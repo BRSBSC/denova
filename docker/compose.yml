@@ -1,0 +1,14 @@
+services:
+  denova:
+    image: ghcr.io/brsbsc/denova:${DENOVA_IMAGE_TAG:-latest}
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      DENOVA_ADMIN_USERNAME: ${DENOVA_ADMIN_USERNAME:?Set the initial login username}
+      DENOVA_ADMIN_PASSWORD: ${DENOVA_ADMIN_PASSWORD:?Set the initial login password}
+    volumes:
+      - denova-data:/data
+    restart: unless-stopped
+
+volumes:
+  denova-data:

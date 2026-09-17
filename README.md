@@ -88,6 +88,8 @@ curl -fsSL https://raw.githubusercontent.com/alfredxw/denova/master/scripts/inst
 
 安装完成后运行 `denova`。Windows 用户以及希望手动安装的用户，可以从 [GitHub Releases](https://github.com/alfredxw/denova/releases) 下载对应平台的压缩包；Windows 运行 `denova.exe`。
 
+本 fork 另提供上游安装包自动同步与 GHCR 双架构容器构建流程，启用方法和 Docker Compose 部署见 [容器发布说明](docs/container-publishing.md)。
+
 稳定使用建议选择 Release；`master` 分支可能包含尚未发布的改动。
 
 从 v0.3.3 升级前，请阅读 [v0.4.0 更新与数据迁移说明](./CHANGELOG.md)：旧全局自动化需在项目内重新创建，部分模型和上下文选项需重新设置。

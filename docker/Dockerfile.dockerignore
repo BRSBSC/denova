@@ -1,0 +1,11 @@
+**
+!docker/
+!docker/entrypoint.py
+!dist/
+!dist/upstream/
+!dist/upstream/amd64/
+!dist/upstream/amd64/denova/
+!dist/upstream/amd64/denova/**
+!dist/upstream/arm64/
+!dist/upstream/arm64/denova/
+!dist/upstream/arm64/denova/**

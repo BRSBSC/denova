@@ -30,6 +30,9 @@ docs/tests/*
 !docs/agent-prompt-context-architecture-benchmark.md
 !docs/portable-denova-data-directory-design.md
 !docs/claude-runtime.md
+!docs/container-publishing.md
+!docs/container-publishing.en.md
+docker/.env
 .worktrees/
 .pnpm-store/
 .DS_Store

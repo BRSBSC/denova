@@ -88,6 +88,8 @@ curl -fsSL https://raw.githubusercontent.com/alfredxw/denova/master/scripts/inst
 
 Run `denova` after installation. Windows users and anyone who prefers manual installation can download the archive for their platform from [GitHub Releases](https://github.com/alfredxw/denova/releases); on Windows, run `denova.exe`.
 
+This fork also provides upstream release mirroring and dual-architecture GHCR image builds. See [container publishing](docs/container-publishing.en.md) for setup and Docker Compose deployment.
+
 For stable use, choose a Release. The `master` branch may contain unreleased changes.
 
 Before upgrading from v0.3.3, read the [v0.4.0 release and data migration notes](./CHANGELOG.md): recreate legacy global Automations within Projects and reselect affected model and context options.
