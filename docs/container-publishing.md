@@ -30,8 +30,8 @@
 在 `docker/.env` 中设置首次登录账号（此文件已被 Git 忽略）：
 
 ```dotenv
-DENOVA_ADMIN_USERNAME=admin
-DENOVA_ADMIN_PASSWORD=replace-with-your-own-password
+DENOVA_USERNAME=admin
+DENOVA_PASSWORD=replace-with-your-own-password
 DENOVA_IMAGE_TAG=latest
 ```
 

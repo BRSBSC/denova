@@ -30,8 +30,8 @@ The entire pipeline runs in one workflow and does not rely on a tag triggering a
 Create `docker/.env` (ignored by Git) with initial credentials:
 
 ```dotenv
-DENOVA_ADMIN_USERNAME=admin
-DENOVA_ADMIN_PASSWORD=replace-with-your-own-password
+DENOVA_USERNAME=admin
+DENOVA_PASSWORD=replace-with-your-own-password
 DENOVA_IMAGE_TAG=latest
 ```
 

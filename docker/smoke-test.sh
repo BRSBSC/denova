@@ -19,8 +19,8 @@ actual_version="$(docker run --rm --platform "${platform}" "${image}" --version)
 [[ "${actual_version}" == "${version#v}" ]]
 container="$(docker run --detach --platform "${platform}" \
   --publish 127.0.0.1::8080 \
-  --env DENOVA_ADMIN_USERNAME=smoke \
-  --env DENOVA_ADMIN_PASSWORD=container-smoke-password \
+  --env DENOVA_USERNAME=smoke \
+  --env DENOVA_PASSWORD=container-smoke-password \
   "${image}")"
 
 wait_for_server() {

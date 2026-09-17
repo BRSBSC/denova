@@ -4,8 +4,8 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      DENOVA_ADMIN_USERNAME: ${DENOVA_ADMIN_USERNAME:?Set the initial login username}
-      DENOVA_ADMIN_PASSWORD: ${DENOVA_ADMIN_PASSWORD:?Set the initial login password}
+      DENOVA_USERNAME: ${DENOVA_USERNAME:?Set the initial login username}
+      DENOVA_PASSWORD: ${DENOVA_PASSWORD:?Set the initial login password}
     volumes:
       - denova-data:/data
     restart: unless-stopped
