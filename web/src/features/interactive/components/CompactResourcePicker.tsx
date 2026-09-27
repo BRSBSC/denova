@@ -60,7 +60,8 @@ export function CompactResourcePicker<T>({
   const close = () => setOpen(false)
 
   const selector = (
-    <Popover open={open} onOpenChange={(nextOpen) => setOpen(!disabled && nextOpen)}>
+    // Own the scroll lock so portaled lists also scroll inside a modal dialog.
+    <Popover modal open={open} onOpenChange={(nextOpen) => setOpen(!disabled && nextOpen)}>
       <PopoverTrigger asChild>
         <Button
           type="button"
