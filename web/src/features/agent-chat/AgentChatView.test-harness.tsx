@@ -158,7 +158,6 @@ vi.mock('@/components/layout/adaptive-surface', () => ({
             <div
               role="separator"
               aria-label={rightResize.label}
-              className="nova-resize-handle nova-resize-divider nova-resize-divider-vertical w-2"
             />
           )}
           {right.content}

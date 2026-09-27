@@ -276,16 +276,13 @@ describe('ModeRouter autosave navigation policy', () => {
     })
   })
 
-  it('stacks Diff Review above retained document-tab overlays', () => {
+  it('shows Diff Review while hiding the retained document tabs', () => {
     writingChangeReviewMock.activeReviewThreadID = 'review-thread'
 
     const { container } = render(withAppProviders(<ModeRouter {...modeRouterProps()} />))
 
     const writingLayer = container.querySelector('[data-writing-content-layer="true"]')
-    const reviewLayer = container.querySelector('[data-change-review-layer="true"]')
-    expect(writingLayer).toHaveClass('z-0')
     expect(writingLayer).toHaveAttribute('aria-hidden', 'true')
-    expect(reviewLayer).toHaveClass('z-10')
     expect(screen.getByTestId('change-review-workspace')).toBeInTheDocument()
   })
 

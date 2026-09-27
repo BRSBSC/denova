@@ -7,6 +7,8 @@ import { MobilePaneHost, type MobilePane, type MobilePaneControls } from './mobi
 import { CollapsiblePanelSeparator, CollapsibleResizablePanel, InlineCollapsiblePane, PanelMotionGroup } from './panel-motion'
 import { createStablePortalHost, StablePortalSlot } from './stable-portal-slot'
 import { resolvePanelInitialSize, usePersistedPanelLayout } from './use-persisted-panel-layout'
+import { adaptivePanelMinimumWidth, type AdaptivePanelSize } from './adaptive-panel-layout'
+import { AdaptiveResizablePanes } from './adaptive-resizable-panes'
 
 export interface AdaptiveSurfacePane {
   id: string
@@ -58,10 +60,11 @@ interface AdaptiveSurfaceProps {
 export interface AdaptiveSurfaceSideResize {
   layoutKey: string
   label: string
-  defaultSize?: string
-  minSize?: string
-  maxSize?: string
-  mainMinSize?: string
+  defaultSize?: AdaptivePanelSize
+  /** Pixel minima also define when side panes must switch to drawers. */
+  minSize?: `${number}px`
+  maxSize?: AdaptivePanelSize
+  mainMinSize?: `${number}px`
 }
 
 const closedControls: MobilePaneControls = {
@@ -87,7 +90,12 @@ export function AdaptiveSurface({
 }: AdaptiveSurfaceProps) {
   const { t } = useTranslation()
   const viewportMobile = useIsMobile()
-  const collapseWidth = normalizeCollapseWidth(collapseAt)
+  const leftVisible = Boolean(left && left.enabled !== false && left.desktopVisible !== false)
+  const rightVisible = Boolean(right && right.enabled !== false && right.desktopVisible !== false)
+  const threePaneMinimum = leftResize && rightResize ? adaptivePanelMinimumWidth({
+    left: leftResize, right: rightResize, leftVisible, rightVisible, rightExpanded: rightVisible && rightExpanded,
+  }) : 0
+  const collapseWidth = normalizeCollapseWidth(Math.max(collapseAt ?? 0, threePaneMinimum))
   const { containerRef, widthCollapsed } = useWidthCollapse(collapseWidth)
   const isMobile = viewportMobile || widthCollapsed
   const panes = [left, right].filter((pane): pane is AdaptiveSurfacePane => Boolean(pane && pane.enabled !== false))
@@ -234,7 +242,20 @@ export function AdaptiveSurface({
       </PanelMotionGroup>
     ) : null
 
-    if (leftResize && retainedDesktopLeft) {
+    if (leftResize && rightResize && retainedDesktopLeft) {
+      surface = (
+        <div className={`flex h-full min-h-0 min-w-0 ${className}`} data-nova-adaptive-resizable="both">
+          <AdaptiveResizablePanes
+            key={leftResize.layoutKey}
+            left={retainedDesktopLeft}
+            right={retainedDesktopRight}
+            sizing={{ left: leftResize, right: rightResize, leftVisible: desktopLeftVisible, rightVisible: desktopRightVisible, rightExpanded: expandRight }}
+          >
+            {mainContentSlot}
+          </AdaptiveResizablePanes>
+        </div>
+      )
+    } else if (leftResize && retainedDesktopLeft) {
       const mainAndRight = rightResizeSurface ?? (
         <div className={`grid h-full min-h-0 min-w-0 ${defaultDesktopGridClassName(false, Boolean(desktopRight))}`}>
           {mainContentSlot}
@@ -392,12 +413,18 @@ function useWidthCollapse(collapseWidth: number | null) {
     update(container.getBoundingClientRect().width)
     if (typeof ResizeObserver === 'undefined') return
 
+    let frame = 0
     const observer = new ResizeObserver((entries) => {
       const entry = entries.find((item) => item.target === container)
-      if (entry) update(entry.contentRect.width)
+      if (entry) {
+        // Switching between drawers and panels changes observed descendants. Commit outside the
+        // observer delivery cycle so their observers can settle without a resize-loop error.
+        cancelAnimationFrame(frame)
+        frame = requestAnimationFrame(() => update(entry.contentRect.width))
+      }
     })
     observer.observe(container)
-    return () => observer.disconnect()
+    return () => { observer.disconnect(); cancelAnimationFrame(frame) }
   }, [collapseWidth])
 
   return { containerRef, widthCollapsed }

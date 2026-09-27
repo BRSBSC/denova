@@ -1714,13 +1714,6 @@ html[data-nova-motion="off"] .shimmer {
   transition: flex-grow var(--nova-panel-motion-duration) var(--nova-panel-motion-ease);
 }
 
-/* Retained page routes should swap directly. Panel motion remains available for explicit layout
-   actions such as opening, closing, or resizing a pane within the current page. */
-[data-nova-panel-motion-group][data-nova-panel-motion-suspended="true"] {
-  --nova-panel-motion-duration: 0ms;
-  --nova-panel-fade-duration: 0ms;
-}
-
 [data-panel][data-nova-panel-motion="resizable"] {
   transition:
     flex-grow var(--nova-panel-motion-duration) var(--nova-panel-motion-ease),
@@ -1859,6 +1852,16 @@ html[data-nova-motion="off"] .shimmer {
 
 [data-nova-panel-motion-group][data-nova-panel-resizing="true"] > [data-panel] {
   transition: none;
+}
+
+/* Route swaps only suspend this group's own panels, separators and content. Overriding inherited
+   duration tokens here would also disable every nested workspace's explicit pane toggles.
+   Panel places its content inside one library-owned wrapper. */
+[data-nova-panel-motion-group][data-nova-panel-motion-suspended="true"] > :is([data-panel], [data-nova-panel-motion-separator]),
+[data-nova-panel-motion-group][data-nova-panel-motion-suspended="true"] > [data-panel] > div > [data-nova-panel-motion-clip] > [data-nova-panel-motion-content],
+[data-nova-panel-motion-group][data-nova-panel-motion-suspended="true"] > [data-panel] > div > [data-nova-panel-motion-collapsed-content] {
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
 }
 
 /* Review swaps a live editor for another Monaco-heavy surface. Its outer geometry settles in one

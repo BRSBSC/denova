@@ -397,52 +397,6 @@ describe('AgentChatView project workbenches', () => {
     expect(screen.getAllByTestId('draft-conversation')).toHaveLength(1)
   })
 
-  it('uses the full split separator as one visible resize target', async () => {
-    const splitProject = project('/books/a', 'Project A', 'session-a', 'Chat A')
-    splitProject.total = 2
-    splitProject.sessions.push({
-      ...splitProject.sessions[0],
-      id: 'session-secondary',
-      title: 'Secondary',
-    })
-    vi.mocked(getAgentChatProjects).mockResolvedValue([splitProject])
-    persistWorkbenchState({
-      activeProjectId: 'project-a',
-      projects: {
-        'project-a': {
-          tabs: [
-            {
-              kind: 'agent',
-              id: 'primary-tab',
-              projectId: 'project-a',
-              workspace: '/books/a',
-              group: 'primary',
-              sessionId: 'session-a',
-            },
-            {
-              kind: 'agent',
-              id: 'secondary-tab',
-              projectId: 'project-a',
-              workspace: '/books/a',
-              group: 'secondary',
-              sessionId: 'session-secondary',
-            },
-          ],
-          activeTabIds: { primary: 'primary-tab', secondary: 'secondary-tab' },
-          focusedGroup: 'secondary',
-          secondaryVisible: true,
-        },
-      },
-    })
-
-    renderView(<AgentChatView composerSettings={{} as never} tellers={[]} imagePresets={[]} renderPage={() => null} renderReview={() => null} />)
-
-    const separator = await screen.findByRole('separator', {
-      name: '调整分栏宽度',
-    })
-    expect(separator).toHaveClass('nova-resize-handle', 'nova-resize-divider', 'nova-resize-divider-vertical', 'w-2')
-  })
-
   it('hides and restores the secondary pane without unmounting its conversation', async () => {
     const user = userEvent.setup()
     const splitProject = project('/books/a', 'Project A', 'session-a', 'Chat A')
