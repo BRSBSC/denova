@@ -3,6 +3,7 @@ import { createAndOpenBook } from '../support/api'
 import type { LoreItem } from '../../src/lib/api'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 
 const portrait = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
@@ -30,11 +31,16 @@ async function readItems(request: APIRequestContext, project: string): Promise<L
   return (await response.json()).items
 }
 
-for (const theme of ['dark', 'light']) {
-  test(`manages shared lore materials and stops audio in ${theme}`, async ({
+for (const [theme, format] of [['dark', 'png'], ['light', 'jpeg'], ['dark', 'webp'], ['light', 'gif']] as const) {
+  test(`manages shared ${format} lore materials and stops audio in ${theme}`, async ({
     page,
     request,
   }, testInfo) => {
+    const filename = `portrait.${format}`
+    const sharp = createRequire(import.meta.url)('sharp') as typeof import('sharp').default
+    const image = await sharp({
+      create: { width: 32, height: 32, channels: 4, background: '#cc3344' },
+    }).toFormat(format).toBuffer()
     const settings = await (await request.get('/api/settings')).json()
     const patch = await request.patch('/api/settings', {
       data: {
@@ -65,7 +71,7 @@ for (const theme of ['dark', 'light']) {
     await page.getByRole('tab', { name: '素材 (0)', exact: true }).click()
     await expect(page.getByText('还没有关联素材', { exact: true })).toBeVisible()
     await page.getByLabel('上传文件', { exact: true }).setInputFiles([
-      { name: 'portrait.png', mimeType: 'image/png', buffer: portrait },
+      { name: filename, mimeType: `image/${format}`, buffer: image },
       { name: 'environment.wav', mimeType: 'audio/wav', buffer: wave() },
     ])
     await expect(page.getByRole('tab', { name: '素材 (2)', exact: true })).toBeVisible()
@@ -73,8 +79,9 @@ for (const theme of ['dark', 'light']) {
       .poll(async () => (await readItems(request, book.projectId))[0]?.resolved_materials?.length)
       .toBe(2)
     expect((await readItems(request, book.projectId))[0].image).toBeUndefined()
-    await page.getByRole('button', { name: '查看素材：portrait.png', exact: true }).click()
-    let dialog = page.getByRole('dialog', { name: 'portrait.png', exact: true })
+    await page.getByRole('button', { name: `查看素材：${filename}`, exact: true }).click()
+    let dialog = page.getByRole('dialog', { name: filename, exact: true })
+    await expect.poll(() => dialog.locator('img').first().evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(32)
     await dialog
       .getByLabel('素材名称', { exact: true })
       .fill('正面参考与服装 ' + 'Long reference '.repeat(8))
@@ -124,13 +131,16 @@ for (const theme of ['dark', 'light']) {
     await page.getByRole('menuitem', { name: '复用素材', exact: true }).click()
     await page
       .getByRole('dialog', { name: '复用素材', exact: true })
-      .getByRole('button', { name: '查看素材：portrait.png', exact: true })
+      .getByRole('button', { name: `查看素材：${filename}`, exact: true })
       .click()
     await expect(page.getByRole('tab', { name: '素材 (2)', exact: true })).toBeVisible()
     const persisted = (await readItems(request, book.projectId))[0]
     expect(persisted.content).toBe('原始正文')
     expect(persisted.type).toBe('character')
     expect(persisted.image).toBeUndefined()
+    const savedImage = persisted.resolved_materials!.find((material) => material.mime_type === `image/${format}`)!
+    expect(savedImage.path).toMatch(new RegExp(`\\.${format}$`))
+    expect(await readFile(path.join(book.workspace, savedImage.path))).toEqual(image)
     // The actual asset boundary serves audio and byte ranges, not only an URL.
     const sound = persisted.resolved_materials!.find(
       (material) => material.mime_type === 'audio/wav',

@@ -222,7 +222,7 @@ export function LoreMaterialsPanel({
           ref={input}
           className="hidden"
           type="file"
-          accept="image/png,image/jpeg,audio/mpeg,audio/wav,.mp3,.wav"
+          accept="image/png,image/jpeg,image/webp,image/gif,audio/mpeg,audio/wav,.mp3,.wav"
           multiple
           aria-label={t('lore.materials.upload')}
           onChange={(event) => {

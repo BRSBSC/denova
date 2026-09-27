@@ -108,11 +108,11 @@ func (c *Conversation) SubmitTurnResult(ctx context.Context, input interactive.T
 	c.mu.Lock()
 	current := c.turnProtocol.draft()
 	c.mu.Unlock()
-	basePresentation := snapshotPresentation(storyCtx.Snapshot)
+	basePresentation := snapshotPresentation(storyCtx.Snapshot, storyCtx.Meta.PresentationSettings)
 	if current != nil && current.TurnResult().Presentation != nil {
 		basePresentation = current.TurnResult().Presentation
 	}
-	presentation, presentationReceipt := resolvePresentationPatch(c.workspace, basePresentation, input.Presentation, storyCtx.Meta.PresentationSettings)
+	presentation, presentationReceipt := interactive.ResolvePresentationPatch(c.workspace, basePresentation, input.Presentation, storyCtx.Meta.PresentationSettings)
 	if presentationReceipt != nil && presentationReceipt.Ignored > 0 {
 		slog.WarnContext(ctx, "[interactive-presentation] ignored visual changes", "story_id", c.storyID, "branch_id", c.branchID, "applied", presentationReceipt.Applied, "ignored", presentationReceipt.Ignored, "reasons", presentationReceipt.Reasons)
 	}

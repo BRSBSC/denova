@@ -1,3 +1,4 @@
+import { visibleStoryPresentation } from '../presentation'
 import { Eye, EyeOff, Square } from 'lucide-react'
 import { StoryStageArtwork } from './story-stage/StoryStageArtwork'
 import { useGameStories } from '@/features/platform/game-story-context'
@@ -589,9 +590,25 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
     await onDone({ silent: true })
   }
 
+  const waitingToStartOpening = Boolean(pendingOpeningStoryId) && pendingOpeningStoryId === storyId
+  const committedTurnCount = Math.max(story?.turn_count || 0, snapshot?.turn_count || 0, snapshot?.turns?.length || 0)
+  const openingRuntimeActive = streaming
+    || Boolean(stageRun.runtime.operationId)
+    || Boolean(stageRun.runtime.pendingInterruptionId)
+    || stageRun.runtime.recoveryPaused
+    || stageRun.runtime.queue.length > 0
+    || Boolean(stageRun.retryMessage)
+    || liveMessages.length > 0
+  const storySetupVisible = creatingStory || (
+    !waitingToStartOpening
+    && !snapshotLoading
+    && committedTurnCount === 0
+    && !openingRuntimeActive
+  )
+
   const presentationTurn = streaming ? snapshot?.current_turn : turnsById.get(activeTurnAnchorId) ?? displaySnapshot?.current_turn
-  const presentation = presentationTurn?.turn_result?.presentation
-  const hasStageArtwork = !creatingStory && Boolean((story?.presentation_settings?.background !== false && presentation?.background) || (story?.presentation_settings?.characters !== false && presentation?.characters?.length))
+  const presentation = visibleStoryPresentation(presentationTurn?.turn_result?.presentation, story?.presentation_settings)
+  const hasStageArtwork = !storySetupVisible && Boolean(presentation.background || presentation.characters?.length)
   useEffect(() => { if (!hasStageArtwork) setTextHidden(false) }, [hasStageArtwork])
   const presentationTurnIndex = displaySnapshot?.turns.findIndex(turn => turn.id === presentationTurn?.id) ?? -1
   const previousPresentationTurnId = presentationTurnIndex > 0 ? displaySnapshot?.turns[presentationTurnIndex - 1]?.id : undefined
@@ -617,21 +634,6 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
     {artworkOnly && streaming && <Button type="button" variant="ghost" size="icon-sm" aria-label={t('chat.runtime.abort')} disabled={commandSubmitting || stageRun.runtime.abortPending} onClick={() => void stop()}><Square className="size-4" /></Button>}
     </>
   )
-  const waitingToStartOpening = Boolean(pendingOpeningStoryId) && pendingOpeningStoryId === storyId
-  const committedTurnCount = Math.max(story?.turn_count || 0, snapshot?.turn_count || 0, snapshot?.turns?.length || 0)
-  const openingRuntimeActive = streaming
-    || Boolean(stageRun.runtime.operationId)
-    || Boolean(stageRun.runtime.pendingInterruptionId)
-    || stageRun.runtime.recoveryPaused
-    || stageRun.runtime.queue.length > 0
-    || Boolean(stageRun.retryMessage)
-    || liveMessages.length > 0
-  const storySetupVisible = creatingStory || (
-    !waitingToStartOpening
-    && !snapshotLoading
-    && committedTurnCount === 0
-    && !openingRuntimeActive
-  )
 
   return (
     <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--nova-surface-2)]">
@@ -640,7 +642,7 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
         <StoryStageHeader isMobile={isMobile} controls={stageControls} />
         <div className="shrink-0 px-3" style={{ visibility: artworkOnly ? 'hidden' : undefined }} inert={artworkOnly}><SpeechPlayback owner={stageKey} /></div>
 
-        <div className="nova-story-stage-content flex min-h-0 flex-1 overflow-hidden" data-artwork={hasStageArtwork && !storySetupVisible ? 'true' : undefined} style={{ visibility: artworkOnly ? 'hidden' : undefined }} inert={artworkOnly} aria-hidden={artworkOnly || undefined}>
+        <div className="nova-story-stage-content flex min-h-0 flex-1 overflow-hidden" data-artwork={hasStageArtwork ? 'true' : undefined} style={{ visibility: artworkOnly ? 'hidden' : undefined }} inert={artworkOnly} aria-hidden={artworkOnly || undefined}>
           {!isMobile && <TurnNavigator items={turnNavigationItems} activeAnchorId={activeTurnAnchorId} onSelect={handleTurnNavigationSelect} />}
           <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {historyWindow.stageKey === stageKey && !historyWindow.followLatest ? (

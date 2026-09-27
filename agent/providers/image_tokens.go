@@ -12,7 +12,7 @@ import (
 // InputEstimator follows the image detail actually sent by the built-in
 // adapters: OpenAI uses auto, and Anthropic uses its native resolution tier.
 // Model names also work through compatible endpoints. Unidentified models use
-// Agent's conservative visual reserve; encoded bytes never stand in for pixels.
+// Agent's shared image fallback; encoded bytes never stand in for pixels.
 func (config ModelConfig) InputEstimator() agent.InputEstimator {
 	return agent.InputEstimator{ImageTokens: config.imagePolicy().tokens}
 }

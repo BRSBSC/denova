@@ -202,7 +202,7 @@ export function StoryStateLedger({ snapshot, displayPreference, onDisplayPrefere
 }
 
 /**
- * Full-width state projection for secondary surfaces such as the Story Console
+ * Full-width state projection for secondary surfaces such as the Game Console
  * dialog. It reuses the stage ledger's grouping, field renderers, saved layout,
  * and Actor/world navigation without repeating the narrow sidebar treatment.
  */

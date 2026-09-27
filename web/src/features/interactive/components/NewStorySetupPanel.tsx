@@ -17,7 +17,8 @@ import { gamePlanningTemplateName } from '../game-planning'
 import { normalizeStoryImageSettings } from '../image-settings'
 import { DEFAULT_NARRATIVE_STYLE_ID, resolveNarrativeStyle } from '../narrative-style'
 import { DEFAULT_INTERACTIVE_CHOICE_COUNT, DEFAULT_INTERACTIVE_REPLY_TARGET_CHARS, truncateStoryOpeningText, type BookOpeningPreset, type StoryCreateInput } from '../opening'
-import type { GamePlanningTemplate, ImagePreset, StoryOpeningConfig, StoryProtagonist, StorySummary, Teller } from '../types'
+import type { GamePlanningTemplate, ImagePreset, StoryOpeningConfig, StoryPresentationSettings, StoryProtagonist, StorySummary, Teller } from '../types'
+import { StoryPresentationControls } from './director-console/StoryPresentationControls'
 import { StoryOpeningSelector } from './story-setup/StoryOpeningSelector'
 import { StoryProtagonistSelector } from './story-setup/StoryProtagonistSelector'
 import { StorySetupAdvanced, type StorySetupSettings } from './story-setup/StorySetupAdvanced'
@@ -67,6 +68,7 @@ export function NewStorySetupPanel({
   const [opening, setOpening] = useState<StoryOpeningConfig>(() => story?.opening || { mode: 'custom' })
   const [settings, setSettings] = useState<StorySetupSettings>(() => initialSettings(story, recentTeller?.id, conversationConfig.snapshot))
   const [advancedOpen, setAdvancedOpen] = useState(!isMobile)
+  const [presentationSettings, setPresentationSettings] = useState<StoryPresentationSettings>(() => ({ background: true, characters: true, ...story?.presentation_settings }))
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const initialProtagonistRef = useRef<StoryProtagonist>(initialProtagonist)
@@ -174,6 +176,7 @@ export function NewStorySetupPanel({
         opening: openingForSubmit(opening),
         image_settings: { ...settings.imageSettings, preset_id: settings.imageSettings.preset_id || moduleRefs.image_preset_id || 'game-cg' },
         check_settings: settings.checkSettings,
+        presentation_settings: presentationSettings,
         state_schema_policy: { mode: settings.stateSchemaMode },
       })
     } catch (reason) {
@@ -195,6 +198,7 @@ export function NewStorySetupPanel({
           <div className="flex flex-col gap-4">
             <StoryProtagonistSelector projectId={projectId} value={protagonist} loreItems={loreItems} onChange={changeProtagonist} onRequestLoreInit={onRequestLoreInit} />
             <StoryOpeningSelector value={opening} presets={bookOpeningPresets} onChange={setOpening} />
+            <StoryPresentationControls projectId={projectId} value={presentationSettings} loreItems={loreItems} disabled={creating} onChange={setPresentationSettings} />
 
             <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="overflow-hidden rounded-xl border border-border bg-card">
               <CollapsibleTrigger asChild>

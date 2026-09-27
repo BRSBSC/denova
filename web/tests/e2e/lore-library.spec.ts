@@ -103,7 +103,14 @@ for (const theme of ['dark', 'light']) {
         await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
       }
       await expect(hero.locator('[data-slot=card-description]')).toHaveCount(size === '小' ? 0 : 1)
-      await expect(hero.locator('[data-slot=card-footer]')).toHaveCount(size === '大' ? 1 : 0)
+      const upload = hero.getByRole('button', { name: '上传封面', exact: true })
+      const generate = hero.getByRole('button', { name: '重新生成', exact: true })
+      await expect(upload).toBeVisible()
+      await expect(generate).toBeVisible()
+      await expect(upload).toHaveText('')
+      await expect(generate).toHaveText('')
+      await expect(upload).toHaveAttribute('title', '上传封面')
+      await expect(generate).toHaveAttribute('title', '重新生成')
       await page.screenshot({ path: testInfo.outputPath(`library-${theme}-${size}-wide.png`), animations: 'disabled' })
     }
     expect(widths[0]).toBeLessThan(widths[1])
@@ -138,6 +145,16 @@ for (const theme of ['dark', 'light']) {
     await page.setViewportSize({ width: 390, height: 844 })
     for (const size of ['小', '中', '大']) {
       await sizes.getByRole('radio', { name: size, exact: true }).click()
+      const material = await hero.getByRole('button', { name: '选择封面：hero · 资料', exact: true }).boundingBox()
+      const upload = await hero.getByRole('button', { name: '上传封面', exact: true }).boundingBox()
+      const generate = await hero.getByRole('button', { name: '重新生成', exact: true }).boundingBox()
+      expect(material).not.toBeNull()
+      expect(upload).not.toBeNull()
+      expect(generate).not.toBeNull()
+      expect(Math.abs(material!.y + material!.height / 2 - upload!.y - upload!.height / 2)).toBeLessThan(2)
+      expect(Math.abs(upload!.y - generate!.y)).toBeLessThan(2)
+      expect(material!.x + material!.width).toBeLessThanOrEqual(upload!.x)
+      expect(upload!.x + upload!.width).toBeLessThanOrEqual(generate!.x)
       await page.screenshot({ path: testInfo.outputPath(`library-${theme}-${size}-390.png`), animations: 'disabled' })
       expect(await library.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     }
@@ -166,8 +183,7 @@ test('uploads and regenerates covers while keeping old images and text', async (
   await seed(request, book.projectId, 'hero')
   await openLibrary(page)
   const card = page.getByTestId('lore-card-hero')
-  await card.getByRole('button', { name: '封面操作：hero · 资料', exact: true }).click()
-  await page.getByRole('menuitem', { name: '生成封面', exact: true }).click()
+  await card.getByRole('button', { name: '生成封面', exact: true }).click()
   await customGenerate(page, '生成封面')
   const picker = page.getByRole('dialog', { name: 'hero · 资料 · 封面', exact: true })
   await expect(picker).toBeVisible()
@@ -189,8 +205,7 @@ test('uploads and regenerates covers while keeping old images and text', async (
   await picker.getByRole('button', { name: '设为封面', exact: true }).click()
   await expect(picker).toBeHidden()
   await sizes.getByRole('radio', { name: '小', exact: true }).click()
-  await card.getByRole('button', { name: '封面操作：hero · 资料', exact: true }).click()
-  await page.getByRole('menuitem', { name: '上传封面', exact: true }).click()
+  await card.getByRole('button', { name: '上传封面', exact: true }).click()
   await picker
     .getByLabel('上传封面', { exact: true })
     .setInputFiles({ name: 'portrait.png', mimeType: 'image/png', buffer: portrait })
@@ -216,6 +231,59 @@ test('uploads and regenerates covers while keeping old images and text', async (
     .click()
   await page.reload()
   await expect(card.getByRole('img', { name: 'hero · 资料' })).toBeVisible()
+})
+
+test('toggles Lore enabled state from cards and preserves it when saving fails', async ({
+  page,
+  request,
+  browserDiagnostics,
+}) => {
+  const book = await createAndOpenBook(request, 'Lore card enabled state')
+  await seed(request, book.projectId, 'hero')
+  await openLibrary(page)
+  const card = page.getByTestId('lore-card-hero')
+  const toggle = card.getByRole('switch', { name: '启用资料：hero · 资料', exact: true })
+  const generate = card.getByRole('button', { name: '生成封面', exact: true })
+  await expect(toggle).toBeChecked()
+  await toggle.click()
+  await expect(toggle).not.toBeChecked()
+  await expect(generate).toBeDisabled()
+  await expect(card).toBeVisible()
+  expect((await readItems(request, book.projectId))[0]).toMatchObject({
+    enabled: false,
+    name: 'hero · 资料',
+    content: 'Body of hero',
+  })
+  await page.reload()
+  await expect(toggle).not.toBeChecked()
+  await page.getByRole('group', { name: '卡片大小', exact: true })
+    .getByRole('radio', { name: '小', exact: true }).click()
+  await toggle.press('Space')
+  await expect(toggle).toBeChecked()
+  await expect(toggle).toBeEnabled()
+  await expect(generate).toBeEnabled()
+  expect((await readItems(request, book.projectId))[0].enabled).toBe(true)
+
+  browserDiagnostics.allow(/console\.error: Failed to load resource:.*500/)
+  browserDiagnostics.allow(/console\.error: \[lore-card\] enabled state update failed/)
+  browserDiagnostics.allow(/http\.5xx: PUT .*\/book\/lore\/items\/hero returned 500/)
+  let releaseUpdate!: () => void
+  const updateGate = new Promise<void>((resolve) => { releaseUpdate = resolve })
+  await page.route(`**${itemsURL(book.projectId)}/hero`, async (route) => {
+    if (route.request().method() !== 'PUT') return route.continue()
+    await updateGate
+    await route.fulfill({ status: 500, json: { error: 'Save unavailable' } })
+  })
+  await toggle.click()
+  try {
+    await expect(toggle).toBeDisabled()
+  } finally {
+    releaseUpdate()
+  }
+  await expect(page.getByText('启用状态未能保存，请刷新后重试', { exact: true })).toBeVisible()
+  await expect(toggle).toBeEnabled()
+  await expect(toggle).toBeChecked()
+  expect((await readItems(request, book.projectId))[0].enabled).toBe(true)
 })
 
 test('batch deletion requires a recovery point and preserves partial failures and shared images', async ({

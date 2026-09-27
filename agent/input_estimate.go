@@ -14,7 +14,7 @@ import (
 
 // InputEstimateVersion changes when the local token-counting units change. A stored
 // response may calibrate a later request only when both use this version.
-const InputEstimateVersion uint16 = 2
+const InputEstimateVersion uint16 = 3
 
 // InputSize measures context capacity. Tokens includes text and native vision.
 // Bytes measures the provider-neutral JSON envelope (including attachment
@@ -26,7 +26,7 @@ type InputSize struct {
 
 // InputEstimator supplies a model's visual token policy to the shared request
 // accounting. ImageTokens receives decoded dimensions, never compressed bytes.
-// A zero value reserves 32K tokens per image for unidentified custom models;
+// A zero value estimates 1,844 tokens per image for unidentified custom models;
 // known adapters should provide their documented visual policy instead.
 // Estimators are immutable and must be safe for concurrent use.
 type InputEstimator struct {
@@ -65,7 +65,7 @@ func (estimator InputEstimator) Estimate(messages []*Message, tools []*ToolInfo)
 			if err != nil {
 				return InputSize{}, err
 			}
-			tokens := 32 * 1024
+			tokens := 1844
 			if estimator.ImageTokens != nil {
 				tokens = estimator.ImageTokens(config.Width, config.Height)
 			}

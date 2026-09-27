@@ -34,6 +34,10 @@ func (h *Handlers) HandleInteractiveStoryCreate(ctx context.Context, c *app.Requ
 	}
 	story, err := h.app.CreateInteractiveStoryContext(ctx, body)
 	if err != nil {
+		if errors.Is(err, interactive.ErrDefaultBackground) {
+			writeErrorKey(c, consts.StatusBadRequest, "api.interactive.invalidDefaultBackground")
+			return
+		}
 		if errors.Is(err, interactive.ErrSpeechContentMode) {
 			writeErrorKey(c, consts.StatusBadRequest, "api.interactive.invalidSpeechContentMode")
 			return
@@ -66,6 +70,10 @@ func (h *Handlers) HandleInteractiveStoryUpdate(ctx context.Context, c *app.Requ
 	}
 	story, err := h.app.UpdateInteractiveStory(c.Param("id"), body)
 	if err != nil {
+		if errors.Is(err, interactive.ErrDefaultBackground) {
+			writeErrorKey(c, consts.StatusBadRequest, "api.interactive.invalidDefaultBackground")
+			return
+		}
 		if errors.Is(err, interactive.ErrSpeechContentMode) {
 			writeErrorKey(c, consts.StatusBadRequest, "api.interactive.invalidSpeechContentMode")
 			return

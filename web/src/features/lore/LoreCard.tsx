@@ -1,5 +1,7 @@
-import { ImagePlus, Images, MoreHorizontal, Sparkles, Upload } from 'lucide-react'
+import { useState } from 'react'
+import { ImagePlus, Images, Sparkles, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -7,22 +9,16 @@ import {
   CardAction,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { loreImageURL, type LoreItem } from '@/lib/api'
+import { Switch } from '@/components/ui/switch'
+import { loreImageURL, updateProjectLoreItem, type LoreItem } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { MaterialImage } from './MaterialImage'
 import { hasLoreProtagonistTag } from './tags'
+import { notifyLoreUpdated } from './events'
 
 export type LoreCoverAction = 'upload' | 'generate' | 'choose'
 export type LoreCardSize = 'small' | 'medium' | 'large'
@@ -37,6 +33,7 @@ export function LoreCard({
   onSelect,
   onToggle,
   onCover,
+  onChanged,
 }: {
   projectId: string
   item: LoreItem
@@ -47,8 +44,10 @@ export function LoreCard({
   onSelect: () => void
   onToggle: () => void
   onCover: (action: LoreCoverAction) => void
+  onChanged: (item: LoreItem) => void
 }) {
   const { t } = useTranslation()
+  const [savingEnabled, setSavingEnabled] = useState(false)
   const image = loreImageURL(projectId, item)
   const generationDisabled = !imageConfigured || !item.enabled
   const generationHint = !imageConfigured
@@ -59,6 +58,19 @@ export function LoreCard({
   const generationLabel = t(image ? 'lore.library.regenerate' : 'lore.library.generateCover')
   const protagonist = item.type === 'character' && hasLoreProtagonistTag(item.tags)
   const materialCount = item.resolved_materials?.length ?? 0
+  const setEnabled = async (enabled: boolean) => {
+    setSavingEnabled(true)
+    try {
+      const saved = await updateProjectLoreItem(projectId, item.id, { ...item, enabled }, item.updated_at)
+      onChanged(saved)
+      notifyLoreUpdated({ projectId, source: 'library' })
+    } catch (error) {
+      console.error('[lore-card] enabled state update failed', { projectId, itemId: item.id, error })
+      toast.error(t('lore.library.toggleFailed'))
+    } finally {
+      setSavingEnabled(false)
+    }
+  }
   return (
     <Card
       size="sm"
@@ -113,47 +125,14 @@ export function LoreCard({
               onCheckedChange={onToggle}
               aria-label={t('lore.library.selectItem', { name: item.name })}
             />
-          ) : cardSize === 'large' ? (
-            <Button
-              size="icon-sm"
-              variant="ghost"
-              onClick={() => onCover('choose')}
-              aria-label={t('lore.library.chooseCoverFor', { name: item.name })}
-            >
-              <Images />
-            </Button>
           ) : (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label={t('lore.library.coverActionsFor', { name: item.name })}
-                >
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
-                  <DropdownMenuItem onSelect={() => onCover('choose')}>
-                    <Images />
-                    {t('lore.library.chooseCover')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => onCover('upload')}>
-                    <Upload />
-                    {t('lore.library.uploadCover')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={generationDisabled}
-                    title={generationHint}
-                    onSelect={() => onCover('generate')}
-                  >
-                    <Sparkles />
-                    {generationLabel}
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Switch
+              checked={item.enabled}
+              disabled={savingEnabled}
+              onCheckedChange={(enabled) => void setEnabled(enabled)}
+              aria-label={t('lore.library.enabledFor', { name: item.name })}
+              title={t(item.enabled ? 'settingPanel.enabled' : 'settingPanel.disabled')}
+            />
           )}
         </CardAction>
         {cardSize !== 'small' && (
@@ -167,37 +146,55 @@ export function LoreCard({
           </CardDescription>
         )}
       </CardHeader>
-      {(protagonist || !item.enabled || materialCount > 0) && (
-        <CardContent className="mt-auto flex flex-wrap items-start gap-1.5">
+      {(!selecting || protagonist || !item.enabled || materialCount > 0) && (
+        <CardContent className="mt-auto flex flex-wrap items-center gap-1">
           {protagonist && <Badge variant="outline">{t('lore.library.protagonist')}</Badge>}
-          {!item.enabled && <Badge variant="outline">{t('lore.library.disabled')}</Badge>}
-          {materialCount > 0 && (
-            <Badge variant="outline">
-              {t('lore.materials.tab', { count: materialCount })}
-            </Badge>
+          {selecting && !item.enabled && <Badge variant="outline">{t('lore.library.disabled')}</Badge>}
+          {selecting ? (
+            materialCount > 0 && (
+              <Badge variant="outline">
+                {t('lore.materials.tab', { count: materialCount })}
+              </Badge>
+            )
+          ) : (
+            <div
+              className="flex min-w-max flex-1 items-center gap-0.5"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <Button
+                size="sm"
+                variant="ghost"
+                className="px-1.5"
+                onClick={() => onCover('choose')}
+                aria-label={t('lore.library.chooseCoverFor', { name: item.name })}
+                title={`${t('lore.library.chooseCover')} · ${t('lore.materials.tab', { count: materialCount })}`}
+              >
+                <Images />
+                <span>{materialCount}</span>
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                className="ml-auto"
+                aria-label={t('lore.library.uploadCover')}
+                title={t('lore.library.uploadCover')}
+                onClick={() => onCover('upload')}
+              >
+                <Upload />
+              </Button>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                disabled={generationDisabled}
+                aria-label={generationLabel}
+                title={generationHint || generationLabel}
+                onClick={() => onCover('generate')}
+              >
+                <Sparkles />
+              </Button>
+            </div>
           )}
         </CardContent>
-      )}
-      {!selecting && cardSize === 'large' && (
-        <CardFooter
-          className="mt-auto flex-wrap justify-between gap-1"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <Button size="sm" variant="ghost" onClick={() => onCover('upload')}>
-            <Upload data-icon="inline-start" />
-            {t('lore.library.uploadCover')}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={generationDisabled}
-            title={generationHint}
-            onClick={() => onCover('generate')}
-          >
-            <Sparkles data-icon="inline-start" />
-            {generationLabel}
-          </Button>
-        </CardFooter>
       )}
     </Card>
   )

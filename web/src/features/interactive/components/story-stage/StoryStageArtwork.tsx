@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { projectFileAssetURL } from '@/lib/api-client/project-files'
+import { visibleStoryPresentation } from '../../presentation'
 import type { PresentationMaterial, StoryPresentationSettings, TurnEvent } from '../../types'
 
 interface StoryStageArtworkProps {
@@ -23,18 +24,19 @@ export function StoryStageArtwork({ projectId, turn, previousTurnId, latest, set
     const continues = latest && continuity.latest && previousTurnId !== undefined && previousTurnId === continuity.turnId
     setContinuity({ scene, turnId: turn?.id, latest, epoch: continuity.epoch + (continues ? 0 : 1) })
   }
-  const stage = turn?.turn_result?.presentation
-  const background = settings?.background !== false ? stage?.background : undefined
-  const characters = settings?.characters !== false ? stage?.characters ?? [] : []
+  const { background, characters = [] } = visibleStoryPresentation(turn?.turn_result?.presentation, settings)
+  // Preference changes must not retain a different image if the default fails
+  // to load. Only turn-to-turn replacement shares the live background slot.
+  const backgroundSlot = settings?.background !== false && turn?.turn_result?.presentation ? 'turn' : `default:${background?.path}`
   if (!background && !characters.length) return null
 
   return (
     <div data-testid="story-stage-artwork" className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      {background && <StageImage key={`${continuity.epoch}:background`} projectId={projectId} material={background} layer="background" />}
+      {background && <StageImage fallbackKey={`${continuity.epoch}:${backgroundSlot}`} projectId={projectId} material={background} layer="background" />}
       <div className="absolute inset-x-0 bottom-0 flex h-[88%] items-end justify-center">
         {characters.map(character => (
-          <div key={`${continuity.epoch}:${character.item_id}`} className="relative h-full min-w-0 flex-1" style={{ maxWidth: characters.length === 1 ? '70%' : undefined }}>
-            <StageImage projectId={projectId} material={character} layer="character" />
+          <div key={character.item_id} className="relative h-full min-w-0 flex-1" style={{ maxWidth: characters.length === 1 ? '70%' : undefined }}>
+            <StageImage fallbackKey={String(continuity.epoch)} projectId={projectId} material={character} layer="character" />
           </div>
         ))}
       </div>
@@ -43,16 +45,21 @@ export function StoryStageArtwork({ projectId, turn, previousTurnId, latest, set
   )
 }
 
-function StageImage({ projectId, material, layer }: { projectId: string; material: PresentationMaterial; layer: 'background' | 'character' }) {
-  const [loaded, setLoaded] = useState<{ src: string; name: string }>()
+function StageImage({ projectId, material, layer, fallbackKey }: { projectId: string; material: PresentationMaterial; layer: 'background' | 'character'; fallbackKey: string }) {
   const src = projectFileAssetURL(projectId, material.path)
+  const [imageState, setImageState] = useState<{ fallbackKey: string; loaded?: { src: string; name: string } }>({ fallbackKey })
+  if (imageState.fallbackKey !== fallbackKey) {
+    // Reset stale fallbacks without remounting the same asset during history scrolling.
+    setImageState({ fallbackKey, loaded: imageState.loaded?.src === src ? imageState.loaded : undefined })
+  }
+  const { loaded } = imageState
   useEffect(() => {
     let cancelled = false
     const image = new Image()
     image.onload = () => {
       // decode avoids replacing the previous image before the browser can paint.
       const ready = typeof image.decode === 'function' ? image.decode() : Promise.resolve()
-      void ready.then(() => { if (!cancelled) setLoaded({ src, name: material.name }) }).catch(() => {
+      void ready.then(() => { if (!cancelled) setImageState(current => ({ ...current, loaded: { src, name: material.name } })) }).catch(() => {
         if (!cancelled) console.warn('[story-presentation] image decoding failed', { path: material.path })
       })
     }

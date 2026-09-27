@@ -9,8 +9,29 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
+
+func TestRemoteMaterialDownloadPreservesImagesWithMisleadingMIME(t *testing.T) {
+	for _, format := range []string{"jpeg", "png", "webp", "gif"} {
+		t.Run(format, func(t *testing.T) {
+			data := materialImage(t, format)
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !strings.Contains(r.Header.Get("Accept"), "image/"+format) {
+					t.Errorf("download does not advertise %s support", format)
+				}
+				w.Header().Set("Content-Type", "image/jpeg")
+				_, _ = w.Write(data)
+			}))
+			defer server.Close()
+			got, err := downloadMaterial(t.Context(), server.Client(), server.URL+"/preview.jpg")
+			if err != nil || !bytes.Equal(got, data) {
+				t.Fatalf("download did not preserve %s image: %v", format, err)
+			}
+		})
+	}
+}
 
 func TestRemoteMaterialsPreserveSharingCoverAndLocalCopy(t *testing.T) {
 	ctx := context.Background()

@@ -326,6 +326,7 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
       module_refs: input.module_refs,
       reply_target_chars: input.reply_target_chars,
       choice_count: input.choice_count,
+      presentation_settings: input.presentation_settings,
       image_settings: input.image_settings,
       check_settings: input.check_settings,
       opening: input.opening,
@@ -517,6 +518,7 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
               ) : (
                 <StoryWorkspace
                   rightPanelVisible={rightPanelVisible}
+                  onToggleRightPanel={onToggleRightPanel}
                   mobileConsoleOpen={mobileSnapshotOpen}
                   onMobileConsoleOpenChange={setMobileSnapshotOpen}
                   story={storyStage}

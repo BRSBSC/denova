@@ -40,7 +40,7 @@ export function SkillLibrary({ target, snapshot, loading, onSelect, onChanged }:
   const hasFilters = query.trim() !== '' || status !== 'all' || source !== 'all' || category !== 'all'
   const categories = useMemo(() => Array.from(new Set(snapshot.skills.map(skillCategory))).sort(), [snapshot.skills])
   const [installations, setInstallations] = useState<Installation[]>([])
-  const [exporting, setExporting] = useState<LocalRef>()
+  const [exporting, setExporting] = useState<LocalRef[]>()
   useEffect(() => {
     let active = true
     void exchange<Installation[]>('/installations').then((items) => { if (active) setInstallations(items) }).catch(() => { if (active) toast.error(t('market.errors.operationFailed')) })
@@ -84,9 +84,19 @@ export function SkillLibrary({ target, snapshot, loading, onSelect, onChanged }:
   return (
     <div className="h-full min-h-0 overflow-y-auto" data-testid="skill-library">
       <div className="mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-6 p-4 sm:p-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">{t('skills.library.title')}</h1>
-          <Badge variant="outline">{snapshot.skills.length}</Badge>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold tracking-tight">{t('skills.library.title')}</h1>
+            <Badge variant="outline">{snapshot.skills.length}</Badge>
+          </div>
+          <Button variant="outline" size="sm" disabled={loading || snapshot.skills.length === 0} onClick={() => setExporting(snapshot.skills.map((skill) => ({
+            kind: 'skill',
+            scope: skill.scope,
+            id: skill.name,
+            project_id: skill.scope === 'workspace' && target.kind === 'project' ? target.projectId : undefined,
+          })))}>
+            <Upload data-icon="inline-start" />{t('skills.library.export')}
+          </Button>
         </div>
 
         <div className="@container flex flex-col gap-3">
@@ -188,10 +198,7 @@ export function SkillLibrary({ target, snapshot, loading, onSelect, onChanged }:
                             {remote ? <Globe className="size-3.5 shrink-0" /> : <Folder className="size-3.5 shrink-0" />}
                             {scopeLabel(skill.scope, t)}{remote && <> · {t('skills.library.remote')}</>}
                           </span>
-                          <div className="flex flex-wrap gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => setExporting({ kind: 'skill', scope: skill.scope, id: skill.name, project_id: skill.scope === 'workspace' && target.kind === 'project' ? target.projectId : undefined })}><Upload data-icon="inline-start" />{t('market.export.title')}</Button>
-                            {remote && <Button size="sm" variant="ghost" onClick={() => useWorkspaceStore.getState().openMarketInstallation(remote.installation_id)}>{t('market.acquired.sourceActions')}</Button>}
-                          </div>
+                          {remote && <Button size="sm" variant="ghost" onClick={() => useWorkspaceStore.getState().openMarketInstallation(remote.installation_id)}>{t('market.acquired.sourceActions')}</Button>}
                         </CardFooter>
                       </Card>
                     )
@@ -201,7 +208,7 @@ export function SkillLibrary({ target, snapshot, loading, onSelect, onChanged }:
             </section>
           )
         })}
-        {exporting && <ExportDialog projectID={exporting.project_id} initialResources={[exporting]} onClose={() => setExporting(undefined)} />}
+        {exporting && <ExportDialog projectID={target.kind === 'project' ? target.projectId : undefined} initialResources={exporting} onClose={() => setExporting(undefined)} />}
       </div>
     </div>
   )

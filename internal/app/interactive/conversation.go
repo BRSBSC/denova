@@ -16,6 +16,7 @@ import (
 	"denova/internal/agents/session"
 	novaskills "denova/internal/agents/skills"
 	"denova/internal/book/lore"
+	"denova/internal/i18n"
 	"denova/internal/interactive"
 )
 
@@ -530,7 +531,7 @@ func (c *Conversation) AssembleModelContext(ctx context.Context, originalMessage
 		return agentcontext.ModelContextResult{}, fmt.Errorf("读取资料库 revision 失败: %w", err)
 	}
 	ruleSummary := interactive.StoryRuleSummary(storyDirector, StoryRuntimeContextMaxBytes)
-	actorStateRuntime := interactive.ActorStateRuntimeContext(storyDirector.ActorState, storyCtx.Snapshot.State, StoryRuntimeContextMaxBytes, storyCtx.Meta.ChoiceCount)
+	actorStateRuntime := interactive.ActorStateRuntimeContext(storyDirector.ActorState, storyCtx.Snapshot.State, storyCtx.Meta.ChoiceCount)
 	stateSchemaInitialization := interactive.OpeningGameStateSchemaInstruction(storyCtx.Meta)
 	runtimeContext := prompts.InteractiveStoryRuntimeContext(prompts.InteractiveStoryPromptInput{
 		Title:                     storyCtx.Meta.Title,
@@ -584,13 +585,27 @@ func (c *Conversation) AssembleModelContext(ctx context.Context, originalMessage
 		})
 	}
 	if strings.TrimSpace(runtimeContext) != "" {
+		// The Actor write contract is indivisible. Check the effective outer
+		// fragment limit before the shared assembler can truncate its tail.
+		limit := StoryRuntimeContextMaxBytes
+		if input.Budget.MaxFragmentBytes > 0 {
+			limit = min(limit, input.Budget.MaxFragmentBytes)
+		}
+		if len(runtimeContext) > limit {
+			slog.ErrorContext(ctx, "[interactive-agent] runtime context exceeds complete state contract budget", "story_id", c.storyID, "branch_id", c.branchID, "bytes", len(runtimeContext), "actor_state_bytes", len(actorStateRuntime), "limit_bytes", limit)
+			locale := ""
+			if c.cfg != nil {
+				locale = c.cfg.Language
+			}
+			return agentcontext.ModelContextResult{}, fmt.Errorf("%s", i18n.New(locale).T("interactive.contextTooLarge", "bytes", len(runtimeContext), "limit", limit))
+		}
 		fragments = append(fragments, agentcontext.Fragment{
 			ID: "interactive_runtime", Source: "interactive.runtime", Title: "Interactive Runtime Context for This Turn",
 			Purpose: "provide bounded story state, branch plan, active lore, actor state, and turn policy",
 			Content: runtimeContext, Placement: agentcontext.PlacementFinalUserPrefix, Limit: StoryRuntimeContextMaxBytes, Included: true,
 		})
 	}
-	presentationSource := buildPresentationContext(c.workspace, storyCtx.Meta.PresentationSettings, snapshotPresentation(storyCtx.Snapshot), activeBranchPlan, input.UserMessage)
+	presentationSource := buildPresentationContext(c.workspace, storyCtx.Meta.PresentationSettings, snapshotPresentation(storyCtx.Snapshot, storyCtx.Meta.PresentationSettings), activeBranchPlan, input.UserMessage)
 	fragments = append(fragments, agentcontext.Fragment{
 		ID: "interactive_presentation", Source: presentationSource.Source, Title: presentationSource.Title,
 		Purpose: presentationSource.Purpose, Content: presentationSource.Content,

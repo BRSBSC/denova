@@ -83,6 +83,10 @@ func (s *Store) CreateStory(req CreateStoryRequest) (StorySummary, error) {
 	if err := validateStoryCheckSettings(req.CheckSettings); err != nil {
 		return StorySummary{}, err
 	}
+	presentationSettings, err := s.resolveStoryPresentationSettings(req.PresentationSettings, nil)
+	if err != nil {
+		return StorySummary{}, err
+	}
 	protagonist := normalizeStoryProtagonist(req.Protagonist)
 	if err := validateStoryProtagonist(protagonist); err != nil {
 		return StorySummary{}, err
@@ -106,7 +110,7 @@ func (s *Store) CreateStory(req CreateStoryRequest) (StorySummary, error) {
 		ImageSettings:        normalizeStoryImageSettings(req.ImageSettings),
 		CheckSettings:        normalizeStoryCheckSettings(req.CheckSettings),
 		SpeechSettings:       normalizeStorySpeechSettings(req.SpeechSettings),
-		PresentationSettings: NormalizeStoryPresentationSettings(req.PresentationSettings),
+		PresentationSettings: presentationSettings,
 		StateSchemaPolicy:    cloneStoryStateSchemaPolicy(stateSchemaPolicy),
 		CreatedAt:            now,
 		UpdatedAt:            now,
@@ -345,7 +349,10 @@ func (s *Store) UpdateStory(storyID string, req UpdateStoryRequest) (StorySummar
 		meta.ImageSettings = normalizeStoryImageSettings(*req.ImageSettings)
 	}
 	if req.PresentationSettings != nil {
-		meta.PresentationSettings = NormalizeStoryPresentationSettings(req.PresentationSettings)
+		meta.PresentationSettings, err = s.resolveStoryPresentationSettings(req.PresentationSettings, meta.PresentationSettings)
+		if err != nil {
+			return StorySummary{}, err
+		}
 	}
 	if req.SpeechSettings != nil {
 		if err := validateStorySpeechSettings(*req.SpeechSettings); err != nil {

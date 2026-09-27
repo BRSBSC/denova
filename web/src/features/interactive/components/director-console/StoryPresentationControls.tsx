@@ -6,11 +6,13 @@ import { Slider } from '@/components/ui/slider'
 import { Field, FieldDescription, FieldTitle } from '@/components/ui/field'
 import { patchProjectSettings, patchSettings } from '@/features/settings/api'
 import { toast } from '@/lib/toast'
-import type { StoryPresentationSettings, StorySummary } from '../../types'
+import type { LoreItem } from '@/lib/api'
+import { StoryBackgroundSelect } from './StoryBackgroundSelect'
+import type { StoryPresentationSettings } from '../../types'
 import { useStagePreferences } from '../story-stage/use-stage-preferences'
 import { ControlSection, TuningRow } from './StoryTuningControls'
 
-export function StoryPresentationControls({ projectId, story, disabled, onChange }: { projectId?: string; story?: StorySummary; disabled: boolean; onChange: (settings: StoryPresentationSettings) => void }) {
+export function StoryPresentationControls({ projectId, value, loreItems, disabled, onChange }: { projectId?: string; value?: StoryPresentationSettings; loreItems?: LoreItem[]; disabled: boolean; onChange: (settings: StoryPresentationSettings) => void }) {
   const { t } = useTranslation()
   const { scrimOpacity } = useStagePreferences(projectId || '')
   const [draft, setDraft] = useState<number>()
@@ -18,7 +20,7 @@ export function StoryPresentationControls({ projectId, story, disabled, onChange
   const saveQueue = useRef(Promise.resolve())
   const labelId = useId()
   const descriptionId = useId()
-  const settings = { background: true, characters: true, ...story?.presentation_settings }
+  const settings = { background: true, characters: true, ...value }
   const opacity = draft ?? scrimOpacity
   const changeOpacity = (value: number) => {
     // Keyboard input may report the commit before the matching value change.
@@ -50,10 +52,11 @@ export function StoryPresentationControls({ projectId, story, disabled, onChange
   }
   return (
     <ControlSection icon={<Images className="size-4" />} title={t('storyStage.presentation.title')}>
-      <TuningRow title={t('storyStage.presentation.background')}>
+      <StoryBackgroundSelect projectId={projectId} value={settings.default_background} loreItems={loreItems} disabled={disabled} onChange={default_background => onChange({ ...settings, default_background })} />
+      <TuningRow title={t('storyStage.presentation.background')} description={t('storyStage.presentation.backgroundHelp')}>
         <Switch aria-label={t('storyStage.presentation.background')} checked={settings.background} disabled={disabled} onCheckedChange={background => onChange({ ...settings, background })} />
       </TuningRow>
-      <TuningRow title={t('storyStage.presentation.characters')}>
+      <TuningRow title={t('storyStage.presentation.characters')} description={t('storyStage.presentation.charactersHelp')}>
         <Switch aria-label={t('storyStage.presentation.characters')} checked={settings.characters} disabled={disabled} onCheckedChange={characters => onChange({ ...settings, characters })} />
       </TuningRow>
       <Field className="director-control-row min-w-0 gap-2 px-2.5 py-2">

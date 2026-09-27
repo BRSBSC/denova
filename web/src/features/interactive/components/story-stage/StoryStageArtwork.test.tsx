@@ -22,6 +22,65 @@ describe('StoryStageArtwork', () => {
   beforeEach(() => { pending.length = 0; vi.stubGlobal('Image', ImageLoader) })
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
+  it.each([true, false])('keeps identical artwork mounted while browsing history (dynamic background: %s)', async (dynamic) => {
+    const props = { projectId: 'project', textHidden: false, scrimOpacity: 0.75 }
+    const settings = { background: dynamic, characters: true, default_background: material('station', 'day') }
+    const first = turn('one', null, 'day')
+    const second = turn('two', 'one', 'day')
+    const { container, rerender } = render(<StoryStageArtwork {...props} turn={second} previousTurnId="one" latest settings={settings} />)
+    await loadAll()
+    const background = container.querySelector('[data-stage-layer="background"]')
+    const character = container.querySelector('[data-stage-layer="character"]')
+    const scrim = container.querySelector('[data-testid="story-stage-scrim"]')
+    expect(background).not.toBeNull()
+    expect(character).not.toBeNull()
+
+    for (const current of [first, second, first, second]) {
+      rerender(<StoryStageArtwork {...props} turn={current} previousTurnId={current === second ? 'one' : undefined} latest={current === second} settings={settings} />)
+      expect(container.querySelector('[data-stage-layer="background"]')).toBe(background)
+      expect(container.querySelector('[data-stage-layer="character"]')).toBe(character)
+      expect(container.querySelector('[data-testid="story-stage-scrim"]')).toBe(scrim)
+      expect(scrim).toHaveStyle({ opacity: '0.75' })
+      expect(pending).toHaveLength(0)
+    }
+  })
+
+  it('clears a different fallback when leaving the live head with the same image still loading', async () => {
+    const props = { projectId: 'project', textHidden: false, scrimOpacity: 0.75 }
+    const first = turn('one', null, 'day')
+    const second = turn('two', 'one', 'night')
+    const { container, rerender } = render(<StoryStageArtwork {...props} turn={first} latest />)
+    await loadAll()
+    rerender(<StoryStageArtwork {...props} turn={second} previousTurnId="one" latest />)
+    expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'day')
+    rerender(<StoryStageArtwork {...props} turn={second} previousTurnId="one" latest={false} />)
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+    await loadAll()
+    expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'night')
+  })
+
+  it('shows the default before the first turn and keeps it when dynamics are disabled', async () => {
+    const props = { projectId: 'project', latest: true, textHidden: false, scrimOpacity: 0.75 }
+    const settings = { background: true, characters: true, default_background: material('station', 'opening') }
+    const { container, rerender } = render(<StoryStageArtwork {...props} settings={settings} />)
+    await loadAll()
+    expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'opening')
+    rerender(<StoryStageArtwork {...props} turn={turn('one', null, 'night')} settings={settings} />)
+    await loadAll()
+    expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'night')
+    rerender(<StoryStageArtwork {...props} turn={turn('one', null, 'night')} settings={{ ...settings, background: false, characters: false }} />)
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+    await loadAll()
+    expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'opening')
+    expect(container.querySelector('[data-stage-layer="character"]')).toBeNull()
+    const cleared = { ...turn('two', 'one', 'night'), turn_result: { state_updates: [], choices: [], presentation: {} } }
+    rerender(<StoryStageArtwork {...props} turn={cleared} settings={settings} />)
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+    rerender(<StoryStageArtwork {...props} turn={cleared} settings={{ ...settings, background: false }} />)
+    await loadAll()
+    expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'opening')
+  })
+
   it('retains each previous slot during loading or failure and switches successful siblings', async () => {
     const props = { projectId: 'project', latest: true, textHidden: false, scrimOpacity: 0.75 }
     const { container, rerender } = render(<StoryStageArtwork {...props} turn={turn('one', null, 'day')} />)

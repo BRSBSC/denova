@@ -163,7 +163,7 @@ export function LoreCoverDialog({
           <input
             ref={fileInput}
             type="file"
-            accept="image/png,image/jpeg"
+            accept="image/png,image/jpeg,image/webp,image/gif"
             className="hidden"
             aria-label={t('lore.library.uploadCover')}
             disabled={busy}

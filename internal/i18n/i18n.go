@@ -77,6 +77,9 @@ func stringify(v any) string {
 }
 
 var catalogZH = map[string]string{
+	"interactive.contextTooLarge":              "游戏上下文超过完整载入上限（{{bytes}} / {{limit}} 字节），已在生成正文前停止。请检查状态或分支计划中是否有冗长、重复内容；状态手册不会被截断。",
+	"api.interactive.invalidDefaultBackground": "默认背景不可用，请重新选择资料库中已启用并保存到本地的图片素材。",
+
 	"market.errors.resourceOwned":       "此资源属于另一个正在跟踪的安装，请先管理或停止该来源跟踪，再替换内容。",
 	"market.errors.localModified":       "本地内容已修改。可以保留本地内容，或明确选择备份后替换。",
 	"market.errors.skillExists":         "已存在同名技能，请使用其他本地名称。",
@@ -164,8 +167,8 @@ var catalogZH = map[string]string{
 	"api.lore.materialTooLarge":                  "素材不能超过 64 MB。",
 	"api.lore.materialURL":                       "请输入不含用户名或密码的 HTTPS 图片直链。",
 	"api.lore.materialDownload":                  "无法保存网络图片，请检查链接是否公开可访问，或稍后重试。",
-	"api.lore.materialRemoteImage":               "保存到项目仅支持有效的 PNG 或 JPEG 图片。",
-	"api.lore.materialInvalid":                   "请选择有效的 PNG、JPEG、MP3 或 PCM WAV 文件。",
+	"api.lore.materialRemoteImage":               "保存到项目仅支持有效的 JPG/JPEG、PNG、WebP 或 GIF 图片。",
+	"api.lore.materialInvalid":                   "请选择有效的 JPG/JPEG、PNG、WebP、GIF、MP3 或 PCM WAV 文件。",
 	"api.lore.imageTooLarge":                     "资料图片不能超过 16MB",
 	"api.lore.materialReadFailed":                "读取资料素材失败: {{detail}}",
 	"api.lore.imageInvalid":                      "仅支持有效的 PNG 或 JPEG 资料图片",
@@ -297,6 +300,9 @@ var catalogZH = map[string]string{
 }
 
 var catalogEN = map[string]string{
+	"interactive.contextTooLarge":              "Game context exceeds the complete-input limit ({{bytes}} / {{limit}} bytes). Generation stopped before prose. Check state or the branch plan for lengthy, redundant content; the state handbook will not be truncated.",
+	"api.interactive.invalidDefaultBackground": "Default background unavailable. Select an enabled Lore image saved locally.",
+
 	"market.errors.resourceOwned":       "This resource belongs to another tracked installation. Manage or detach its source before replacing it.",
 	"market.errors.localModified":       "Local content has changed. Keep it, or explicitly choose to replace it with a backup.",
 	"market.errors.skillExists":         "A Skill with this name already exists. Choose a different local name.",
@@ -384,8 +390,8 @@ var catalogEN = map[string]string{
 	"api.lore.materialTooLarge":                  "Materials cannot exceed 64 MB.",
 	"api.lore.materialURL":                       "Enter a direct HTTPS image URL without a username or password.",
 	"api.lore.materialDownload":                  "Could not save the remote image. Check that the link is publicly accessible or try again later.",
-	"api.lore.materialRemoteImage":               "Saving to the project supports valid PNG or JPEG images only.",
-	"api.lore.materialInvalid":                   "Choose a valid PNG, JPEG, MP3 or PCM WAV file.",
+	"api.lore.materialRemoteImage":               "Saving to the project supports valid JPG/JPEG, PNG, WebP or GIF images only.",
+	"api.lore.materialInvalid":                   "Choose a valid JPG/JPEG, PNG, WebP, GIF, MP3 or PCM WAV file.",
 	"api.lore.imageTooLarge":                     "Lore image must be 16MB or smaller.",
 	"api.lore.materialReadFailed":                "Failed to read lore material: {{detail}}",
 	"api.lore.imageInvalid":                      "Upload a valid PNG or JPEG lore image.",

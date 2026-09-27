@@ -8,10 +8,12 @@ import { NewStorySetupPanel } from './NewStorySetupPanel'
 
 const settingsMocks = vi.hoisted(() => ({
   fetchSettings: vi.fn(),
+  fetchProjectSettings: vi.fn().mockResolvedValue({ effective: {} }),
 }))
 
 vi.mock('@/features/settings/api', () => ({
   fetchSettings: settingsMocks.fetchSettings,
+  fetchProjectSettings: settingsMocks.fetchProjectSettings,
 }))
 
 vi.mock('../api', () => ({
@@ -149,6 +151,27 @@ describe('NewStorySetupPanel', () => {
       opening: { mode: 'preset', preset_id: 'harbor', preset_text: '港口的灯逐盏熄灭。' },
       check_settings: { difficulty_shift: 0, roll_modifier: 0, rule_state_consumption_mode: 'hybrid_auto', rule_visibility_mode: 'audit_only' },
       image_settings: { mode: 'manual', interval_turns: 3, preset_id: 'game-cg' },
+    })
+  })
+
+  it('selects an opening background and submits independent presentation switches', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    const location: LoreItem = {
+      ...loreCharacter, id: 'station', type: 'location', name: '车站', tags: [],
+      resolved_materials: [{ id: 'day', path: 'assets/day.png', name: '白昼', original_name: 'day.png', mime_type: 'image/png', size_bytes: 10, source: { kind: 'uploaded' } }],
+    }
+    render(<NewStorySetupPanel projectId="project-1" tellers={[teller]} planningTemplates={[planningTemplate]} imagePresets={[]} loreItems={[loreCharacter, location]} conversationConfig={conversationConfigController()} onCancel={vi.fn()} onCreate={onCreate} />)
+    await user.click(screen.getByRole('button', { name: '默认背景' }))
+    await user.click(screen.getByRole('button', { name: /白昼.*车站/ }))
+    expect(screen.getByRole('img', { name: '白昼' })).toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: '动态背景' }))
+    await user.click(screen.getByRole('switch', { name: '角色差分' }))
+    await user.click(screen.getByRole('button', { name: '开始故事' }))
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1))
+    expect(onCreate.mock.calls[0][0].presentation_settings).toEqual({
+      background: false, characters: false,
+      default_background: { item_id: 'station', asset_id: 'day', path: 'assets/day.png', name: '白昼' },
     })
   })
 

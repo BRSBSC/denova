@@ -3,6 +3,7 @@ package interactiveapp
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -15,6 +16,67 @@ import (
 	"denova/internal/book/lore"
 	"denova/internal/interactive"
 )
+
+func TestDefaultBackgroundSelectionPersistsAndSeedsOpening(t *testing.T) {
+	workspace := t.TempDir()
+	material := presentationLoreFixture(t, workspace, "station")
+	store := interactive.NewStore(workspace)
+	settings := &interactive.StoryPresentationSettings{Background: false, Characters: false, DefaultBackground: &interactive.PresentationMaterial{
+		ItemID: "station", AssetID: material.ID, Path: "/untrusted/client/path.png", Name: "Client name",
+	}}
+	story, err := store.CreateStory(interactive.CreateStoryRequest{Title: "Opening background", PlanningMode: interactive.StoryPlanningModeDisabled, PresentationSettings: settings})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := &interactive.PresentationMaterial{ItemID: "station", AssetID: material.ID, Path: material.Path, Name: material.Name}
+	if !reflect.DeepEqual(story.PresentationSettings.DefaultBackground, want) {
+		t.Fatalf("selection did not use the authoritative material: %#v", story.PresentationSettings)
+	}
+	c := NewConversation(store, t.TempDir(), workspace, story.ID, "main", "Enter", 800, nil)
+	bindInteractiveCycleForTest(t, c)
+	args := strings.TrimSuffix(gameStateArgs, "}") + `,"choices":["Enter","Observe","Listen","Inspect","Wait"],"presentation":{"background":null}}`
+	receipt, err := c.SubmitTurnResult(t.Context(), interactive.DecodeInteractiveTurnSubmissionInput(args))
+	if err != nil || !receipt.Ready || receipt.Presentation.Ignored != 1 {
+		t.Fatalf("disabled dynamic selection: receipt=%#v err=%v", receipt, err)
+	}
+	if err := commitInteractiveAssistantForTest(t, c, "The station opens.", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store = interactive.NewStore(workspace)
+	defer store.Close()
+	ctx, err := store.StoryContext(story.ID, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(ctx.Meta.PresentationSettings.DefaultBackground, want) || !reflect.DeepEqual(ctx.Snapshot.CurrentTurn.TurnResult.Presentation.Background, want) {
+		t.Fatal("journal lost the configured or opening background")
+	}
+	// Association removal must not break unrelated toggles or change pinned history.
+	if _, err := lore.NewStore(workspace).MutateMaterial("station", lore.MaterialMutation{Op: "remove", AssetID: material.ID}); err != nil {
+		t.Fatal(err)
+	}
+	settings.Background = true
+	updated, err := store.UpdateStory(story.ID, interactive.UpdateStoryRequest{PresentationSettings: settings})
+	if err != nil || !reflect.DeepEqual(updated.PresentationSettings.DefaultBackground, want) {
+		t.Fatalf("unchanged selection was not retained: %#v %v", updated, err)
+	}
+	settings.DefaultBackground.AssetID = "missing"
+	if _, err := store.UpdateStory(story.ID, interactive.UpdateStoryRequest{PresentationSettings: settings}); !errors.Is(err, interactive.ErrDefaultBackground) {
+		t.Fatalf("invalid selection accepted: %v", err)
+	}
+	settings.DefaultBackground = nil
+	updated, err = store.UpdateStory(story.ID, interactive.UpdateStoryRequest{PresentationSettings: settings})
+	if err != nil || updated.PresentationSettings.DefaultBackground != nil {
+		t.Fatalf("could not clear default: %#v %v", updated, err)
+	}
+	snapshot, err := store.Snapshot(story.ID, "main")
+	if err != nil || !reflect.DeepEqual(snapshot.CurrentTurn.TurnResult.Presentation.Background, want) {
+		t.Fatal("changing the default rewrote committed history")
+	}
+}
 
 func presentationLoreFixture(t *testing.T, workspace string, id string) lore.Material {
 	t.Helper()
@@ -37,7 +99,7 @@ func TestPresentationCatalogAndResolverUseEnabledAssociatedImages(t *testing.T) 
 	workspace := t.TempDir()
 	material := presentationLoreFixture(t, workspace, "hero")
 	raw := json.RawMessage(fmt.Sprintf(`{"characters":[{"item_id":"hero","asset_id":%q}]}`, material.ID))
-	stage, receipt := resolvePresentationPatch(workspace, nil, raw, nil)
+	stage, receipt := interactive.ResolvePresentationPatch(workspace, nil, raw, nil)
 	if receipt.Applied != 1 || stage.Characters[0].Path != material.Path {
 		t.Fatalf("resolve=%#v %#v", stage, receipt)
 	}
@@ -53,7 +115,7 @@ func TestPresentationCatalogAndResolverUseEnabledAssociatedImages(t *testing.T) 
 	if _, err := lore.NewStore(workspace).MutateMaterial("hero", lore.MaterialMutation{Op: "remove", AssetID: material.ID}); err != nil {
 		t.Fatal(err)
 	}
-	preserved, receipt := resolvePresentationPatch(workspace, stage, raw, nil)
+	preserved, receipt := interactive.ResolvePresentationPatch(workspace, stage, raw, nil)
 	if receipt.Ignored != 1 || !reflect.DeepEqual(preserved, stage) {
 		t.Fatal("missing association erased an existing sprite")
 	}

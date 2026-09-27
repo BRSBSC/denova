@@ -453,7 +453,8 @@ export interface ContextAnalysisPart {
   content: string
   note?: string
   bytes: number
-  chars: number
+  /** Estimated tokens in the displayed text, excluding request framing and image pixels. */
+  token_estimate: number
   /** Provider-neutral fields and safe opaque-state metadata for diagnostics. */
   parts?: ContextAnalysisPart[]
 }

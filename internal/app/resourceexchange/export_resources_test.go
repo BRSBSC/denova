@@ -69,6 +69,7 @@ func TestExportResourcesHidesBuiltinSkillsAndKeepsUserCopies(t *testing.T) {
 	// Keep the shared library and preferences isolated from the host account.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	workspace := filepath.Join(s.root, "projects", "export")
 	if err := os.MkdirAll(workspace, 0700); err != nil {
 		t.Fatal(err)
@@ -111,8 +112,36 @@ func TestExportResourcesHidesBuiltinSkillsAndKeepsUserCopies(t *testing.T) {
 	want := []LocalRef{
 		{Kind: "skill", Scope: "user", ID: "user-skill"},
 		{Kind: "skill", Scope: "workspace", ProjectID: book.ID, ID: "workspace-skill"},
-		{Kind: "skill", Scope: "shared", ID: "shared-skill"},
 	}
+	assertSkills(want...)
+	shared := LocalRef{Kind: "skill", Scope: "shared", ID: "shared-skill"}
+	for _, enabled := range []bool{true, false, true} {
+		if err := skills.SetSharedEnabled(ctx, dirs, enabled); err != nil {
+			t.Fatal(err)
+		}
+		if enabled {
+			assertSkills(append(want, shared)...)
+		} else {
+			assertSkills(want...)
+		}
+	}
+	if err := skills.SetLibraryEnabled(ctx, dirs, skills.ScopeShared, shared.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	assertSkills(want...)
+	if err := skills.SetLibraryEnabled(ctx, dirs, skills.ScopeShared, shared.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	assertSkills(append(want, shared)...)
+	// A shared Skill shadowed by a local copy is not enabled in the library.
+	if _, err := skills.SaveDocumentAs(ctx, dirs, skills.ScopeShared, shared.ID, skills.ScopeUser, shared.ID, skills.DefaultContent(shared.ID, "Local copy")); err != nil {
+		t.Fatal(err)
+	}
+	assertSkills(append(want, LocalRef{Kind: "skill", Scope: "user", ID: shared.ID})...)
+	if err := skills.DeleteDocument(ctx, dirs, skills.ScopeUser, shared.ID); err != nil {
+		t.Fatal(err)
+	}
+	want = append(want, shared)
 	assertSkills(want...)
 	// Availability preferences do not turn builtin content into user content.
 	if err := skills.SetLibraryEnabled(ctx, dirs, skills.ScopeBuiltin, "builtin-skill", false); err != nil {

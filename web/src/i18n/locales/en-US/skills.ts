@@ -1,5 +1,6 @@
 const skills = {
   "skills.library.title": "Library",
+  "skills.library.export": "Batch export",
   "skills.library.search": "Search skills in your library…",
   "skills.library.all": "All",
   "skills.library.enabled": "Enabled",

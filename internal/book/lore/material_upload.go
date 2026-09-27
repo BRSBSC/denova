@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"image"
+	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
 	"log/slog"
@@ -16,11 +17,12 @@ import (
 
 	"denova/internal/portablepath"
 	"github.com/google/uuid"
+	_ "golang.org/x/image/webp"
 )
 
 const MaxMaterialUploadBytes = 64 * 1024 * 1024
 
-var ErrMaterialInvalid = errors.New("material must contain a valid PNG, JPEG, MP3 or PCM WAV file")
+var ErrMaterialInvalid = errors.New("material must contain a valid PNG, JPEG, WebP, GIF, MP3 or PCM WAV file")
 var ErrMaterialTooLarge = errors.New("material exceeds 64 MiB")
 
 // MaterialFile is a ready payload from an upload or generator. Source and Entry
@@ -108,8 +110,11 @@ func MaterialFormat(data []byte) (mime, ext string, err error) {
 	if len(data) == 0 {
 		return "", "", ErrMaterialInvalid
 	}
-	if _, format, e := image.DecodeConfig(bytes.NewReader(data)); e == nil && (format == "png" || format == "jpeg") {
-		return "image/" + format, format, nil
+	if _, format, e := image.DecodeConfig(bytes.NewReader(data)); e == nil {
+		switch format {
+		case "png", "jpeg", "webp", "gif":
+			return "image/" + format, format, nil
+		}
 	}
 	// WAV is a chunk container. Require a supported format and nonempty, bounded
 	// audio data instead of trusting the extension or just the RIFF signature.

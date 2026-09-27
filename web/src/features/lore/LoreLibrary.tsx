@@ -337,6 +337,7 @@ export function LoreLibrary({
                     onSelect={() => onSelect(item.id)}
                     onToggle={() => toggle(item.id)}
                     onCover={(action) => setCoverTarget({ id: item.id, action })}
+                    onChanged={onChanged}
                   />
                 ))}
               </div>

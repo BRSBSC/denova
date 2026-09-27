@@ -3,14 +3,77 @@ package lore
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"image"
+	"image/color"
+	"image/gif"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func materialImage(t *testing.T, format string) []byte {
+	t.Helper()
+	var data bytes.Buffer
+	picture := image.NewPaletted(image.Rect(0, 0, 2, 2), color.Palette{color.Black, color.White})
+	var err error
+	switch format {
+	case "png":
+		return materialPNG(t)
+	case "jpeg":
+		err = jpeg.Encode(&data, picture, nil)
+	case "gif":
+		second := image.NewPaletted(picture.Rect, picture.Palette)
+		second.SetColorIndex(0, 0, 1)
+		err = gif.EncodeAll(&data, &gif.GIF{Image: []*image.Paletted{picture, second}, Delay: []int{10, 10}})
+	case "webp":
+		decoded, decodeErr := base64.StdEncoding.DecodeString("UklGRiIAAABXRUJQVlA4TBEAAAAvAAAAAAfQ//73v/+BiOh/AAA=")
+		err = decodeErr
+		data.Write(decoded)
+	default:
+		t.Fatalf("unsupported test image format: %s", format)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data.Bytes()
+}
+
+func TestMaterialImageUploadsPreserveFormatBytesAndCover(t *testing.T) {
+	for _, format := range []string{"jpeg", "png", "webp", "gif"} {
+		t.Run(format, func(t *testing.T) {
+			s := NewStore(t.TempDir())
+			if _, err := s.Create(ItemInput{ID: "hero", Name: "Hero"}); err != nil {
+				t.Fatal(err)
+			}
+			data := materialImage(t, format)
+			// Source extensions and MIME headers cannot be trusted to identify images.
+			item, err := s.UploadMaterial(t.Context(), "hero", "reference.jpg", data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			material := item.ResolvedMaterials[0]
+			if material.MIMEType != "image/"+format || filepath.Ext(material.Path) != "."+format || material.SizeBytes != len(data) {
+				t.Fatalf("incorrect stored image format: %+v", material)
+			}
+			stored, err := os.ReadFile(filepath.Join(s.workspace, filepath.FromSlash(material.Path)))
+			if err != nil || !bytes.Equal(data, stored) {
+				t.Fatalf("original image bytes changed: %v", err)
+			}
+			if _, err := s.MutateMaterial("hero", MaterialMutation{Op: "cover", AssetID: material.ID}); err != nil {
+				t.Fatal(err)
+			}
+			restored, err := NewStore(s.workspace).ReadAny("hero")
+			if err != nil || restored.Image == nil || restored.Image.MIMEType != material.MIMEType || restored.Image.ImagePath != material.Path {
+				t.Fatalf("image cover did not survive reopening: %+v, %v", restored.Image, err)
+			}
+		})
+	}
+}
 
 func materialPNG(t *testing.T) []byte {
 	t.Helper()

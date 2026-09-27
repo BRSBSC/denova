@@ -131,6 +131,9 @@ func (s *Service) ExportResources(ctx context.Context, projectID string) ([]Expo
 		if skill.Scope == skills.ScopeBuiltin {
 			continue
 		}
+		if skill.Scope == skills.ScopeShared && (!skill.Active || !skill.Enabled) {
+			continue
+		}
 		local := LocalRef{Kind: "skill", Scope: string(skill.Scope), ID: skill.Name}
 		if skill.Scope == skills.ScopeWorkspace {
 			local.ProjectID = projectID

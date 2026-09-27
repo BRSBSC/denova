@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	agent "github.com/alfredxw/denova/agent"
 
@@ -59,7 +58,8 @@ type ContextAnalysisPart struct {
 	Content    string `json:"content"`
 	Note       string `json:"note,omitempty"`
 	Bytes      int    `json:"bytes"`
-	Chars      int    `json:"chars"`
+	// TokenEstimate measures the displayed text, excluding request framing and image pixels.
+	TokenEstimate int `json:"token_estimate"`
 	// Parts decomposes provider-neutral message fields and safe opaque-state
 	// metadata for diagnostics. Content remains the copyable message body.
 	Parts []ContextAnalysisPart `json:"parts,omitempty"`
@@ -80,17 +80,17 @@ type ContextAnalysisPartInput struct {
 func NewContextAnalysisPart(in ContextAnalysisPartInput) ContextAnalysisPart {
 	content := in.Content
 	return ContextAnalysisPart{
-		ID:         strings.TrimSpace(in.ID),
-		Source:     strings.TrimSpace(in.Source),
-		Title:      strings.TrimSpace(in.Title),
-		Role:       strings.TrimSpace(in.Role),
-		Kind:       strings.TrimSpace(in.Kind),
-		ToolName:   strings.TrimSpace(in.ToolName),
-		ToolCallID: strings.TrimSpace(in.ToolCallID),
-		Content:    content,
-		Note:       strings.TrimSpace(in.Note),
-		Bytes:      len(content),
-		Chars:      utf8.RuneCountInString(content),
+		ID:            strings.TrimSpace(in.ID),
+		Source:        strings.TrimSpace(in.Source),
+		Title:         strings.TrimSpace(in.Title),
+		Role:          strings.TrimSpace(in.Role),
+		Kind:          strings.TrimSpace(in.Kind),
+		ToolName:      strings.TrimSpace(in.ToolName),
+		ToolCallID:    strings.TrimSpace(in.ToolCallID),
+		Content:       content,
+		Note:          strings.TrimSpace(in.Note),
+		Bytes:         len(content),
+		TokenEstimate: agent.EstimateTextTokens(content),
 	}
 }
 

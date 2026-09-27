@@ -6,11 +6,13 @@ import (
 	"fmt"
 )
 
-// StoryPresentationSettings controls future selection and local visibility.
-// Disabling a layer never erases a committed turn's presentation.
+// StoryPresentationSettings is story-owned. Background enables dynamic selection;
+// disabling it displays DefaultBackground. Characters controls selection and visibility.
+// Neither switch erases a committed turn's presentation.
 type StoryPresentationSettings struct {
-	Background bool `json:"background"`
-	Characters bool `json:"characters"`
+	Background        bool                  `json:"background"`
+	DefaultBackground *PresentationMaterial `json:"default_background,omitempty"`
+	Characters        bool                  `json:"characters"`
 }
 
 func NormalizeStoryPresentationSettings(settings *StoryPresentationSettings) *StoryPresentationSettings {
@@ -18,6 +20,10 @@ func NormalizeStoryPresentationSettings(settings *StoryPresentationSettings) *St
 		return &StoryPresentationSettings{Background: true, Characters: true}
 	}
 	copy := *settings
+	if settings.DefaultBackground != nil {
+		background := *settings.DefaultBackground
+		copy.DefaultBackground = &background
+	}
 	return &copy
 }
 

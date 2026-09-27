@@ -403,7 +403,9 @@ export interface UpdateBranchPlanResult {
 }
 
 export interface StoryPresentationSettings {
+  /** Allow turn-driven background changes; otherwise show the default image. */
   background: boolean
+  default_background?: PresentationMaterial
   characters: boolean
 }
 

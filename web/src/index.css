@@ -2997,7 +2997,28 @@ html[data-nova-motion="off"] .nova-change-review-layer {
   min-width: 0;
 }
 
-/* The game stage owns the reading scrim; chat canvases remain opaque elsewhere. */
-.nova-story-stage-content[data-artwork="true"] .nova-chat-canvas {
+/* Resolve translucent bubble colors before overriding the original theme tokens. */
+.nova-story-stage-content[data-artwork="true"] {
+  --nova-stage-user-message-bg-from: color-mix(in srgb, var(--nova-user-message-bg-from) 60%, transparent);
+  --nova-stage-user-message-bg-to: color-mix(in srgb, var(--nova-user-message-bg-to) 60%, transparent);
+}
+
+.nova-story-stage-content[data-artwork="true"] .nova-user-message {
+  --nova-user-message-bg-from: var(--nova-stage-user-message-bg-from);
+  --nova-user-message-bg-to: var(--nova-stage-user-message-bg-to);
+}
+
+/* Share the stage's reading scrim without fading text or stacking opaque cards. */
+.nova-story-stage-content[data-artwork="true"] :is(
+  .nova-chat-canvas,
+  .story-state-ledger,
+  .story-state-ledger__tabs-list,
+  .nova-tool-surface,
+  .nova-tool-content
+) {
   background: transparent;
+}
+
+.nova-story-stage-content[data-artwork="true"] .nova-tool-surface {
+  --nova-hover: color-mix(in srgb, var(--nova-surface-3) 25%, transparent);
 }

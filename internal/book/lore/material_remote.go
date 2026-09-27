@@ -18,7 +18,7 @@ import (
 var (
 	ErrMaterialURL         = errors.New("material URL must be an absolute HTTPS URL without credentials")
 	ErrMaterialDownload    = errors.New("could not download remote material")
-	ErrMaterialRemoteImage = errors.New("remote material must contain a valid PNG or JPEG image")
+	ErrMaterialRemoteImage = errors.New("remote material must contain a valid PNG, JPEG, WebP or GIF image")
 )
 
 func parseMaterialURL(raw string) (*url.URL, error) {
@@ -104,7 +104,7 @@ func downloadMaterial(ctx context.Context, client *http.Client, raw string) ([]b
 	if err != nil {
 		return nil, ErrMaterialURL
 	}
-	req.Header.Set("Accept", "image/png, image/jpeg")
+	req.Header.Set("Accept", "image/png, image/jpeg, image/webp, image/gif")
 	response, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMaterialDownload, err)

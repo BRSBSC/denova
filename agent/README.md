@@ -321,7 +321,7 @@ Agent 统一保护当前用户要求、最近完整工具组及未完成步骤�
 Denova 原生 Agent（包括写作、游戏及持久子 Agent）沿用现有的自动压缩开关；软阈值按摘要阈值同比缩放，默认先 60% 清理、再 85% 摘要。SDK 的 `Elision: nil` 不再创建新清理；已提交投影仍保留。最近 Release 的原始用户数据无需迁移，旧 Cleanup 记录仍仅作为历史诊断读取。
 
 
-原生图片通过 [`Attachment`](attachment.go) 进入用户消息或 `ToolResult.Attachments`。`InputSize.Tokens` 包含文本和视觉 token，`InputSize.Bytes` 只统计消息、工具 Schema 与附件描述的 JSON，不包含图片 Base64；这些上下文预算同时用于压缩与最终输入检查。自定义模型可实现 `ModelInputEstimator` 提供视觉计数规则，未知模型默认每张图片预留 32K token。
+原生图片通过 [`Attachment`](attachment.go) 进入用户消息或 `ToolResult.Attachments`。`InputSize.Tokens` 包含文本和视觉 token，`InputSize.Bytes` 只统计消息、工具 Schema 与附件描述的 JSON，不包含图片 Base64；这些上下文预算同时用于压缩与最终输入检查。自定义模型可实现 `ModelInputEstimator` 提供视觉计数规则，未知模型默认按每张图片 1,844 token 估算。
 
 `tools.Workspace` 的 `read` 可读取 UTF-8 文本和 PNG、JPEG、GIF、WebP 图片（每图最多 20 MiB）。图片读取需要 `Definition.Artifacts` 提供本地路径解析，先将读取的字节保存为不可变产物，再返回原生图片；用户附件路径相对于 `AttachmentRoot`，工具图片路径相对于其产物存储边界。journal 只保留相对引用与 SHA256，运行时绝对路径不持久化。Responses 和 Anthropic 把图片放入工具结果，Chat Completions 在整批工具结果之后投影图片消息，保持调用配对。
 
