@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -29,10 +29,18 @@ export function LoreMaterialGenerateDialog({
   busy,
   onClose,
   onGenerate,
+  title,
+  description,
+  modes = ['agent', 'custom'],
+  children,
 }: {
   busy: boolean
   onClose: () => void
   onGenerate: (input: LoreItemImageGenerateRequest) => Promise<boolean>
+  title?: string
+  description?: string
+  modes?: Array<'agent' | 'custom'>
+  children?: ReactNode
 }) {
   const { t } = useTranslation()
   const id = useId()
@@ -62,30 +70,40 @@ export function LoreMaterialGenerateDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t('lore.materials.generate')}</DialogTitle>
-          <DialogDescription>{t('lore.materials.generateHint')}</DialogDescription>
+          <DialogTitle>{title ?? t('lore.materials.generate')}</DialogTitle>
+          <DialogDescription>{description ?? t('lore.materials.generateHint')}</DialogDescription>
         </DialogHeader>
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor={`${id}-mode`}>
-              {t('settingPanel.loreImage.generationMode')}
-            </FieldLabel>
-            <Select
-              value={mode}
-              onValueChange={(value) => setMode(value as typeof mode)}
-              disabled={busy}
-            >
-              <SelectTrigger id={`${id}-mode`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="agent">{t('settingPanel.loreImage.modeAgent')}</SelectItem>
-                  <SelectItem value="custom">{t('settingPanel.loreImage.modeCustom')}</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
+          {modes.length > 1 && (
+            <Field>
+              <FieldLabel htmlFor={`${id}-mode`}>
+                {t('settingPanel.loreImage.generationMode')}
+              </FieldLabel>
+              <Select
+                value={mode}
+                onValueChange={(value) => setMode(value as typeof mode)}
+                disabled={busy}
+              >
+                <SelectTrigger id={`${id}-mode`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {modes.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {t(
+                          value === 'agent'
+                            ? 'settingPanel.loreImage.modeAgent'
+                            : 'settingPanel.loreImage.modeCustom',
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+          {children}
           {mode === 'agent' && (
             <Field>
               <FieldLabel htmlFor={`${id}-preset`}>{t('settingPanel.loreImage.preset')}</FieldLabel>

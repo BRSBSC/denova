@@ -3,6 +3,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { runtimeRoot } from './e2e-paths.mjs'
 import { compactionCompletion, compactionControl } from './e2e-compaction-fixture.mjs'
+import { loreCompletion } from './e2e-lore-fixture.mjs'
 import { extensionImage, extensionOpening, extensionScene } from './e2e-extension-fixture.mjs'
 import { responsesRequest, responsesControl, captureNativeRequest, runtimeCompletion, writeCompletionFrame, finishCompletion } from './e2e-responses-fixture.mjs'
 
@@ -378,7 +379,7 @@ const server = createServer(async (request, response) => {
     else writeGeneratedCompletion(response, scene)
     return
   }
-  const compaction = runtimeCompletion(body) ?? compactionCompletion(body)
+  const compaction = loreCompletion(body) ?? runtimeCompletion(body) ?? compactionCompletion(body)
   if (compaction) {
     if (body.stream !== true) writeGeneratedCompletion(response, compaction.content)
     else if (compaction.tool) writeChatCompletion(response, toolCompletionFrames(compaction.tool, compaction.arguments, compaction.id))

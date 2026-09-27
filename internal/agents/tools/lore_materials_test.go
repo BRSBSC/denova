@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"image"
 	"image/png"
@@ -65,5 +66,49 @@ func TestLoreMaterialDiscoveryThenNativeImageRead(t *testing.T) {
 	}
 	if len(result.Artifacts) != 1 {
 		t.Fatal("selected media has no recovery artifact", result)
+	}
+}
+
+func TestLoreMaterialDiscoveryReportsCoverAcrossPaginationAndLegacyData(t *testing.T) {
+	workspace := t.TempDir()
+	store := lore.NewStore(workspace)
+	legacy, err := store.Create(lore.ItemInput{ID: "legacy", Name: "Legacy", Image: &lore.Image{ImagePath: "assets/lore/images/legacy.png", MIMEType: "image/png"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	modern, err := store.Create(lore.ItemInput{ID: "modern", Name: "Modern"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"first", "cover"} {
+		modern, err = store.AppendImage(modern.ID, &lore.Image{ImagePath: "assets/lore/images/" + path + ".png", MIMEType: "image/png"})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	modern, err = store.MutateMaterial(modern.ID, lore.MaterialMutation{Op: "cover", AssetID: modern.ResolvedMaterials[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool, err := newLoreMaterialsTool(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []lore.Item{legacy, modern} {
+		input, _ := json.Marshal(listLoreMaterialsInput{ItemID: item.ID, Limit: 1})
+		result, err := tool.Tool.Run(context.Background(), string(input))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var page struct {
+			CoverID string `json:"cover_asset_id"`
+		}
+		if err := json.Unmarshal([]byte(result.ModelContent), &page); err != nil {
+			t.Fatal(err)
+		}
+		want := item.ResolvedMaterials[len(item.ResolvedMaterials)-1].ID
+		if page.CoverID != want {
+			t.Fatalf("cover for %s: got %q, want %q", item.ID, page.CoverID, want)
+		}
 	}
 }

@@ -61,6 +61,7 @@ for (const theme of ['dark', 'light']) {
       .getByLabel('工作台侧边栏')
       .getByRole('button', { name: '资料库', exact: true })
       .click()
+    await page.getByTestId('lore-card-hero').getByRole('button', { name: '素材测试角色', exact: true }).click()
     await page.getByRole('tab', { name: '素材 (0)', exact: true }).click()
     await expect(page.getByText('还没有关联素材', { exact: true })).toBeVisible()
     await page.getByLabel('上传文件', { exact: true }).setInputFiles([
@@ -159,6 +160,7 @@ test('an upload completing after leaving the material tab preserves unsaved text
   })
   await page.goto('/')
   await page.getByLabel('工作台侧边栏').getByRole('button', { name: '资料库', exact: true }).click()
+  await page.getByTestId('lore-library').getByRole('button', { name: /^(并发角色|A 角色)$/, exact: true }).click()
   await page.getByRole('tab', { name: '素材 (0)', exact: true }).click()
   let release!: () => void
   const held = new Promise<void>((resolve) => {
@@ -211,6 +213,7 @@ test('retries only failed uploads without changing the current selection', async
   }
   await page.goto('/')
   await page.getByLabel('工作台侧边栏').getByRole('button', { name: '资料库', exact: true }).click()
+  await page.getByTestId('lore-library').getByRole('button', { name: /^(并发角色|A 角色)$/, exact: true }).click()
   await page.getByRole('tab', { name: '素材 (0)', exact: true }).click()
   let attempts = 0
   browserDiagnostics.allow(/console\.error: Failed to load resource:.*422/)
@@ -250,7 +253,7 @@ test('retries only failed uploads without changing the current selection', async
       .getByLabel('上传文件', { exact: true })
       .setInputFiles({ name: 'another.png', mimeType: 'image/png', buffer: portrait })
     await committedPromise
-    await page.getByRole('button', { name: /^B 角色/ }).click()
+    await page.getByRole('button', { name: /^B 角色/ }).filter({ visible: true }).click()
     release()
     await expect(page.getByLabel('名称', { exact: true })).toHaveValue('B 角色')
     await expect
@@ -297,6 +300,7 @@ test('reads released single-image data without rewriting and appends generated i
   await writeFile(collectionPath, legacy)
   await page.goto('/')
   await page.getByLabel('工作台侧边栏').getByRole('button', { name: '资料库', exact: true }).click()
+  await page.getByTestId('lore-card-hero').getByRole('button', { name: '旧版角色', exact: true }).click()
   await page.getByRole('tab', { name: '素材 (1)', exact: true }).click()
   await expect(page.getByText('旧图说明', { exact: true })).toBeVisible()
   expect(await readFile(collectionPath, 'utf8')).toBe(legacy)

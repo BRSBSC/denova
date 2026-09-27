@@ -14,6 +14,9 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Added / 新增
 
+- 资料库新增分类卡片总览，支持封面上传、生成与选择、批量补齐封面或追加图片，以及带版本恢复点的批量删除。
+- Lore adds a categorized card overview with cover upload, generation and selection, batch cover completion or image creation, and batch deletion protected by a recovery version.
+
 - 游戏舞台支持由 Agent 按回合选择资料库背景与角色差分，多角色并列显示，并提供图层开关、文字遮罩和隐藏文字按钮；演出随故事分支保存，素材错误不阻塞剧情。
 - Game stages support per-turn Lore backgrounds and character sprites selected by the Agent, multiple characters, layer toggles, a reading scrim and text hiding. Presentation follows story branches, and invalid materials never block the story.
 - 资料项支持多图与音频素材、网络图片引用与按需保存到项目、独立说明、作品内复用和封面选择；生成图片追加保存，素材随资源包导入导出，版本恢复保留历史可能引用的媒体。新版直接读取 v0.5.0 单图资料，无需迁移。

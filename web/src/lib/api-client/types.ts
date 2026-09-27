@@ -823,7 +823,7 @@ export interface LoreMaterial extends LoreAsset {
 export interface LoreMaterialMutation {
   url?: string
   save_locally?: boolean
-  op: 'link' | 'update' | 'remove' | 'cover' | 'remote' | 'localize'
+  op: 'link' | 'update' | 'remove' | 'cover' | 'cover_if_missing' | 'remote' | 'localize'
   asset_id?: string
   name?: string
   description?: string

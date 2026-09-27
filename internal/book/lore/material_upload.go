@@ -94,7 +94,7 @@ func (s *Store) SaveMaterial(ctx context.Context, id string, file MaterialFile) 
 	if err := ctx.Err(); err != nil {
 		return Item{}, err
 	}
-	item, err := s.attachAsset(id, a, file.Entry, file.ReplaceAssetID)
+	item, err := s.attachAsset(id, a, file.Entry, materialAttachment{replaceID: file.ReplaceAssetID})
 	if err != nil {
 		return Item{}, err
 	}

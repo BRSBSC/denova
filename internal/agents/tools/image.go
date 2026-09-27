@@ -36,20 +36,21 @@ const (
 const GenerateImageToolName = generateImageToolName
 
 type generateImageInput struct {
-	Purpose      string `json:"purpose,omitempty" jsonschema:"description=Image purpose. Leave empty or use general for ordinary images; use chapter_illustration for chapter art; use interactive_image for interactive art; use book_cover for the canonical book cover; use lore_item for one lore item."`
-	TargetPath   string `json:"target_path,omitempty" jsonschema:"description=Related workspace-relative path. For chapter illustrations, provide a chapter path such as chapters/001.md; ordinary images may omit it."`
-	LoreItemID   string `json:"lore_item_id,omitempty" jsonschema:"description=Exact lore item ID; required only when purpose=lore_item."`
-	StoryID      string `json:"story_id,omitempty" jsonschema:"description=Story ID for an interactive image; provide only when purpose=interactive_image."`
-	BranchID     string `json:"branch_id,omitempty" jsonschema:"description=Branch ID for an interactive image; provide only when purpose=interactive_image."`
-	TurnID       string `json:"turn_id,omitempty" jsonschema:"description=Turn ID for an interactive image; provide only when purpose=interactive_image."`
-	Prompt       string `json:"prompt" jsonschema:"required,description=Complete visual prompt for the image model, including subject, scene, composition, style, lighting, mood, and text or watermarks to avoid."`
-	AltText      string `json:"alt_text,omitempty" jsonschema:"description=Markdown image alt text; generated from the chapter name when omitted."`
-	N            int    `json:"n,omitempty" jsonschema:"description=Number of images. Ordinary images accept 1 to 10; chapter illustrations and interactive images always generate one."`
-	Size         string `json:"size,omitempty" jsonschema:"description=Optional image dimensions such as 1024x1024. Support depends on the selected provider."`
-	AspectRatio  string `json:"aspect_ratio,omitempty" jsonschema:"description=Optional aspect ratio such as 1:1, 16:9, or 9:16. The provider chooses the nearest supported ratio when needed."`
-	Resolution   string `json:"resolution,omitempty" jsonschema:"description=Optional provider resolution tier such as 1K or 2K."`
-	Quality      string `json:"quality,omitempty" jsonschema:"description=Optional image quality, such as auto, standard, hd, low, medium, or high."`
-	OutputFormat string `json:"output_format,omitempty" jsonschema:"description=Optional output format: png, jpeg, or webp."`
+	Purpose      string               `json:"purpose,omitempty" jsonschema:"description=Image purpose. Leave empty or use general for ordinary images; use chapter_illustration for chapter art; use interactive_image for interactive art; use book_cover for the canonical book cover; use lore_item for one lore item."`
+	TargetPath   string               `json:"target_path,omitempty" jsonschema:"description=Related workspace-relative path. For chapter illustrations, provide a chapter path such as chapters/001.md; ordinary images may omit it."`
+	LoreItemID   string               `json:"lore_item_id,omitempty" jsonschema:"description=Exact lore item ID; required only when purpose=lore_item."`
+	LoreCover    booklore.CoverPolicy `json:"lore_cover,omitempty" jsonschema:"enum=if_missing,description=Only for purpose=lore_item. Use if_missing when the user requests a cover: attach the generated image and set it as cover only if the item still has no cover. Omit to preserve the cover. Existing images and text are always retained."`
+	StoryID      string               `json:"story_id,omitempty" jsonschema:"description=Story ID for an interactive image; provide only when purpose=interactive_image."`
+	BranchID     string               `json:"branch_id,omitempty" jsonschema:"description=Branch ID for an interactive image; provide only when purpose=interactive_image."`
+	TurnID       string               `json:"turn_id,omitempty" jsonschema:"description=Turn ID for an interactive image; provide only when purpose=interactive_image."`
+	Prompt       string               `json:"prompt" jsonschema:"required,description=Complete visual prompt for the image model, including subject, scene, composition, style, lighting, mood, and text or watermarks to avoid."`
+	AltText      string               `json:"alt_text,omitempty" jsonschema:"description=Markdown image alt text; generated from the chapter name when omitted."`
+	N            int                  `json:"n,omitempty" jsonschema:"description=Number of images. Ordinary images accept 1 to 10; chapter illustrations and interactive images always generate one."`
+	Size         string               `json:"size,omitempty" jsonschema:"description=Optional image dimensions such as 1024x1024. Support depends on the selected provider."`
+	AspectRatio  string               `json:"aspect_ratio,omitempty" jsonschema:"description=Optional aspect ratio such as 1:1, 16:9, or 9:16. The provider chooses the nearest supported ratio when needed."`
+	Resolution   string               `json:"resolution,omitempty" jsonschema:"description=Optional provider resolution tier such as 1K or 2K."`
+	Quality      string               `json:"quality,omitempty" jsonschema:"description=Optional image quality, such as auto, standard, hd, low, medium, or high."`
+	OutputFormat string               `json:"output_format,omitempty" jsonschema:"description=Optional output format: png, jpeg, or webp."`
 }
 
 type generatedImageToolResult struct {
@@ -296,6 +297,9 @@ func generateImageForTool(ctx context.Context, cfg *config.Config, bookService *
 }
 
 func generateLoreImageForTool(ctx context.Context, cfg *config.Config, bookService *book.Service, input generateImageInput) (generatedImageToolResult, error) {
+	if input.LoreCover != booklore.CoverPreserve && input.LoreCover != booklore.CoverIfMissing {
+		return generatedImageToolResult{}, fmt.Errorf("unsupported lore_cover: %s", input.LoreCover)
+	}
 	itemID := strings.TrimSpace(input.LoreItemID)
 	if itemID == "" {
 		return generatedImageToolResult{}, fmt.Errorf("lore_item_id is required when purpose=lore_item")
@@ -312,7 +316,7 @@ func generateLoreImageForTool(ctx context.Context, cfg *config.Config, bookServi
 	if err != nil {
 		return generatedImageToolResult{}, err
 	}
-	if _, err := store.AppendImage(item.ID, &generated); err != nil {
+	if _, err := store.AppendImageWithCover(item.ID, &generated, input.LoreCover); err != nil {
 		imageasset.DiscardUnlinkedLore(ctx, store, bookService, generated)
 		return generatedImageToolResult{}, err
 	}

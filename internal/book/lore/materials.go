@@ -20,6 +20,20 @@ type MaterialEntry struct {
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
 }
+
+// CoverPolicy applies to a newly generated image under the collection lock.
+// Filling a missing cover never replaces a cover selected while generation ran.
+type CoverPolicy string
+
+const (
+	CoverPreserve  CoverPolicy = ""
+	CoverIfMissing CoverPolicy = "if_missing"
+)
+
+type materialAttachment struct {
+	replaceID string
+	cover     CoverPolicy
+}
 type AssetSource struct {
 	Kind     string `json:"kind"`
 	MetaPath string `json:"meta_path,omitempty"`
@@ -231,14 +245,15 @@ func (s *Store) mutateMaterials(id string, change func(*Collection, *Item) error
 // AttachAsset registers a ready resource and its association atomically. Callers own
 // file creation and must remove only their uncommitted files on failure.
 func (s *Store) AttachAsset(id string, asset Asset, entry MaterialEntry) (Item, error) {
-	return s.attachAsset(id, asset, entry, "")
+	return s.attachAsset(id, asset, entry, materialAttachment{})
 }
 
 // Replacement affects only this association, preserving its latest text and cover.
 // Other items may still use the original asset, which remains available for reuse.
-func (s *Store) attachAsset(id string, asset Asset, entry MaterialEntry, replaceID string) (Item, error) {
+func (s *Store) attachAsset(id string, asset Asset, entry MaterialEntry, options materialAttachment) (Item, error) {
 	return s.mutateMaterials(id, func(c *Collection, item *Item) error {
 		promoteMaterials(c, item)
+		replaceID := options.replaceID
 		if replaceID != "" {
 			index := -1
 			for i, e := range item.Materials.Entries {
@@ -269,14 +284,25 @@ func (s *Store) attachAsset(id string, asset Asset, entry MaterialEntry, replace
 		}
 		entry.AssetID = asset.ID
 		item.Materials.Entries = append(item.Materials.Entries, entry)
+		if options.cover == CoverIfMissing && item.Materials.CoverAssetID == "" {
+			item.Materials.CoverAssetID = asset.ID
+		}
 		return nil
 	})
 }
 func (s *Store) AppendImage(id string, image *Image) (Item, error) {
+	return s.AppendImageWithCover(id, image, CoverPreserve)
+}
+
+// AppendImageWithCover commits the new material and its requested cover policy together.
+func (s *Store) AppendImageWithCover(id string, image *Image, cover CoverPolicy) (Item, error) {
 	if image == nil {
 		return Item{}, fmt.Errorf("image is required")
 	}
-	return s.AttachAsset(id, assetFromImage(image), MaterialEntry{Name: image.AltText})
+	if cover != CoverPreserve && cover != CoverIfMissing {
+		return Item{}, fmt.Errorf("unknown lore cover policy: %s", cover)
+	}
+	return s.attachAsset(id, assetFromImage(image), MaterialEntry{Name: image.AltText}, materialAttachment{cover: cover})
 }
 func (s *Store) MutateMaterial(id string, m MaterialMutation) (Item, error) {
 	return s.mutateMaterials(id, func(c *Collection, item *Item) error {
@@ -340,11 +366,13 @@ func (s *Store) MutateMaterial(id string, m MaterialMutation) (Item, error) {
 			if item.Materials.CoverAssetID == m.AssetID {
 				item.Materials.CoverAssetID = ""
 			}
-		case "cover":
+		case "cover", "cover_if_missing":
 			if m.AssetID != "" && index < 0 {
 				return fmt.Errorf("cover is not linked: %s", m.AssetID)
 			}
-			item.Materials.CoverAssetID = m.AssetID
+			if m.Op == "cover" || item.Materials.CoverAssetID == "" {
+				item.Materials.CoverAssetID = m.AssetID
+			}
 		default:
 			return fmt.Errorf("unknown material operation: %s", m.Op)
 		}

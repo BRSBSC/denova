@@ -73,3 +73,33 @@ func TestMaterialsShareDescriptionsAndPreserveText(t *testing.T) {
 		t.Fatalf("dedup: %+v %v", c, err)
 	}
 }
+
+func TestGeneratedCoverOnlyFillsMissingCover(t *testing.T) {
+	s := NewStore(t.TempDir())
+	item, err := s.Create(ItemInput{ID: "hero", Name: "Hero", Content: "Keep this text"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := &Image{ImagePath: "assets/lore/media/asset_first/file.png", MIMEType: "image/png"}
+	second := &Image{ImagePath: "assets/lore/media/asset_second/file.png", MIMEType: "image/png"}
+	item, err = s.AppendImageWithCover(item.ID, first, CoverIfMissing)
+	if err != nil || item.Image == nil || item.Image.ImagePath != first.ImagePath {
+		t.Fatalf("first cover: %+v %v", item, err)
+	}
+	item, err = s.AppendImageWithCover(item.ID, second, CoverIfMissing)
+	if err != nil || item.Image.ImagePath != first.ImagePath || len(item.ResolvedMaterials) != 2 || item.Content != "Keep this text" {
+		t.Fatalf("existing cover changed: %+v %v", item, err)
+	}
+	item, err = s.MutateMaterial(item.ID, MaterialMutation{Op: "cover_if_missing", AssetID: item.ResolvedMaterials[1].ID})
+	if err != nil || item.Image.ImagePath != first.ImagePath {
+		t.Fatalf("conditional cover replaced existing: %+v %v", item, err)
+	}
+	item, err = s.MutateMaterial(item.ID, MaterialMutation{Op: "cover"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err = s.MutateMaterial(item.ID, MaterialMutation{Op: "cover_if_missing", AssetID: item.ResolvedMaterials[1].ID})
+	if err != nil || item.Image == nil || item.Image.ImagePath != second.ImagePath {
+		t.Fatalf("conditional cover missing: %+v %v", item, err)
+	}
+}

@@ -75,7 +75,7 @@ func (s *Store) RemoteMaterial(ctx context.Context, id string, m MaterialMutatio
 	}
 	// Exact MIME and byte size are unknown until explicitly downloaded.
 	asset := Asset{URL: raw, OriginalName: filename, MIMEType: "image/*", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Source: source}
-	updated, err := s.attachAsset(id, asset, entry, m.AssetID)
+	updated, err := s.attachAsset(id, asset, entry, materialAttachment{replaceID: m.AssetID})
 	if err == nil {
 		slog.InfoContext(ctx, "[lore-material] linked remote image", "item_id", id, "host", u.Hostname())
 	}

@@ -1,7 +1,7 @@
 import { ResourceExchangeActions } from '@/features/market/ResourceExchangeActions'
 import { closeMobilePanes } from '@/components/layout/mobile-pane-events'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookMarked, Bot, Database, Image as ImageIcon, Images, Search, SlidersHorizontal, Sparkles, Tags, Trash2 } from 'lucide-react'
+import { BookMarked, Bot, Database, LayoutGrid, SlidersHorizontal, Sparkles, Tags, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
 import { APIError, createProjectLoreItem, deleteProjectLoreItem, getProjectLoreItems, loreImageURL, readOptionalProjectFile, readProjectFile, type LoreItem } from '@/lib/api'
@@ -20,27 +20,24 @@ import { ResourceWorkspace, useResponsiveAgentOpen } from '@/components/layout/r
 import { FeaturePageShell } from '@/components/layout/feature-page-shell'
 import { ResourceDirectory } from '@/components/resource-directory/ResourceDirectory'
 import type { ResourceDirectoryBadge, ResourceDirectoryItem, ResourceDirectorySection } from '@/components/resource-directory/types'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
-import { Textarea } from '@/components/ui/textarea'
-import { getImagePresets } from '../api'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { INTERACTIVE_OPENING_PRESET_PATH, INTERACTIVE_OPENING_PRESET_UPDATED_EVENT, INTERACTIVE_OPENING_PRESET_ENTRY_ID, LEGACY_INTERACTIVE_OPENING_PRESET_PATH, parseBookOpeningPresets, serializeBookOpeningPresets, type BookOpeningPreset } from '../opening'
 import type { GamePlanningTemplate, ImagePreset, Teller } from '../types'
 import { CreatorDirectory, CreatorEditor } from './setting-panel/CreatorEditor'
 import { LoreEditor } from './setting-panel/LoreEditor'
+import { LoreLibrary, LORE_OVERVIEW_ID } from '@/features/lore/LoreLibrary'
+import { loreImageTaskInstruction } from '@/features/lore/lore-image-task'
 import { OpeningPresetEditor } from './setting-panel/OpeningPresetEditor'
 import { loreImportanceLabel, loreLoadModeLabel, loreTypeLabel } from '@/features/lore/options'
 import { LoreClassificationDialog } from './LoreClassificationDialog'
-import { presetActionButtonClassName as actionButtonClassName, presetIconActionClassName as iconActionClassName } from './preset-config/editor-styles'
+import { presetIconActionClassName as iconActionClassName } from './preset-config/editor-styles'
 import { PresetSettingsPanel } from './setting-panel/PresetSettingsPanel'
 import { loreAutosaveDraft, useLoreItemAutosave, type LoreAutosaveDraft } from '@/features/lore/use-lore-item-autosave'
 import { hasLoreProtagonistTag } from '@/features/lore/tags'
 import { LORE_UPDATED_EVENT, notifyLoreUpdated, type LoreUpdatedDetail } from '@/features/lore/events'
 import { useProjectFileAutosave } from './setting-panel/use-project-file-autosave'
 import { EMPTY_IMAGE_PRESETS, EMPTY_STORY_DIRECTORS, EMPTY_TELLERS } from './setting-panel/presetResources'
-import { firstVisibleLoreItemId, KNOWLEDGE_SECTIONS, sectionItems, type KnowledgeSection, type LoreLoadModeFilter, type LoreType } from '@/features/lore/knowledge-sections'
+import { KNOWLEDGE_SECTIONS, sectionItems, type KnowledgeSection, type LoreLoadModeFilter } from '@/features/lore/knowledge-sections'
 import { isProjectChangeForProject, type WorkspaceChangeEvent } from '@/features/changes/types'
 import type { DocumentReviewController, DocumentReviewNavigationIntent } from '@/features/document-review/controller'
 import type { DocumentReviewSnapshot } from '@/components/Editor/documentReviewAnchors'
@@ -51,8 +48,6 @@ const CREATOR_ENTRY_ID = '__creator__'
 const UTF8_ENCODER = new TextEncoder()
 
 export type SettingPanelMode = 'lore' | 'creator' | 'teller'
-
-const LORE_TYPE_FILTER_OPTIONS: LoreType[] = ['character', 'world', 'location', 'faction', 'rule', 'item', 'other']
 
 interface SettingPanelProps {
   mode?: SettingPanelMode
@@ -103,14 +98,12 @@ export function SettingPanel({
       />
     )
   }
-  return <LoreSettingPanel mode={activeMode} projectId={projectId} imagePresets={imagePresets} onImagePresetsChange={onImagePresetsChange} documentReview={documentReview} documentReviewNavigationIntent={documentReviewNavigationIntent} refreshSignal={refreshSignal} embedded={embedded} onFlushHandlerChange={onFlushHandlerChange} toolNavigationIntent={toolNavigationIntent} />
+  return <LoreSettingPanel mode={activeMode} projectId={projectId} documentReview={documentReview} documentReviewNavigationIntent={documentReviewNavigationIntent} refreshSignal={refreshSignal} embedded={embedded} onFlushHandlerChange={onFlushHandlerChange} toolNavigationIntent={toolNavigationIntent} />
 }
 
 function LoreSettingPanel({
   mode,
   projectId,
-  imagePresets: externalImagePresets,
-  onImagePresetsChange,
   documentReview,
   documentReviewNavigationIntent,
   refreshSignal,
@@ -120,8 +113,6 @@ function LoreSettingPanel({
 }: {
   mode: Exclude<SettingPanelMode, 'teller'>
   projectId: string
-  imagePresets: ImagePreset[]
-  onImagePresetsChange?: (presets: ImagePreset[]) => void
   documentReview?: DocumentReviewController
   documentReviewNavigationIntent?: DocumentReviewNavigationIntent | null
   refreshSignal: number
@@ -134,7 +125,7 @@ function LoreSettingPanel({
   const [items, setItems] = useState<LoreItem[]>([])
   const [loading, setLoading] = useState(Boolean(projectId))
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [activeId, setActiveId] = useState('')
+  const [activeId, setActiveId] = useState(LORE_OVERVIEW_ID)
   const [draft, setDraft] = useState<LoreItem | null>(null)
   const [tagDraft, setTagDraft] = useState('')
   const [query, setQuery] = useState('')
@@ -146,16 +137,7 @@ function LoreSettingPanel({
   const [openingPresetRevision, setOpeningPresetRevision] = useState('')
   const [openingPresetProjectId, setOpeningPresetProjectId] = useState('')
   const [activeOpeningPresetId, setActiveOpeningPresetId] = useState('')
-  const [imagePresets, setImagePresets] = useState<ImagePreset[]>(externalImagePresets)
-  const [activeImagePresetId, setActiveImagePresetId] = useState('')
-  const [loreImageBatchOpen, setLoreImageBatchOpen] = useState(false)
   const [loreClassificationOpen, setLoreClassificationOpen] = useState(false)
-  const [loreImageBatchSelectedIds, setLoreImageBatchSelectedIds] = useState<string[]>([])
-  const [loreImageBatchQuery, setLoreImageBatchQuery] = useState('')
-  const [loreImageBatchType, setLoreImageBatchType] = useState<LoreType | 'all'>('all')
-  const [loreImageBatchPresetId, setLoreImageBatchPresetId] = useState('')
-  const [loreImageBatchInstruction, setLoreImageBatchInstruction] = useState('')
-  const [loreImageBatchIncludeExisting, setLoreImageBatchIncludeExisting] = useState(false)
   const [pendingLoreImageTask, setPendingLoreImageTask] = useState<{ key: string; instruction: string } | null>(null)
   const [agentOpen, setAgentOpen] = useResponsiveAgentOpen()
   const [deleteLoreTarget, setDeleteLoreTarget] = useState<LoreItem | null>(null)
@@ -197,6 +179,7 @@ function LoreSettingPanel({
     baseline: selectedLoreBaseline,
     active: activeMode === 'lore'
       && Boolean(draft)
+      && activeId !== LORE_OVERVIEW_ID
       && activeId !== CREATOR_ENTRY_ID
       && activeId !== INTERACTIVE_OPENING_PRESET_ENTRY_ID,
     projectId,
@@ -344,8 +327,7 @@ function LoreSettingPanel({
     try {
       const data = await getProjectLoreItems(projectId)
       setItems(data)
-      // Select the first visible lore item; an empty catalog is handled by the empty state.
-      setActiveId(firstVisibleLoreItemId(data) ?? '')
+      setActiveId((current) => current === LORE_OVERVIEW_ID || current === CREATOR_ENTRY_ID || current === INTERACTIVE_OPENING_PRESET_ENTRY_ID || data.some((item) => item.id === current) ? current : LORE_OVERVIEW_ID)
     } catch (error) {
       setItems([])
       setActiveId('')
@@ -357,7 +339,7 @@ function LoreSettingPanel({
 
   useEffect(() => {
     setItems([])
-    setActiveId('')
+    setActiveId(LORE_OVERVIEW_ID)
     setDraft(null)
     setTagDraft('')
     loreBaselineDraftRef.current = null
@@ -586,40 +568,15 @@ function LoreSettingPanel({
     return () => window.removeEventListener('nova:workspace-change', onWorkspaceChange)
   }, [activeId, activeMode, isCreatorActive, projectId, reconcileCreatorFile, reconcileOpeningPresetFile])
 
-  useEffect(() => {
-    if (activeMode !== 'lore' || onImagePresetsChange || externalImagePresets.length > 0) return
-    let cancelled = false
-    getImagePresets()
-      .then((data) => {
-        if (cancelled) return
-        setImagePresets(data)
-        setActiveImagePresetId((current) => current || data[0]?.id || '')
-      })
-      .catch(() => {
-        if (!cancelled) setImagePresets([])
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [activeMode, externalImagePresets.length, onImagePresetsChange])
-
-  useEffect(() => {
-    setImagePresets(externalImagePresets)
-    setActiveImagePresetId((current) => {
-      if (current && externalImagePresets.some((preset) => preset.id === current)) return current
-      return externalImagePresets[0]?.id || ''
-    })
-  }, [externalImagePresets])
-
   const refreshItems = useCallback(async (nextActiveId?: string) => {
     const data = await getProjectLoreItems(projectId)
     setItems(data)
-    // Preserve an existing selection, including virtual entries, then fall back to the first visible item.
+    // Preserve an existing selection, including the overview, after background updates.
     setActiveId((current) => {
       if (nextActiveId && data.some((item) => item.id === nextActiveId)) return nextActiveId
-      if (current === CREATOR_ENTRY_ID || current === INTERACTIVE_OPENING_PRESET_ENTRY_ID) return current
+      if (current === LORE_OVERVIEW_ID || current === CREATOR_ENTRY_ID || current === INTERACTIVE_OPENING_PRESET_ENTRY_ID) return current
       if (current && data.some((item) => item.id === current)) return current
-      return firstVisibleLoreItemId(data) ?? ''
+      return LORE_OVERVIEW_ID
     })
   }, [projectId])
 
@@ -764,44 +721,30 @@ function LoreSettingPanel({
     }
   }, [activeId, creatorAutosave.flushPending, creatorAutosave.saveNow, flushLoreAutosave, openingPresetAutosave.flushPending, openingPresetAutosave.saveNow, t])
 
-  useEffect(() => {
-    if (!documentReviewLoreID || documentReviewLoreID === activeId || !items.some((item) => item.id === documentReviewLoreID)) return
-    void handleSelectLore(documentReviewLoreID)
-  }, [activeId, documentReviewLoreID, handleSelectLore, items])
+  // Navigation intents are one-shot so returning to the overview stays there.
+  const handledReviewNavigation = useRef<string>('')
+  const handledToolNavigation = useRef<string>('')
 
   useEffect(() => {
+    const navigationKey = `${projectId}:${documentReviewNavigationIntent?.nonce}`
+    if (handledReviewNavigation.current === navigationKey) return
+    if (!documentReviewLoreID || !items.some((item) => item.id === documentReviewLoreID)) return
+    handledReviewNavigation.current = navigationKey
+    void handleSelectLore(documentReviewLoreID)
+  }, [activeId, documentReviewLoreID, documentReviewNavigationIntent?.nonce, handleSelectLore, items, projectId])
+
+  useEffect(() => {
+    const navigationKey = `${projectId}:${toolNavigationIntent?.nonce}`
+    if (handledToolNavigation.current === navigationKey) return
     const target = toolNavigationIntent?.target
     if (!target || target.kind !== 'lore_item') return
     const targetID = target.id || items.find((item) => item.name === target.name)?.id || ''
-    if (!targetID || targetID === activeId || !items.some((item) => item.id === targetID)) return
+    if (!targetID || !items.some((item) => item.id === targetID)) return
+    handledToolNavigation.current = navigationKey
     void handleSelectLore(targetID)
-  }, [activeId, handleSelectLore, items, toolNavigationIntent?.nonce])
+  }, [activeId, handleSelectLore, items, projectId, toolNavigationIntent])
 
-  const selectedLoreImagePresetId = () => activeImagePresetId || imagePresets.find((preset) => !preset.invalid)?.id || 'game-cg'
-
-  const handleOpenLoreImageBatch = () => {
-    setLoreImageBatchSelectedIds([])
-    setLoreImageBatchPresetId(selectedLoreImagePresetId())
-    setLoreImageBatchOpen(true)
-  }
-
-  const handleRunLoreImageBatch = () => {
-    if (loreImageBatchSelectedIds.length === 0) {
-      toast.error(t('settingPanel.loreImage.noSelection'))
-      return
-    }
-    setPendingLoreImageTask({
-      key: `lore-images-${Date.now()}`,
-      instruction: buildLoreImageBatchAgentInstruction({
-        itemIds: loreImageBatchSelectedIds,
-        imagePresetId: loreImageBatchPresetId || selectedLoreImagePresetId(),
-        instruction: loreImageBatchInstruction,
-        includeExisting: loreImageBatchIncludeExisting,
-      }),
-    })
-    setLoreImageBatchOpen(false)
-    setAgentOpen(true)
-  }
+  const isOverview = activeMode === 'lore' && activeId === LORE_OVERVIEW_ID
 
   const isOpeningPresetActive = activeMode === 'lore' && activeId === INTERACTIVE_OPENING_PRESET_ENTRY_ID
   const activeAutosaveStatus = isCreatorActive
@@ -814,13 +757,13 @@ function LoreSettingPanel({
     : isOpeningPresetActive
       ? openingPresetAutosave.error
       : loreAutosave.error
-  const editorHeaderIcon = isCreatorActive ? BookMarked : isOpeningPresetActive ? Sparkles : Database
-  const editorHeaderTitle = isCreatorActive
+  const editorHeaderIcon = isOverview ? LayoutGrid : isCreatorActive ? BookMarked : isOpeningPresetActive ? Sparkles : Database
+  const editorHeaderTitle = isOverview ? t('lore.library.title') : isCreatorActive
       ? CREATOR_PATH
       : isOpeningPresetActive
         ? t('settingPanel.openingPreset.title')
         : editorTitle(activeMode, draft, t)
-  const editorHeaderSubtitle = isCreatorActive
+  const editorHeaderSubtitle = isOverview ? t('lore.library.subtitle') : isCreatorActive
       ? t('settingPanel.editor.creatorSubtitle')
       : isOpeningPresetActive
         ? t('settingPanel.openingPreset.subtitle')
@@ -863,9 +806,6 @@ function LoreSettingPanel({
   )
   const loreDirectoryActions = (
     <>
-      <Button className={iconActionClassName} variant="outline" size="icon" disabled={saving || items.length === 0} onClick={handleOpenLoreImageBatch} aria-label={t('settingPanel.loreImage.batchOpen')}>
-        <Images data-icon="inline-start" />
-      </Button>
       <Button className={iconActionClassName} variant="outline" size="icon" disabled={saving || items.length === 0} onClick={() => setLoreClassificationOpen(true)} aria-label={t('settingPanel.loreClassification.open')}>
         <Tags data-icon="inline-start" />
       </Button>
@@ -890,6 +830,7 @@ function LoreSettingPanel({
             onSelect={handleSelectLore}
             saving={saving}
             pinnedEntries={[
+              { id: LORE_OVERVIEW_ID, label: t('lore.library.title'), icon: LayoutGrid },
               { id: CREATOR_ENTRY_ID, label: CREATOR_PATH, icon: BookMarked },
               { id: INTERACTIVE_OPENING_PRESET_ENTRY_ID, label: t('settingPanel.openingPreset.title'), icon: Sparkles },
             ]}
@@ -930,7 +871,7 @@ function LoreSettingPanel({
             <ConfigManagerChat
               projectId={projectId}
               origin="lore"
-              resourceId={activeId || 'lore'}
+              resourceId={isOverview ? 'lore' : activeId || 'lore'}
               context={{
                 active_lore_id: draft?.id || '',
                 active_lore_name: draft?.name || '',
@@ -975,15 +916,16 @@ function LoreSettingPanel({
               onSaveShortcut={flushActiveAutosave}
               actions={(
                 <>
-                  <ResourceExchangeActions projectID={projectId} resources={isOpeningPresetActive && activeOpeningPresetId ? [{ kind: 'game.opening', scope: 'project', project_id: projectId, id: activeOpeningPresetId }] : draft && !isCreatorActive ? [{ kind: 'lore.item', scope: 'project', project_id: projectId, id: draft.id }] : undefined} beforeOpen={flushActiveAutosave} onImported={async () => { await loadLoreItems(); notifyOpeningPresetUpdated() }} />
-                  {isCreatorActive || isOpeningPresetActive || draft ? (
+                  {activeMode === 'lore' && !isOverview && <Button size="icon-sm" variant="ghost" aria-label={t('lore.library.back')} onClick={() => void handleSelectLore(LORE_OVERVIEW_ID)}><LayoutGrid /></Button>}
+                  <ResourceExchangeActions projectID={projectId} resources={isOpeningPresetActive && activeOpeningPresetId ? [{ kind: 'game.opening', scope: 'project', project_id: projectId, id: activeOpeningPresetId }] : draft && !isCreatorActive && !isOverview ? [{ kind: 'lore.item', scope: 'project', project_id: projectId, id: draft.id }] : undefined} beforeOpen={flushActiveAutosave} onImported={async () => { await loadLoreItems(); notifyOpeningPresetUpdated() }} />
+                  {!isOverview && (isCreatorActive || isOpeningPresetActive || draft) ? (
                     <AutosaveStatusIndicator
                       status={activeAutosaveStatus}
                       error={activeAutosaveError}
                       onRetry={flushActiveAutosave}
                     />
                   ) : null}
-                  {activeMode === 'lore' && !isCreatorActive && !isOpeningPresetActive && draft && (
+                  {activeMode === 'lore' && !isOverview && !isCreatorActive && !isOpeningPresetActive && draft && (
                     <Button className={iconActionClassName} variant="outline" size="icon" disabled={saving} onClick={handleDelete} aria-label={t('settingPanel.deleteLore')}>
                       <Trash2 data-icon="inline-start" />
                     </Button>
@@ -1000,9 +942,29 @@ function LoreSettingPanel({
             >
               {activeMode === 'lore' ? (
                 <>
+                  {!loading && !loadError && <div className={isOverview ? 'h-full min-h-0' : 'hidden'}>
+                    <LoreLibrary
+                      key={projectId}
+                      projectId={projectId}
+                      items={items}
+                      query={query}
+                      onQueryChange={setQuery}
+                      onSelect={(id) => void handleSelectLore(id)}
+                      onCreate={(section) => void handleCreateLore(section)}
+                      onChanged={(saved) => setItems((current) => current.map((item) => item.id === saved.id ? saved : item))}
+                      onReload={refreshItems}
+                      onGenerate={async (ids, request, batchMode) => {
+                        if (!(await flushActiveAutosave())) return false
+                        setPendingLoreImageTask({ key: `lore-images-${Date.now()}`, instruction: loreImageTaskInstruction(ids, request, batchMode) })
+                        setAgentOpen(true)
+                        return true
+                      }}
+                    />
+                  </div>}
+
                   {loading ? (
                     <LoadingState label={t('common.loading')} className="h-full min-h-0" />
-                  ) : items.length === 0 && !loadError && !activeId ? (
+                  ) : isOverview ? null : items.length === 0 && !loadError && !activeId ? (
                     <EmptyState
                       icon={Database}
                       title={t('settingPanel.lore.emptyTitle')}
@@ -1052,26 +1014,6 @@ function LoreSettingPanel({
           notifyLoreUpdated({ projectId, ids: selectedItem ? [selectedItem.id] : [] })
         }}
       />
-      <LoreImageBatchDialog
-        open={loreImageBatchOpen}
-        projectId={projectId}
-        items={items}
-        query={loreImageBatchQuery}
-        type={loreImageBatchType}
-        selectedIds={loreImageBatchSelectedIds}
-        imagePresets={imagePresets.filter((preset) => !preset.invalid)}
-        imagePresetId={loreImageBatchPresetId || selectedLoreImagePresetId()}
-        instruction={loreImageBatchInstruction}
-        includeExisting={loreImageBatchIncludeExisting}
-        onOpenChange={setLoreImageBatchOpen}
-        onQueryChange={setLoreImageBatchQuery}
-        onTypeChange={setLoreImageBatchType}
-        onSelectedIdsChange={setLoreImageBatchSelectedIds}
-        onImagePresetChange={setLoreImageBatchPresetId}
-        onInstructionChange={setLoreImageBatchInstruction}
-        onIncludeExistingChange={setLoreImageBatchIncludeExisting}
-        onRun={handleRunLoreImageBatch}
-      />
       <ConfirmDialog
         open={Boolean(deleteLoreTarget)}
         onOpenChange={(open) => {
@@ -1085,240 +1027,6 @@ function LoreSettingPanel({
       />
     </section>
   )
-}
-
-interface LoreImageBatchDialogProps {
-  open: boolean
-  projectId: string
-  items: LoreItem[]
-  query: string
-  type: LoreType | 'all'
-  selectedIds: string[]
-  imagePresets: ImagePreset[]
-  imagePresetId: string
-  instruction: string
-  includeExisting: boolean
-  onOpenChange: (open: boolean) => void
-  onQueryChange: (value: string) => void
-  onTypeChange: (value: LoreType | 'all') => void
-  onSelectedIdsChange: (ids: string[]) => void
-  onImagePresetChange: (id: string) => void
-  onInstructionChange: (value: string) => void
-  onIncludeExistingChange: (value: boolean) => void
-  onRun: () => void
-}
-
-function LoreImageBatchDialog({
-  open,
-  projectId,
-  items,
-  query,
-  type,
-  selectedIds,
-  imagePresets,
-  imagePresetId,
-  instruction,
-  includeExisting,
-  onOpenChange,
-  onQueryChange,
-  onTypeChange,
-  onSelectedIdsChange,
-  onImagePresetChange,
-  onInstructionChange,
-  onIncludeExistingChange,
-  onRun,
-}: LoreImageBatchDialogProps) {
-  const { t } = useTranslation()
-  const selectedSet = new Set(selectedIds)
-  const filteredItems = filterLoreImageBatchItems(items, query, type)
-
-  const toggleSelected = (id: string) => {
-    onSelectedIdsChange(selectedSet.has(id) ? selectedIds.filter((entry) => entry !== id) : [...selectedIds, id])
-  }
-
-  const selectVisible = () => {
-    const next = new Set(selectedIds)
-    filteredItems.forEach((item) => next.add(item.id))
-    onSelectedIdsChange(Array.from(next))
-  }
-
-  const clearSelection = () => {
-    onSelectedIdsChange([])
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(nextOpen) => {
-      onOpenChange(nextOpen)
-    }}>
-      <DialogContent className="max-w-[min(calc(100vw-2rem),760px)] gap-3 border border-[var(--nova-border)] bg-[var(--nova-surface)] text-[var(--nova-text)]">
-        <DialogHeader>
-          <DialogTitle>{t('settingPanel.loreImage.batchTitle')}</DialogTitle>
-          <DialogDescription>{t('settingPanel.loreImage.batchDesc')}</DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
-          <div className="nova-field flex h-8 items-center gap-2 rounded-[var(--nova-radius)] px-2 text-xs text-[var(--nova-text-faint)]">
-            <Search className="h-3.5 w-3.5" />
-            <input
-              className="min-w-0 flex-1 bg-transparent text-[var(--nova-text-muted)] outline-none placeholder:text-[var(--nova-text-faint)]"
-              value={query}
-              onChange={(event) => onQueryChange(event.target.value)}
-              placeholder={t('settingPanel.loreImage.search')}
-            />
-          </div>
-          <Select value={type} onValueChange={(value) => onTypeChange(value as LoreType | 'all')}>
-            <SelectTrigger size="sm" className="nova-field h-8 text-xs focus:ring-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="nova-panel border text-[var(--nova-text)]">
-              <SelectGroup>
-                <SelectItem value="all">{t('settingPanel.loreImage.typeAll')}</SelectItem>
-                {LORE_TYPE_FILTER_OPTIONS.map((option) => (
-                  <SelectItem key={option} value={option}>{loreTypeLabel(option, t)}</SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-xs text-[var(--nova-text-faint)]">{t('settingPanel.loreImage.selectedCount', { count: selectedIds.length })}</div>
-          <div className="flex items-center gap-2">
-            <Button className={actionButtonClassName} variant="outline" size="sm" disabled={filteredItems.length === 0} onClick={selectVisible}>
-              {t('settingPanel.loreImage.selectVisible')}
-            </Button>
-            <Button className={actionButtonClassName} variant="outline" size="sm" disabled={selectedIds.length === 0} onClick={clearSelection}>
-              {t('settingPanel.loreImage.clearSelection')}
-            </Button>
-          </div>
-        </div>
-
-        <ScrollArea className="h-[min(42vh,360px)] rounded-lg border border-[var(--nova-border)] bg-[var(--nova-surface-2)]">
-          <div className="divide-y divide-[var(--nova-border)]">
-            {filteredItems.length === 0 ? (
-              <div className="px-3 py-8 text-center text-xs text-[var(--nova-text-faint)]">{t('settingPanel.loreImage.noItems')}</div>
-            ) : filteredItems.map((item) => {
-              return (
-                <label key={item.id} className="flex min-h-16 cursor-pointer items-center gap-3 px-3 py-2 text-xs hover:bg-[var(--nova-hover)]">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-[var(--nova-accent)]"
-                    checked={selectedSet.has(item.id)}
-                    onChange={() => toggleSelected(item.id)}
-                    aria-label={item.name}
-                  />
-                  <LoreImageBatchThumb projectId={projectId} item={item} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium text-[var(--nova-text)]">{item.name}</span>
-                    <span className="mt-0.5 block truncate text-[11px] text-[var(--nova-text-faint)]">{loreTypeLabel(item.type, t)} · {item.brief_description || t('settingPanel.loreImage.missingImage')}</span>
-                  </span>
-                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] ${loreImageStatusClassName(item)}`}>
-                    {item.resolved_materials?.some((material) => material.mime_type.startsWith('image/')) ? t('settingPanel.loreImage.hasImage') : t('settingPanel.loreImage.missingImage')}
-                  </span>
-                </label>
-              )
-            })}
-          </div>
-        </ScrollArea>
-
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
-          <label className="grid gap-1.5">
-            <span className="text-[11px] text-[var(--nova-text-faint)]">{t('settingPanel.loreImage.instruction')}</span>
-            <Textarea
-              className="nova-field min-h-20 resize-y text-xs leading-5 shadow-none focus-visible:ring-0"
-              value={instruction}
-              onChange={(event) => onInstructionChange(event.target.value)}
-              placeholder={t('settingPanel.loreImage.instructionPlaceholder')}
-            />
-          </label>
-          <div className="grid content-start gap-3">
-            <label className="grid gap-1.5">
-              <span className="text-[11px] text-[var(--nova-text-faint)]">{t('settingPanel.loreImage.preset')}</span>
-              <Select value={imagePresetId} onValueChange={onImagePresetChange}>
-                <SelectTrigger size="sm" className="nova-field h-8 text-xs focus:ring-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="nova-panel border text-[var(--nova-text)]">
-                  <SelectGroup>
-                    {imagePresets.length > 0 ? imagePresets.map((preset) => (
-                      <SelectItem key={preset.id} value={preset.id}>{preset.name}</SelectItem>
-                    )) : (
-                      <SelectItem value="game-cg">{t('settingPanel.editor.defaultImagePreset')}</SelectItem>
-                    )}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </label>
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-3 py-2">
-              <span className="min-w-0 text-xs text-[var(--nova-text-muted)]">{t('settingPanel.loreImage.includeExisting')}</span>
-              <Switch checked={includeExisting} onCheckedChange={onIncludeExistingChange} />
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter className="border-[var(--nova-border)] bg-[var(--nova-surface-2)]">
-          <Button className={actionButtonClassName} variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-            {t('common.close')}
-          </Button>
-          <Button className={actionButtonClassName} variant="outline" size="sm" disabled={selectedIds.length === 0} onClick={onRun}>
-            <Sparkles data-icon="inline-start" />
-            {t('settingPanel.loreImage.startBatch')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function LoreImageBatchThumb({ projectId, item }: { projectId: string; item: LoreItem }) {
-  const imageSrc = loreImageURL(projectId, item)
-  if (!imageSrc) {
-    return (
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-dashed border-[var(--nova-border)] bg-[var(--nova-surface)] text-[var(--nova-text-faint)]">
-        <ImageIcon className="h-4 w-4" />
-      </span>
-    )
-  }
-  return (
-    <span className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-[var(--nova-border)] bg-[var(--nova-surface)]">
-      <img referrerPolicy="no-referrer" src={imageSrc} alt="" className="h-full w-full object-cover" />
-    </span>
-  )
-}
-
-function filterLoreImageBatchItems(items: LoreItem[], query: string, type: LoreType | 'all') {
-  const normalizedQuery = query.trim().toLowerCase()
-  return items.filter((item) => {
-    if (type !== 'all' && item.type !== type) return false
-    if (!normalizedQuery) return true
-    const haystack = [item.name, item.brief_description || '', item.content || '', (item.tags || []).join('\n')].join('\n').toLowerCase()
-    return haystack.includes(normalizedQuery)
-  })
-}
-
-function buildLoreImageBatchAgentInstruction(input: {
-  itemIds: string[]
-  imagePresetId: string
-  instruction: string
-  includeExisting: boolean
-}) {
-  const userInstruction = input.instruction.trim() || 'No additional user requirements.'
-  return [
-    'Generate images for the selected lore items as one managed task.',
-    `Exact lore item IDs: ${JSON.stringify(input.itemIds)}`,
-    `Image preset ID: ${JSON.stringify(input.imagePresetId)}`,
-    `Generate additional images for items that already have image materials: ${input.includeExisting ? 'yes' : 'no'}. Always append images, preserve the cover and lore text.`,
-    `Additional user requirements: ${userInstruction}`,
-    '',
-    'Read the exact lore items with read_lore_items. Read the selected image_preset with config_read when available.',
-    'For each eligible item, author a complete final model-native prompt from its lore content, the image preset, the additional requirements, and the prompt guide in generate_image. Then call generate_image once with purpose=lore_item and that exact lore_item_id.',
-    'Use list_lore_materials to check each item. When including existing images is no, skip items that already have image materials. Continue after an individual failure and report generated, skipped, and failed item IDs at the end. Do not create or edit lore text. Do not add a negative prompt.',
-  ].join('\n')
-}
-
-function loreImageStatusClassName(item: LoreItem) {
-  if (item.resolved_materials?.some((material) => material.mime_type.startsWith('image/'))) return 'border-[var(--nova-accent-green)]/35 bg-[var(--nova-accent-green)]/10 text-[var(--nova-text-muted)]'
-  return 'border-[var(--nova-border)] bg-[var(--nova-surface)] text-[var(--nova-text-faint)]'
 }
 
 function notifyOpeningPresetUpdated() {
