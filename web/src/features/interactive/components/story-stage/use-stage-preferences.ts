@@ -3,7 +3,7 @@ import { fetchProjectSettings } from '@/features/settings/api'
 import { projectSettingsTarget, subscribeSettingsTarget } from '@/features/settings/query'
 
 const DEFAULT_STAGE_LINE_HEIGHT = 1.78
-const DEFAULT_STAGE_PREFERENCES = { lineHeight: DEFAULT_STAGE_LINE_HEIGHT, scrimOpacity: 0.75 }
+const DEFAULT_STAGE_PREFERENCES = { lineHeight: DEFAULT_STAGE_LINE_HEIGHT, scrimOpacity: 0.75, textMaxWidth: 896 }
 
 export function useStagePreferences(projectId: string) {
   const [preferences, setPreferences] = useState(DEFAULT_STAGE_PREFERENCES)
@@ -14,6 +14,7 @@ export function useStagePreferences(projectId: string) {
     setPreferences({
       lineHeight: clampNumber(effective.interactive_stage_line_height, 1.35, 2.4, DEFAULT_STAGE_LINE_HEIGHT),
       scrimOpacity: clampNumber(effective.interactive_stage_scrim_opacity, 0, 1, 0.75),
+      textMaxWidth: clampNumber(effective.interactive_stage_text_max_width, 480, 1600, 896),
     })
   }, [])
 

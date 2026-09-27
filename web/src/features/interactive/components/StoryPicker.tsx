@@ -20,13 +20,15 @@ export interface StoryPickerProps {
   onDeleteStories: (storyIds: string[]) => void | Promise<void>
   onRenameStory?: (storyId: string, title: string) => void | Promise<void>
   layout?: 'inline' | 'sidebar'
+  /** Compact stage controls shorten the selected title and use an icon-only create action. */
+  variant?: 'default' | 'compact'
   hideCreate?: boolean
   onOpenHistory?: () => void
 }
 
 export type StoryPickerItem = Pick<StorySummary, 'id' | 'title' | 'updated_at'> & { turn_count?: number; title_source?: StorySummary['title_source']; gameName?: string }
 
-export function StoryPicker({ stories, currentStoryId, onSelect, onCreate, onDeleteStories, onRenameStory, layout = 'inline', hideCreate = false, onOpenHistory }: StoryPickerProps) {
+export function StoryPicker({ stories, currentStoryId, onSelect, onCreate, onDeleteStories, onRenameStory, layout = 'inline', variant = 'default', hideCreate = false, onOpenHistory }: StoryPickerProps) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
   const titleMenu = isMobile && layout === 'inline'
@@ -39,8 +41,10 @@ export function StoryPicker({ stories, currentStoryId, onSelect, onCreate, onDel
   const [renaming, setRenaming] = useState(false)
   const selectedStories = stories.filter((story) => deleteSelection.has(story.id))
   const currentStory = stories.find((story) => story.id === currentStoryId)
+  const titleCharacters = Array.from(currentStory?.title || '')
+  const triggerLabel = variant === 'compact' && titleCharacters.length > 6 ? `${titleCharacters.slice(0, 6).join('')}…` : undefined
   const allStoriesSelected = stories.length > 0 && selectedStories.length === stories.length
-  const createButton = hideCreate ? null : <Button type="button" variant="ghost" size="xs" className="nova-nav-item" aria-label={t('chat.new')} title={t('chat.new')} onClick={onCreate}><Plus data-icon="inline-start" /><span className="max-lg:sr-only">{t('chat.new')}</span></Button>
+  const createButton = hideCreate ? null : <Button type="button" variant="ghost" size={variant === 'compact' ? 'icon-sm' : 'xs'} className="nova-nav-item" aria-label={t('chat.new')} title={t('chat.new')} onClick={onCreate}><Plus data-icon={variant === 'compact' ? undefined : 'inline-start'} />{variant !== 'compact' && <span className="max-lg:sr-only">{t('chat.new')}</span>}</Button>
 
   const beginDeleteSelection = () => {
     const initialStoryId = stories.some((story) => story.id === currentStoryId) ? currentStoryId : stories[0]?.id
@@ -114,6 +118,7 @@ export function StoryPicker({ stories, currentStoryId, onSelect, onCreate, onDel
         placeholder={t('storyPicker.placeholder')}
         emptyLabel={t('storyPicker.empty')}
         layout={layout}
+        triggerLabel={triggerLabel}
         contentClassName="w-[min(calc(100vw-2rem),22rem)]"
         triggerClassName={titleMenu ? 'nova-mobile-story-title' : undefined}
         trailingAction={titleMenu ? null : createButton}

@@ -360,7 +360,7 @@ func TestReadSettingsFileMissingReturnsZero(t *testing.T) {
 func TestWriteThenReadSettings(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "config.toml")
-	in := Settings{ModelProfiles: []ModelProfileSettings{{ID: "default", EndpointID: "default", Model: "abc"}}, AutoSaveEnabled: boolPtr(false), Language: "en-US"}
+	in := Settings{ModelProfiles: []ModelProfileSettings{{ID: "default", EndpointID: "default", Model: "abc"}}, AutoSaveEnabled: boolPtr(false), Language: "en-US", InteractiveStageTextMaxWidth: intPtr(1120)}
 	if err := WriteSettingsFile(p, in); err != nil {
 		t.Fatal(err)
 	}
@@ -376,6 +376,9 @@ func TestWriteThenReadSettings(t *testing.T) {
 	}
 	if out.Language != "en-US" {
 		t.Fatalf("language")
+	}
+	if effective := Merge(DefaultSettings(), out); effective.InteractiveStageTextMaxWidth == nil || *effective.InteractiveStageTextMaxWidth != 1120 {
+		t.Fatal("saved stage text width must override the default after reload")
 	}
 }
 

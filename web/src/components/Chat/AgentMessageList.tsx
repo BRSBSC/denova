@@ -436,9 +436,9 @@ function usePrependStableFirstItemIndex(items: AgentChatListItem[], resetKey?: s
 
 function MessageListHeader({ context }: ContextProp<MessageListVirtuosoContext>) {
   const { t } = useTranslation()
-  if (!context.hasEarlierMessages) return <div aria-hidden="true" className="h-5 shrink-0" />
+  if (!context.hasEarlierMessages) return <div aria-hidden="true" className="nova-message-list-header h-5 shrink-0" />
   return (
-    <div className="flex min-h-10 shrink-0 items-center justify-center px-4 py-2">
+    <div className="nova-message-list-header flex min-h-10 shrink-0 items-center justify-center px-4 py-2">
       <Button
         type="button"
         variant="ghost"

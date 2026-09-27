@@ -90,6 +90,7 @@ export interface Settings {
   interactive_stage_font_size?: number | null
   interactive_stage_scrim_opacity?: number | null
   interactive_stage_line_height?: number | null
+  interactive_stage_text_max_width?: number | null
 }
 
 export interface LabSettings {

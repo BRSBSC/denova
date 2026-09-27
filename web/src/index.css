@@ -699,8 +699,7 @@
     0 12px 30px rgba(0, 0, 0, 0.1);
 }
 
-[data-theme="light"] .nova-chat-input-area-floating,
-[data-theme="light"] .nova-story-input-float {
+[data-theme="light"] .nova-chat-input-area-floating {
   background:
     linear-gradient(180deg, transparent, color-mix(in srgb, var(--nova-surface-2) 76%, transparent) 34%, color-mix(in srgb, var(--nova-surface-2) 92%, transparent));
 }
@@ -1099,6 +1098,22 @@ html[data-nova-motion="off"] .shimmer {
     var(--nova-surface-2);
 }
 
+.nova-story-reading-column {
+  width: 100%;
+  max-width: var(--nova-story-text-max-width, 896px);
+  margin-inline: auto;
+  padding-inline: 24px;
+}
+
+.nova-story-stage-content .nova-story-input-float {
+  padding-inline: 0;
+}
+
+.nova-story-stage-content [data-nova-scroll-to-bottom] {
+  /* Reading controls stay beneath the floating composer and its popup. */
+  z-index: 10;
+}
+
 .nova-story-stage-content {
   container-name: nova-story-stage;
   container-type: inline-size;
@@ -1289,11 +1304,6 @@ html[data-nova-motion="off"] .shimmer {
   pointer-events: auto;
 }
 
-.nova-story-input-float {
-  background:
-    linear-gradient(180deg, transparent, color-mix(in srgb, var(--nova-surface-2) 72%, transparent) 34%, color-mix(in srgb, var(--nova-surface-2) 90%, transparent));
-}
-
 .nova-chat-composer {
   box-shadow:
     inset 0 1px 0 var(--nova-control-shadow),
@@ -1337,6 +1347,112 @@ html[data-nova-motion="off"] .shimmer {
     inset 0 1px 0 rgba(255, 255, 255, 0.055),
     0 0 0 1px rgba(163, 163, 163, 0.08),
     0 18px 40px rgba(0, 0, 0, 0.24);
+}
+
+/* Game controls and compact composers share one frosted surface. */
+.nova-story-stage-controls,
+.nova-story-console-toggle,
+.nova-story-choice-panel,
+.nova-agent-composer.nova-story-stage-composer,
+.nova-agent-composer.nova-story-stage-composer:focus-within,
+[data-nova-mobile-shell="true"] .nova-agent-composer,
+[data-nova-mobile-shell="true"] .nova-agent-composer:focus-within {
+  background: color-mix(in srgb, var(--nova-surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+.nova-story-stage-header {
+  color: var(--nova-text-muted);
+  font-size: var(--nova-ui-font-size);
+  line-height: var(--nova-ui-line-height);
+}
+
+.nova-story-stage-header button,
+.nova-story-console-toggle {
+  pointer-events: auto;
+  border-color: transparent;
+  border-radius: var(--nova-radius);
+}
+
+.nova-story-stage-header button {
+  background: transparent;
+}
+
+.nova-story-stage-header button:is(:hover, [aria-expanded="true"]),
+.nova-story-console-toggle:hover {
+  background: color-mix(in srgb, var(--nova-surface-3) 88%, transparent);
+}
+
+.nova-story-stage-controls [data-layout="inline"] > span {
+  display: none;
+}
+
+.nova-story-stage-controls [data-layout="inline"] > div {
+  width: auto;
+  flex: 0 1 auto;
+}
+
+@media (min-width: 1024px) {
+  /* The inset scrolls away with the first message; the canvas fills the stage. */
+  .nova-story-stage-content .nova-message-list-header {
+    min-height: 48px;
+    padding-top: 48px;
+  }
+
+  .nova-story-stage-content[data-setup="true"],
+  .nova-story-speech-playback:not(:empty) {
+    padding-top: 48px;
+  }
+}
+
+.nova-story-choice-panel,
+.nova-agent-composer.nova-story-stage-composer,
+.nova-agent-composer.nova-story-stage-composer:focus-within,
+[data-nova-mobile-shell="true"] .nova-agent-composer,
+[data-nova-mobile-shell="true"] .nova-agent-composer:focus-within {
+  border-color: var(--nova-border-soft);
+  padding: 8px;
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--nova-bg-deep) 12%, transparent);
+}
+
+[data-nova-mobile-shell="true"] .nova-agent-composer,
+[data-nova-mobile-shell="true"] .nova-agent-composer:focus-within {
+  border-radius: 24px;
+}
+
+.nova-story-stage-controls,
+.nova-story-console-toggle,
+.nova-story-choice-panel,
+.nova-agent-composer.nova-story-stage-composer,
+.nova-agent-composer.nova-story-stage-composer:focus-within {
+  border-radius: 12px;
+}
+
+.nova-agent-composer.nova-story-stage-composer:focus-within,
+[data-nova-mobile-shell="true"] .nova-agent-composer:focus-within {
+  border-color: var(--nova-field-focus-border);
+}
+
+.nova-agent-composer.nova-story-stage-composer :is(.nova-agent-composer-icon, .nova-agent-composer-pill, [data-model-profile-trigger="true"]) {
+  border-radius: var(--nova-radius);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.nova-agent-composer.nova-story-stage-composer :is(.nova-agent-composer-icon, .nova-agent-composer-pill, [data-model-profile-trigger="true"]):is(:hover, :focus-visible, [aria-pressed="true"], [data-state="open"]) {
+  background: var(--nova-hover);
+}
+
+.nova-agent-composer.nova-story-stage-composer :is(.nova-agent-composer-submit, .nova-agent-composer-stop) {
+  border-radius: var(--nova-radius);
+  box-shadow: none;
+}
+
+.nova-story-stage-composer .nova-agent-composer-submit:not(:disabled) {
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
 .nova-agent-composer-references > :last-child {

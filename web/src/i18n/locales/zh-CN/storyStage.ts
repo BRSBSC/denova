@@ -1,4 +1,6 @@
 const storyStage = {
+  'storyStage.presentation.textMaxWidth': '文本最大宽度（px）',
+  'storyStage.presentation.textMaxWidthHelp': '所有故事共用。正文与输入区居中显示，窄屏自动收窄。',
   'storyStage.presentation.backgroundHelp': '随剧情切换背景；关闭后固定显示默认背景。',
   'storyStage.presentation.charactersHelp': '允许剧情选择角色差分并显示在舞台上。',
   'storyStage.presentation.defaultBackground': '默认背景',

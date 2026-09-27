@@ -15,6 +15,8 @@ interface CompactResourcePickerProps<T> {
   emptyLabel?: string
   layout?: 'inline' | 'sidebar'
   disabled?: boolean
+  /** Short display label for the trigger; menu items retain their full labels. */
+  triggerLabel?: string
   triggerClassName?: string
   contentClassName?: string
   trailingAction?: ReactNode
@@ -44,6 +46,7 @@ export function CompactResourcePicker<T>({
   emptyLabel = placeholder,
   layout = 'inline',
   disabled = false,
+  triggerLabel,
   triggerClassName,
   contentClassName,
   trailingAction,
@@ -70,8 +73,9 @@ export function CompactResourcePicker<T>({
           )}
           aria-label={ariaLabel}
           aria-expanded={open}
+          title={selectedItem ? getLabel(selectedItem) : undefined}
         >
-          <span className="min-w-0 flex-1 truncate text-left">{selectedItem ? getLabel(selectedItem) : placeholder}</span>
+          <span className="min-w-0 flex-1 truncate text-left">{triggerLabel ?? (selectedItem ? getLabel(selectedItem) : placeholder)}</span>
           <ChevronDown data-icon="inline-end" className={cn('shrink-0 text-[var(--nova-text-faint)] transition-transform', open && 'rotate-180')} />
         </Button>
       </PopoverTrigger>

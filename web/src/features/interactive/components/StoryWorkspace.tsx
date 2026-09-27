@@ -39,7 +39,7 @@ export function StoryWorkspace({ story, console: consoleContent, rightPanelVisib
       {!isMobile && !externalSetup && onToggleRightPanel && (
         <Button
           type="button" variant="ghost" size="icon-sm"
-          className="absolute right-2 top-2 z-40"
+          className="nova-story-console-toggle absolute right-2 top-2 z-40"
           onClick={onToggleRightPanel}
           aria-label={t(rightPanelVisible ? 'storyStage.hideDirectorPanel' : 'storyStage.showDirectorPanel')}
           title={t(rightPanelVisible ? 'storyStage.hideDirectorPanel' : 'storyStage.showDirectorPanel')}

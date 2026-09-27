@@ -10,11 +10,13 @@ import type { LoreItem } from '@/lib/api'
 import { StoryBackgroundSelect } from './StoryBackgroundSelect'
 import type { StoryPresentationSettings } from '../../types'
 import { useStagePreferences } from '../story-stage/use-stage-preferences'
-import { ControlSection, TuningRow } from './StoryTuningControls'
+import { ControlSection, NumberSettingInput, TuningRow } from './StoryTuningControls'
 
 export function StoryPresentationControls({ projectId, value, loreItems, disabled, onChange }: { projectId?: string; value?: StoryPresentationSettings; loreItems?: LoreItem[]; disabled: boolean; onChange: (settings: StoryPresentationSettings) => void }) {
   const { t } = useTranslation()
-  const { scrimOpacity } = useStagePreferences(projectId || '')
+  const { scrimOpacity, textMaxWidth } = useStagePreferences(projectId || '')
+  const [widthDraft, setWidthDraft] = useState<number>()
+  const [savingWidth, setSavingWidth] = useState(false)
   const [draft, setDraft] = useState<number>()
   const latestEdit = useRef({ value: scrimOpacity, version: 0 })
   const saveQueue = useRef(Promise.resolve())
@@ -22,6 +24,23 @@ export function StoryPresentationControls({ projectId, value, loreItems, disable
   const descriptionId = useId()
   const settings = { background: true, characters: true, ...value }
   const opacity = draft ?? scrimOpacity
+  const saveTextMaxWidth = async (value: number) => {
+    setWidthDraft(value)
+    setSavingWidth(true)
+    try {
+      const changes = { interactive_stage_text_max_width: value }
+      const saved = projectId
+        ? await patchProjectSettings(projectId, 'user', changes)
+        : await patchSettings('user', changes)
+      setWidthDraft(projectId ? undefined : saved.effective.interactive_stage_text_max_width ?? value)
+    } catch (error) {
+      console.warn('[story-presentation] failed to save text maximum width', error)
+      toast.error(t('storyStage.presentation.saveFailed'))
+      setWidthDraft(undefined)
+    } finally {
+      setSavingWidth(false)
+    }
+  }
   const changeOpacity = (value: number) => {
     // Keyboard input may report the commit before the matching value change.
     if (latestEdit.current.value !== value) {
@@ -58,6 +77,9 @@ export function StoryPresentationControls({ projectId, value, loreItems, disable
       </TuningRow>
       <TuningRow title={t('storyStage.presentation.characters')} description={t('storyStage.presentation.charactersHelp')}>
         <Switch aria-label={t('storyStage.presentation.characters')} checked={settings.characters} disabled={disabled} onCheckedChange={characters => onChange({ ...settings, characters })} />
+      </TuningRow>
+      <TuningRow title={t('storyStage.presentation.textMaxWidth')} description={t('storyStage.presentation.textMaxWidthHelp')}>
+        <NumberSettingInput label={t('storyStage.presentation.textMaxWidth')} value={widthDraft ?? textMaxWidth} min={480} max={1600} disabled={savingWidth} onCommit={value => void saveTextMaxWidth(value)} />
       </TuningRow>
       <Field className="director-control-row min-w-0 gap-2 px-2.5 py-2">
         <div className="flex min-w-0 items-start justify-between gap-2">

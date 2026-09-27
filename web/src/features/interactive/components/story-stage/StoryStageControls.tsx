@@ -18,7 +18,7 @@ export function StoryStageControls({ isMobile, picker, history, directorPanelVis
     <>
       {isMobile ? (
         <TurnNavigator {...history} renderTrigger={(openHistory) => <StoryPicker {...picker} onOpenHistory={history.items.length ? openHistory : undefined} />} />
-      ) : <StoryPicker {...picker} />}
+      ) : <StoryPicker {...picker} variant="compact" />}
       {isMobile && onToggleDirectorPanel && (
         <Button type="button" variant="ghost" size="icon" onClick={onToggleDirectorPanel} aria-label={directorPanelVisible ? t('storyStage.hideDirectorPanel') : t('storyStage.showDirectorPanel')} aria-expanded={directorPanelVisible} title={t('storyStage.directorPanel')}>
           <SlidersHorizontal />

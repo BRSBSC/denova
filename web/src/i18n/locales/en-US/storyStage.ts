@@ -1,4 +1,6 @@
 const storyStage = {
+  'storyStage.presentation.textMaxWidth': 'Text maximum width (px)',
+  'storyStage.presentation.textMaxWidthHelp': 'Shared by all stories. Text and input stay centered and adapt to narrower screens.',
   'storyStage.presentation.backgroundHelp': 'Let the story change backgrounds. Turn off to keep the default background.',
   'storyStage.presentation.charactersHelp': 'Let the story select and display character sprites.',
   'storyStage.presentation.defaultBackground': 'Default background',

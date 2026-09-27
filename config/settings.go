@@ -135,6 +135,7 @@ type Settings struct {
 	InteractiveStageFontSize     *int     `toml:"interactive_stage_font_size,omitempty" json:"interactive_stage_font_size,omitempty"`
 	InteractiveStageScrimOpacity *float64 `toml:"interactive_stage_scrim_opacity,omitempty" json:"interactive_stage_scrim_opacity,omitempty"`
 	InteractiveStageLineHeight   *float64 `toml:"interactive_stage_line_height,omitempty" json:"interactive_stage_line_height,omitempty"`
+	InteractiveStageTextMaxWidth *int     `toml:"interactive_stage_text_max_width,omitempty" json:"interactive_stage_text_max_width,omitempty"`
 }
 
 func boolPtr(v bool) *bool        { return &v }
@@ -237,6 +238,7 @@ func DefaultSettings() Settings {
 		InteractiveStageFontSize:     intPtr(16),
 		InteractiveStageLineHeight:   floatPtr(1.78),
 		InteractiveStageScrimOpacity: floatPtr(0.75),
+		InteractiveStageTextMaxWidth: intPtr(896),
 	}
 }
 
@@ -461,6 +463,9 @@ func Merge(parent, child Settings) Settings {
 	}
 	if child.InteractiveStageLineHeight != nil {
 		out.InteractiveStageLineHeight = child.InteractiveStageLineHeight
+	}
+	if child.InteractiveStageTextMaxWidth != nil {
+		out.InteractiveStageTextMaxWidth = child.InteractiveStageTextMaxWidth
 	}
 	return out
 }
