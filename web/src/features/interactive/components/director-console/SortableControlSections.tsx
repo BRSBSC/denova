@@ -83,10 +83,11 @@ export function SortableControlSections({ children }: { children: ReactNode }) {
 
 function SortableSection({ id, expanded, toggle, children }: { id: string; expanded: boolean; toggle: () => void; children: ReactNode }) {
   const sortable = useSortable({ id })
+  // Cards have different heights; sorting must not scale them to the drop target.
   return (
     <div ref={sortable.setNodeRef} data-control-section={id}
       className={sortable.isDragging ? 'relative z-10 shadow-lg' : undefined}
-      style={{ transform: CSS.Transform.toString(sortable.transform), transition: sortable.transition }}>
+      style={{ transform: CSS.Translate.toString(sortable.transform), transition: sortable.transition }}>
       <SectionContext.Provider value={{ expanded, toggle, sortable }}>{children}</SectionContext.Provider>
     </div>
   )

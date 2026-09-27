@@ -31,7 +31,7 @@ export function ControlSection({
               {...layout.sortable.attributes} {...layout.sortable.listeners}
               aria-expanded={layout.expanded}
               onClick={layout.toggle}
-              className="flex w-full touch-none select-none items-center gap-2 rounded-md text-left text-xs font-semibold text-foreground outline-none hover:text-[var(--director-brass)] focus-visible:ring-2 focus-visible:ring-ring cursor-grab active:cursor-grabbing">
+              className="flex w-full touch-none select-none items-center gap-2 rounded-md text-left text-xs font-semibold text-foreground outline-none hover:text-[var(--director-brass)] focus-visible:ring-2 focus-visible:ring-ring">
               <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-[var(--director-brass)]">{icon}</span>
               <span className="min-w-0 flex-1 truncate">{title}</span>
               <ChevronRight aria-hidden="true" className={`size-3 shrink-0 transition-transform ${layout.expanded ? 'rotate-90' : ''}`} />
