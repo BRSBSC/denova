@@ -4,9 +4,9 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.0）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.0 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.0) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.0 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
@@ -35,6 +35,34 @@ Denova records only major user-visible features, important compatibility or data
 - 修复大型项目移除时长时间无响应的问题，减少版本状态查询的文件读取，并避免将源码 Git 仓库误当作创作版本历史。
 - Fix long stalls when removing large projects, reduce file reads for version status, and keep source Git repositories separate from creative version history.
 
+### Changed / 变更
+
+- 旧 Skill 来源和自动更新选择迁入统一安装记录，正文不变，旧来源文件在移除前保留事务备份；降级 v0.5.0 需恢复这些文件才能继续使用原来源和自动更新信息。
+- Skill sources and existing update preferences move into shared installation records without changing content. Old source files are backed up before removal; downgrading to v0.5.0 requires restoring them to recover source and automatic-update information.
+
+## [v0.5.1] - 2026-09-28
+
+### Brief / 简要说明
+
+#### 中文
+
+- 减少长会话在历史压缩、恢复和复用外部运行时会话时的开销。
+- 修复 Native Agent 工具审批与暂停恢复，以及外部运行时取消排队写入后无法继续会话的问题。
+- Skills 支持中文等多语言名称。
+
+#### English
+
+- Reduce long-conversation overhead during compaction, recovery, and external runtime session reuse.
+- Fix Native Agent tool approvals and paused-task recovery, and unblock external runtime conversations after cancelling queued writes.
+- Support multilingual Skill names, including Chinese.
+
+### Added / 新增
+
+- Skills 支持中文等多语言名称，可通过名称显式调用。
+- Skills support multilingual names, including Chinese, with explicit invocation by name.
+
+### Fixed / 修复
+
 - Native Agent 在写作、通用对话与游戏中压缩历史后，只保留活动上下文，并在版本一致时直接恢复，减少长会话的历史读取与检查点开销；已有会话和旧检查点仍可读取、恢复。
 - After compaction, Native Agent keeps an active context window for Writing, General, and Game and reuses aligned checkpoints, reducing long-session history reads and checkpoint work. Existing conversations and older checkpoints remain readable and recoverable.
 
@@ -46,11 +74,6 @@ Denova records only major user-visible features, important compatibility or data
 
 - 修复写作与通用对话使用外部运行时时，取消排队中的写入后无法继续会话或切换运行时的问题。
 - Fix external-runtime Writing and General conversations remaining blocked after cancelling a queued write, preventing continuation or runtime switching.
-
-### Changed / 变更
-
-- 旧 Skill 来源和自动更新选择迁入统一安装记录，正文不变，旧来源文件在移除前保留事务备份；降级 v0.5.0 需恢复这些文件才能继续使用原来源和自动更新信息。
-- Skill sources and existing update preferences move into shared installation records without changing content. Old source files are backed up before removal; downgrading to v0.5.0 requires restoring them to recover source and automatic-update information.
 
 ## [v0.5.0] - 2026-09-22
 
