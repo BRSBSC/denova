@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { StrictMode, useEffect } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -245,6 +245,46 @@ describe('AgentChatView project workbenches', () => {
     await waitFor(() => expect(flush).toHaveBeenCalledTimes(1))
     expect(archiveAgentChatProject).not.toHaveBeenCalled()
     expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  })
+
+  it('finishes archiving without waiting for a project refresh and ignores the older snapshot', async () => {
+    const user = userEvent.setup()
+    renderView(<AgentChatView composerSettings={{} as never} tellers={[]} imagePresets={[]} renderPage={() => null} renderReview={() => null} />)
+    await user.click(await screen.findByRole('button', { name: 'Project A 的项目操作' }))
+    await user.click(await screen.findByRole('menuitem', { name: '从项目中移除' }))
+
+    let resolveProjects!: (value: Awaited<ReturnType<typeof getAgentChatProjects>>) => void
+    vi.mocked(getAgentChatProjects).mockImplementation(() => new Promise(resolve => { resolveProjects = resolve }))
+    act(() => window.dispatchEvent(new Event('focus')))
+    const dialog = screen.getByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: '从项目中移除' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Project A 的项目操作' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Project B 的项目操作' })).toBeInTheDocument()
+    await act(async () => resolveProjects([project('/books/a', 'Project A', 'session-a', 'Chat A'), project('/books/b', 'Project B', 'session-b', 'Chat B')]))
+    expect(screen.queryByRole('button', { name: 'Project A 的项目操作' })).not.toBeInTheDocument()
+  })
+
+  it('shows archive progress and retains projects refreshed during the removal', async () => {
+    const user = userEvent.setup()
+    let finishArchive!: () => void
+    vi.mocked(archiveAgentChatProject).mockImplementation(() => new Promise(resolve => { finishArchive = resolve }))
+    renderView(<AgentChatView composerSettings={{} as never} tellers={[]} imagePresets={[]} renderPage={() => null} renderReview={() => null} />)
+    await user.click(await screen.findByRole('button', { name: 'Project A 的项目操作' }))
+    await user.click(await screen.findByRole('menuitem', { name: '从项目中移除' }))
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '从项目中移除' }))
+    expect(screen.getByRole('button', { name: '正在移除项目...' })).toHaveAttribute('aria-busy', 'true')
+    vi.mocked(getAgentChatProjects).mockResolvedValue([
+      project('/books/a', 'Project A', 'session-a', 'Chat A'),
+      project('/books/b', 'Project B', 'session-b', 'Chat B'),
+      project('/books/c', 'Project C', 'session-c', 'Chat C'),
+    ])
+    await act(async () => window.dispatchEvent(new Event('focus')))
+    await act(async () => finishArchive())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Project A 的项目操作' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Project C 的项目操作' })).toBeInTheDocument()
   })
 
   it('toggles the activity tree from one persistent header button', async () => {

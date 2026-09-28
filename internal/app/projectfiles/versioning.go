@@ -58,7 +58,7 @@ func (service *Service) VersionStatus(ctx context.Context, projectID string) (bo
 	var status book.VersionStatus
 	err = changes.WithConsistentWorkspaceSnapshot(ctx, func() error {
 		var statusErr error
-		status, statusErr = resources.VersionService.Status(resources.Settings)
+		status, statusErr = resources.VersionService.Status(ctx, resources.Settings)
 		return statusErr
 	})
 	return status, err

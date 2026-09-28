@@ -155,6 +155,7 @@ const chat = {
   'chat.modelProfile.action': 'Model Profile',
   'chat.modelProfile.switch': 'Switch model, current: {{model}}',
   'chat.modelProfile.loading': 'Loading model…',
+  'chat.modelProfile.configError': 'Conversation configuration error',
   'chat.modelProfile.defaultModel': 'Default model',
   'chat.modelProfile.rememberSelection': 'Model and thinking choices are remembered for new conversations of this type.',
   'chat.modelProfile.defaultProfile': 'Default: {{label}}',

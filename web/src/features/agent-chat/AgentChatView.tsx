@@ -146,6 +146,8 @@ export function AgentChatView({
   const [liveRunningBindings, setLiveRunningBindings] = useState<ReadonlySet<string>>(() => new Set())
   const liveRunningBindingsRef = useRef<ReadonlySet<string>>(new Set())
   const refreshSequenceRef = useRef(0)
+  const projectsRef = useRef(projects)
+  projectsRef.current = projects
   const tabFlushHandlersRef = useRef(new Map<string, EditorFlushHandler>())
   const [filesEditorRefreshSignals, setFilesEditorRefreshSignals] = useState<ReadonlyMap<string, number>>(() => new Map())
   const [filesTreeRefreshSignals, setFilesTreeRefreshSignals] = useState<ReadonlyMap<string, number>>(() => new Map())
@@ -712,9 +714,18 @@ export function AgentChatView({
     if (!target) return false
     if (!(await flushProjectDrafts(target.id))) return false
     await archiveAgentChatProject(target.id)
-    await refreshProjects()
+    // The archive response is authoritative. An older list request must not
+    // restore the removed Project or keep its confirmation dialog blocked.
+    refreshSequenceRef.current += 1
+    const next = projectsRef.current.filter(project => project.id !== target.id)
+    setProjects(next)
+    setWorkbench(current => {
+      const reconciled = reconcileWorkbenchProjects(current, next)
+      const activeProjectId = reconciled.activeProjectId || next.find(project => project.current)?.id || next[0]?.id || ''
+      return { ...reconciled, activeProjectId }
+    })
     return true
-  }, [archiveTarget, flushProjectDrafts, refreshProjects])
+  }, [archiveTarget, flushProjectDrafts])
 
   const treeProps = {
     projects,
@@ -1038,6 +1049,7 @@ export function AgentChatView({
           name: archiveTarget?.name || archiveTarget?.path,
         })}
         confirmLabel={t('agentChat.project.archive')}
+        pendingLabel={t('agentChat.project.archiving')}
         tone="danger"
         detailContent={
           archiveTarget ? (

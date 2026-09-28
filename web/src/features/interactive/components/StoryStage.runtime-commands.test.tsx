@@ -20,6 +20,7 @@ const testMocks = vi.hoisted(() => ({
   submitInteractiveAgentCommandMock: vi.fn(),
   updateInteractiveTurnNarrativeMock: vi.fn(),
   useSkillCommandsMock: vi.fn(),
+  useConversationConfigMock: vi.fn(),
 }))
 
 const {
@@ -38,7 +39,7 @@ vi.mock('@/features/agent-approval/AgentApprovalProvider', () => ({
 }))
 
 vi.mock('@/features/conversation-config/use-conversation-config', () => ({
-  useConversationConfig: () => conversationConfigController(),
+  useConversationConfig: () => testMocks.useConversationConfigMock(),
 }))
 
 vi.mock('@/hooks/useSkillCommands', () => ({
@@ -69,10 +70,29 @@ function conversationConfigController() {
 
 beforeEach(() => {
   resetStoryStageTestHarness(testMocks)
+  testMocks.useConversationConfigMock.mockReset().mockImplementation(conversationConfigController)
   recoverInteractiveAgentRuntimeMock.mockReset()
 })
 
 describe('StoryStage active runtime commands', () => {
+  it('keeps the draft editable and exposes recovery when configuration loading fails', async () => {
+    const reload = vi.fn()
+    testMocks.useConversationConfigMock.mockReturnValue({
+      ...conversationConfigController(), snapshot: null, initialized: false,
+      error: 'Saved configuration is unavailable', reload,
+    })
+    const user = userEvent.setup()
+    render(<StoryStageHarness />)
+    const input = getStageInput()
+    expect(input).toHaveAttribute('contenteditable', 'true')
+    await user.type(input, '保留这段草稿')
+    expect(input).toHaveTextContent('保留这段草稿')
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Saved configuration is unavailable')
+    await user.click(screen.getByRole('button', { name: '重试' }))
+    expect(reload).toHaveBeenCalledOnce()
+    expect(sendInteractiveMessageMock).not.toHaveBeenCalled()
+  })
   it('hides text and input without unmounting them, and restores them with Escape', async () => {
     const user = userEvent.setup()
     const turn: TurnEvent = {

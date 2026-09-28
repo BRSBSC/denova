@@ -22,6 +22,7 @@ import { StoryPresentationControls } from './director-console/StoryPresentationC
 import { StoryOpeningSelector } from './story-setup/StoryOpeningSelector'
 import { StoryProtagonistSelector } from './story-setup/StoryProtagonistSelector'
 import { StorySetupAdvanced, type StorySetupSettings } from './story-setup/StorySetupAdvanced'
+import { ConversationConfigError } from '@/features/conversation-config/ConversationConfigError'
 
 interface NewStorySetupPanelProps {
   projectId: string
@@ -196,6 +197,7 @@ export function NewStorySetupPanel({
           </header>
 
           <div className="flex flex-col gap-4">
+            <ConversationConfigError controller={conversationConfig} agentKey="interactive_story" />
             <StoryProtagonistSelector projectId={projectId} value={protagonist} loreItems={loreItems} onChange={changeProtagonist} onRequestLoreInit={onRequestLoreInit} />
             <StoryOpeningSelector value={opening} presets={bookOpeningPresets} onChange={setOpening} />
             <StoryPresentationControls projectId={projectId} value={presentationSettings} loreItems={loreItems} disabled={creating} onChange={setPresentationSettings} />

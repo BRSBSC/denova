@@ -50,6 +50,7 @@ const agentChat = {
   'agentChat.project.relinkFailed': 'Failed to relink folder',
   'agentChat.project.archive': 'Remove from projects',
   'agentChat.project.archiveTitle': 'Remove project',
+  'agentChat.project.archiving': 'Removing project...',
   'agentChat.project.archiveDescription': 'Remove “{{name}}” from the project list? Its directory and user-owned conversation data will not be deleted.',
   'agentChat.project.name': 'Display name',
   'agentChat.project.nameRequired': 'Enter a project name.',

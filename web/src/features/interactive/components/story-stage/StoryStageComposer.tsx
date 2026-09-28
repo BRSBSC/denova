@@ -23,6 +23,7 @@ import { EditInteractiveReplyDialog } from '../EditInteractiveReplyDialog'
 import type { StoryStageCommandItem } from './story-stage-commands'
 import { isNativeComposingKeyboardEvent } from './utils'
 import type { ConversationConfigController } from '@/features/conversation-config/types'
+import { ConversationConfigError } from '@/features/conversation-config/ConversationConfigError'
 import { supportsRuntimeOperation } from '@/features/conversation-config/types'
 import { ComposerAttachmentTray, useComposerAttachments } from '@/components/Chat/ComposerAttachments'
 import type { InputAreaSendOptions } from '@/components/Chat/InputArea'
@@ -132,7 +133,7 @@ export function StoryStageComposer({ layout, editor, story, runtime, dialogs, ac
   const sendBlocked = streaming && !supportsRuntimeOperation(conversationConfig.snapshot, 'queue')
   const resumeAvailable = Boolean(pendingInterruptionId) && !editingTurn
   const attachments = useComposerAttachments(
-    !branchTerminal && approvalReady,
+    !branchTerminal,
     `game:${layout.attachmentDraftKey}`,
   )
   const stylePickerRef = useRef<FileReferencePickerHandle>(null)
@@ -225,6 +226,7 @@ export function StoryStageComposer({ layout, editor, story, runtime, dialogs, ac
             onActiveIndexChange={setActiveSkillCommandIndex}
             onSelect={(command) => selectSkillCommand(command.cmd.replace(/^\//, ''))}
           />
+          <ConversationConfigError controller={conversationConfig} agentKey="interactive_story" />
           <AgentComposerShell
             className="nova-story-stage-composer"
             references={attachments.items.length ? <ComposerAttachmentTray items={attachments.items} onRemove={attachments.remove} /> : undefined}
@@ -276,7 +278,7 @@ export function StoryStageComposer({ layout, editor, story, runtime, dialogs, ac
               maxRows={isMobile ? 5 : 10}
               className="nova-agent-composer-textarea nova-agent-token-input min-h-[42px] resize-none border-0 bg-transparent px-1 py-[9px] text-sm leading-6 text-[var(--nova-text)] shadow-none placeholder:text-[var(--nova-text-faint)] focus-visible:border-transparent focus-visible:ring-0"
               style={inputTextStyle}
-              disabled={branchTerminal || !approvalReady}
+              disabled={branchTerminal}
               inputMode="text"
               enterKeyHint={isMobile ? 'enter' : 'send'}
               autoCapitalize="sentences"
@@ -316,7 +318,7 @@ export function StoryStageComposer({ layout, editor, story, runtime, dialogs, ac
               {attachments.input}
             </>}
             toolbarEnd={<>
-              <ModelProfileSwitcher agentKey="interactive_story" workspace={workspace} conversationConfig={conversationConfig} disabled={branchTerminal || !approvalReady} runActive={streaming || Boolean(pendingInterruptionId)} />
+              <ModelProfileSwitcher agentKey="interactive_story" workspace={workspace} conversationConfig={conversationConfig} disabled={branchTerminal} runActive={streaming || Boolean(pendingInterruptionId)} />
               <Button type="button" variant="outline" className={`nova-agent-composer-pill h-8 shrink-0 rounded-[10px] border-[var(--nova-border)] bg-[var(--nova-surface)] px-2.5 text-[11px] text-[var(--nova-text-muted)] hover:bg-[var(--nova-hover)] hover:text-[var(--nova-text)] ${showHotChoices ? 'text-[var(--nova-text)]' : ''}`} disabled={!canUseHotChoices} onMouseDown={(event) => event.preventDefault()} onClick={toggleHotChoices} aria-controls={choicesId} aria-expanded={showHotChoices} aria-pressed={showHotChoices} aria-label={showHotChoices ? t('storyStage.hotChoices.collapse') : t('storyStage.hotChoices.get')}><Compass className="h-3.5 w-3.5" />{t('storyStage.hotChoices.button')}</Button>
             </>}
             submitControl={<AgentComposerControls generationActive={streaming} hasSendableContent={Boolean(input.trim() || attachments.files.length)} resumeAvailable={resumeAvailable} onStop={() => { void stop() }} onSend={() => { void submit() }} sendDisabled={sendBlocked || !approvalReady || !storyId || (!input.trim() && attachments.files.length === 0 && !resumeAvailable)} disabled={branchTerminal} abortPending={abortPending} actionPending={commandSubmitting} activeControlsDisabled={activeControlsDisabled} stopDisabled={streaming && !recoveryAbortAvailable && (recoveryPaused || !operationId || connection !== 'connected')} sendLabel={editingTurn ? t('storyStage.sendRegenerate') : undefined} sendIcon={editingTurn ? <RefreshCw data-icon="inline-start" /> : undefined} />}

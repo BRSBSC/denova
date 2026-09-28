@@ -78,7 +78,9 @@ func RecentSessionSeed(store *session.Store, runtime *config.Config, agentKind, 
 	if err != nil {
 		return conversationconfig.Config{}, err
 	}
-	if err := conversationconfig.Validate(runtime, seed, agentKind); err != nil {
+	// Defaults must remain inspectable when their model catalog entry disappears.
+	// ApplySession validates availability immediately before execution.
+	if err := conversationconfig.ValidateShape(seed, agentKind); err != nil {
 		return conversationconfig.Config{}, fmt.Errorf("resolve default conversation config: %w", err)
 	}
 	return seed, nil

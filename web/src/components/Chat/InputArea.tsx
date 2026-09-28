@@ -8,6 +8,7 @@ import type { VisibleAgentKey } from '@/features/agents/agent-registry'
 import { Button } from '@/components/ui/button'
 import { AgentComposerShell } from './AgentComposerShell'
 import { ModelProfileSwitcher } from './ModelProfileSwitcher'
+import { ConversationConfigError } from '@/features/conversation-config/ConversationConfigError'
 import { ComposerTokenInput, type ComposerTokenInputHandle, type ComposerTokenSpec, type ComposerTrigger } from './composer-token-input'
 import { workspaceFileName } from '@/lib/workspace-path'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -609,6 +610,7 @@ export function InputArea({
           />
         ) : null}
 
+        <ConversationConfigError controller={conversationConfig} agentKey={agentKey} />
         <AgentComposerShell
           references={hasReferences ? (
             <>

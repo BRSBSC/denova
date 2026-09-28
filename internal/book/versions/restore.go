@@ -1,6 +1,7 @@
 package versions
 
 import (
+	"context"
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
@@ -56,7 +57,7 @@ func (p restorePlanner) PlanLocked(id string, paths []string, settings VersionAu
 		}
 	}
 	settings = normalizeVersionAutoSettings(settings)
-	status, err := s.statusLocked(settings)
+	status, err := s.statusLocked(context.Background(), settings)
 	if err != nil {
 		return VersionRestorePlan{}, err
 	}
@@ -132,7 +133,7 @@ func (p restorePlanner) ApplyLocked(id string, paths []string, settings VersionA
 		return VersionRestoreResult{}, err
 	}
 
-	nextStatus, statusErr := s.statusLocked(settings)
+	nextStatus, statusErr := s.statusLocked(context.Background(), settings)
 	target := plan.Target
 	restoredPaths := make([]string, 0, len(plan.Changes))
 	for _, change := range plan.Changes {

@@ -32,6 +32,9 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Fixed / 修复
 
+- 修复大型项目移除时长时间无响应的问题，减少版本状态查询的文件读取，并避免将源码 Git 仓库误当作创作版本历史。
+- Fix long stalls when removing large projects, reduce file reads for version status, and keep source Git repositories separate from creative version history.
+
 - Native Agent 在写作、通用对话与游戏中压缩历史后，只保留活动上下文，并在版本一致时直接恢复，减少长会话的历史读取与检查点开销；已有会话和旧检查点仍可读取、恢复。
 - After compaction, Native Agent keeps an active context window for Writing, General, and Game and reuses aligned checkpoints, reducing long-session history reads and checkpoint work. Existing conversations and older checkpoints remain readable and recoverable.
 

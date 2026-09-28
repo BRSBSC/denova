@@ -50,6 +50,7 @@ const agentChat = {
   'agentChat.project.relinkFailed': '重新关联目录失败',
   'agentChat.project.archive': '从项目中移除',
   'agentChat.project.archiveTitle': '移除项目',
+  'agentChat.project.archiving': '正在移除项目...',
   'agentChat.project.archiveDescription': '要从项目列表移除“{{name}}”吗？不会删除项目目录和用户侧的对话数据。',
   'agentChat.project.name': '显示名称',
   'agentChat.project.nameRequired': '请输入项目名称。',

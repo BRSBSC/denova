@@ -155,6 +155,7 @@ const chat = {
   'chat.modelProfile.action': '模型配置',
   'chat.modelProfile.switch': '切换模型，当前：{{model}}',
   'chat.modelProfile.loading': '加载模型…',
+  'chat.modelProfile.configError': '会话配置出错',
   'chat.modelProfile.defaultModel': '默认模型',
   'chat.modelProfile.rememberSelection': '模型和思考强度会记住，用于同类新会话。',
   'chat.modelProfile.defaultProfile': '默认：{{label}}',
