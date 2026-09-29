@@ -1,4 +1,5 @@
 import { lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BookCreationProvider } from './book-creation'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
 import { WRITING_COMPOSER_SETTING_DEFAULTS } from '@/components/Chat/AgentPanel'
@@ -124,7 +125,7 @@ export function ModeRouter(props: ModeRouterProps) {
     onQuickSwitchBook,
     onBeforeWorkspaceSwitch,
     onBooksChange,
-    onAgentChatBookCreated,
+    onBookCreated,
     onOpenCharacterCardImport,
     onSetSidebarView,
     onSelectSearchResult,
@@ -265,6 +266,11 @@ export function ModeRouter(props: ModeRouterProps) {
     if (!(await flushAgentChatDrafts())) return false
     return onBeforeWorkspaceSwitch()
   }, [flushAgentChatDrafts, flushComposerSettingsBestEffort, flushLoreLibraryDraft, onBeforeWorkspaceSwitch])
+
+  const bookCreation = useMemo(() => ({
+    beforeCreate: flushBeforeWorkspaceSwitch,
+    onCreated: onBookCreated,
+  }), [flushBeforeWorkspaceSwitch, onBookCreated])
 
   const quickSwitchBook = useCallback(async (path: string): Promise<boolean> => {
     flushComposerSettingsBestEffort()
@@ -807,7 +813,7 @@ export function ModeRouter(props: ModeRouterProps) {
         autoSaveDelayMs={editorAutoSaveDelayMs}
         readingTypography={readingTypography}
         onBeforeCreateBook={flushBeforeWorkspaceSwitch}
-        onBookCreated={onAgentChatBookCreated}
+        onBookCreated={onBookCreated}
         onBooksChange={onBooksChange}
         onFlushHandlerChange={handleAgentChatFlushHandlerChange}
         onWorkspaceChanged={onWorkspaceChanged}
@@ -833,7 +839,7 @@ export function ModeRouter(props: ModeRouterProps) {
           settingsOpen={settingsOpen}
           developerMode={developerMode}
           sidebar={sidebar}
-          main={main}
+          main={<BookCreationProvider value={bookCreation}>{main}</BookCreationProvider>}
           rightPanelContent={writingAgent.content}
           notice={notice}
           onSetMode={onSetMode}

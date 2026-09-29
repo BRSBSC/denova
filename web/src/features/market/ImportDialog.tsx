@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ImportResourcePicker } from './ImportResourcePicker'
+import { useBookCreation } from '@/components/workbench/book-creation'
 import { CompatibilityReport } from '@/components/workbench/CharacterCardImportDialog'
 import { createBook, getBooks, type BookRecord } from '@/lib/api'
 import {
@@ -62,6 +63,7 @@ export function ImportDialog({
   onInstalled,
 }: ImportDialogProps) {
   const { t } = useTranslation()
+  const bookCreation = useBookCreation()
   const [preview, setPreview] = useState(initialPreview)
   const [candidateID, setCandidateID] = useState(
     initialPreview?.candidates.find(
@@ -539,6 +541,7 @@ export function ImportDialog({
                 else if (!plan) {
                   let targetProject = projectID
                   if (creatingBook) {
+                    if (!(await bookCreation.beforeCreate())) return
                     const created = await createBook(bookTitle.trim())
                     targetProject = created.project_id
                     // Retain the created target even if planning fails, so retry never creates it twice.
@@ -548,6 +551,8 @@ export function ImportDialog({
                       project_id: targetProject, path: created.workspace,
                       name: created.book_meta.title, author: created.book_meta.author || '', last_opened_at: '',
                     }])
+                    // Creation already selects the book on the server, even if planning later fails.
+                    await bookCreation.onCreated(created.workspace)
                   }
                   setPlan(
                     await exchange<Plan>('/plans', {
@@ -568,8 +573,8 @@ export function ImportDialog({
                     `/plans/${plan.plan_id}/apply`,
                     {},
                   )
-                  toast.success(t('market.import.done'))
                   await onInstalled(installed)
+                  toast.success(t('market.import.done'))
                   if (preview) {
                     discardPreview(preview)
                     downloadedPreview.current = undefined

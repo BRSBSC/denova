@@ -1,12 +1,18 @@
-import { StrictMode } from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode, type ReactElement } from 'react'
+import { act, fireEvent, render as renderComponent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { createBook } from '@/lib/api'
+import { BookCreationProvider } from '@/components/workbench/book-creation'
 import { ImportDialog } from './ImportDialog'
 import { discardPreview, previewSource, exchange, type Preview } from './api'
 vi.mock('@/lib/api', () => ({ getBooks: vi.fn().mockResolvedValue([]), createBook: vi.fn() }))
 vi.mock('./api', async (original) => ({ ...await original<typeof import('./api')>(), exchange: vi.fn(), previewSource: vi.fn(), discardPreview: vi.fn() }))
+const beforeCreate = vi.fn<() => Promise<boolean>>()
+const onCreated = vi.fn<(workspace: string) => Promise<void>>()
+const render = (ui: ReactElement) => renderComponent(ui, {
+  wrapper: ({ children }) => <BookCreationProvider value={{ beforeCreate, onCreated }}>{children}</BookCreationProvider>,
+})
 const preview: Preview = {
   preview_id: 'frozen', source: { kind: 'github', url: 'https://github.com/test/package' }, expires_at: '2030-01-01',
   candidates: [{ candidate_id: 'first', package: { id: 'first', name: 'Other package' }, format: 'skill', resources: [] }, {
@@ -22,6 +28,8 @@ beforeEach(() => {
   vi.mocked(previewSource).mockReset()
   vi.mocked(discardPreview).mockReset()
   vi.mocked(createBook).mockReset()
+  beforeCreate.mockReset().mockResolvedValue(true)
+  onCreated.mockReset().mockResolvedValue(undefined)
 })
 it('plans exactly the selected candidate and resources, while displaying its dependency', async () => {
   vi.mocked(exchange).mockResolvedValue({ plan_id: 'plan', items: [], installation: { package: { name: 'Chosen package' } } })
@@ -79,10 +87,28 @@ it('creates a book for lore and reuses it when planning fails', async () => {
   await user.click(review)
   await screen.findByText('Plan failed')
   expect(createBook).toHaveBeenCalledWith('New world')
+  expect(beforeCreate).toHaveBeenCalledOnce()
+  expect(onCreated).toHaveBeenCalledExactlyOnceWith('/books/new')
+  expect(beforeCreate.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(createBook).mock.invocationCallOrder[0])
+  expect(onCreated.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(exchange).mock.invocationCallOrder[0])
   expect(exchange).toHaveBeenCalledWith('/plans', expect.objectContaining({ project_id: 'new-project', resources: ['lore'] }))
   await user.click(screen.getByRole('button', { name: '生成安装计划' }))
   await screen.findByText('确认安装计划')
   expect(createBook).toHaveBeenCalledTimes(1)
+  expect(onCreated).toHaveBeenCalledTimes(1)
+})
+
+it('does not create or plan a book when workspace drafts cannot be saved', async () => {
+  const user = userEvent.setup()
+  beforeCreate.mockResolvedValue(false)
+  render(<ImportDialog preview={{ ...preview, candidates: [{ ...preview.candidates[1], resources: [preview.candidates[1].resources[0]] }] }} onClose={vi.fn()} onInstalled={vi.fn()} />)
+  await user.click(screen.getByRole('radio', { name: '导入成新书籍' }))
+  await user.type(screen.getByRole('textbox', { name: '新书名称' }), 'New world')
+  await user.click(screen.getByRole('button', { name: '创建书籍并生成计划' }))
+  expect(beforeCreate).toHaveBeenCalledOnce()
+  expect(createBook).not.toHaveBeenCalled()
+  expect(exchange).not.toHaveBeenCalled()
+  expect(onCreated).not.toHaveBeenCalled()
 })
 
 it('keeps the new-book form after creation fails and never plans without a project', async () => {
