@@ -198,8 +198,8 @@ fi
 mkdir -p "${DIST_DIR}" "${BUILD_DIR}"
 cp "${ROOT_DIR}/scripts/install.sh" "${DIST_DIR}/install.sh"
 chmod 0755 "${DIST_DIR}/install.sh"
-# Match the normal distribution: serve external assets and retain the embedded
-# fallback. Only generated directories below this checkout are replaced.
+# Release builds serve only the frontend embedded in this exact binary.
+# Only generated directories below this checkout are replaced.
 rm -rf "${ROOT_DIR}/internal/webfs/dist"
 cp -R "${FRONTEND_DIR}" "${ROOT_DIR}/internal/webfs/dist"
 
@@ -227,7 +227,9 @@ for target in "${TARGETS[@]}"; do
     chmod 0755 "${package_dir}/${updater_exe}"
   fi
 
-  cp -R "${FRONTEND_DIR}" "${package_dir}/web"
+  # v0.5.1 requires this directory before invoking the new updater. It does not
+  # require files inside it. New releases serve their embedded frontend only.
+  mkdir -p "${package_dir}/web"
   cp -R "${ROOT_DIR}/skills" "${package_dir}/skills"
   copy_if_exists "${ROOT_DIR}/config.toml" "${package_dir}/"
   copy_if_exists "${ROOT_DIR}/README.md" "${package_dir}/"

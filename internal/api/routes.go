@@ -9,6 +9,7 @@ import (
 
 	hertzapp "github.com/cloudwego/hertz/pkg/app"
 	hertzserver "github.com/cloudwego/hertz/pkg/app/server"
+	"github.com/cloudwego/hertz/pkg/common/adaptor"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 
 	"denova/internal/api/handlers"
@@ -263,6 +264,7 @@ func (s *Server) registerRoutes(h *hertzserver.Hertz) {
 		api.POST("/images/comfyui/workflows/load", apiHandlers.HandleComfyUIWorkflowLoad)
 		api.GET("/conversation-config", apiHandlers.HandleConversationConfigGet)
 		api.PATCH("/conversation-config", apiHandlers.HandleConversationConfigPatch)
+		api.GET("/update/status", apiHandlers.HandleUpdateStatus)
 		api.GET("/update/check", apiHandlers.HandleUpdateCheck)
 		api.POST("/update/install", apiHandlers.HandleUpdateInstall)
 		api.POST("/update/install/stream", apiHandlers.HandleUpdateInstallStream)
@@ -283,7 +285,24 @@ func (s *Server) registerRoutes(h *hertzserver.Hertz) {
 		api.GET("/status", apiHandlers.HandleStatus)
 	}
 
-	if webRoot := resolveWebRoot(); webRoot != "" {
+	if embedded := webfs.Handler(); embedded != nil {
+		// Release frontend and backend must come from the same executable.
+		// Disk overrides and repository discovery belong to development builds.
+		slog.InfoContext(context.Background(), "[startup] Serving embedded frontend")
+		static := func(ctx context.Context, c *hertzapp.RequestContext) {
+			// These finite assets must remain buffered until Hertz's gzip and
+			// response middleware finish. HertzHandler writes straight to the
+			// connection and bypasses that middleware, so use the buffered adapter.
+			request, err := adaptor.GetCompatRequest(&c.Request)
+			if err != nil {
+				c.AbortWithStatus(consts.StatusBadRequest)
+				return
+			}
+			embedded.ServeHTTP(adaptor.GetCompatResponseWriter(&c.Response), request.WithContext(ctx))
+		}
+		h.GET("/*filepath", static)
+		h.HEAD("/*filepath", static)
+	} else if webRoot := resolveWebRoot(); webRoot != "" {
 		slog.InfoContext(context.Background(), fmt.Sprintf("[startup] Web static asset directory: %s", webRoot))
 		staticFS := &hertzapp.FS{Root: webRoot, IndexNames: []string{"index.html"}}
 		if spaFallback := spaFallbackHandler(webRoot); spaFallback != nil {
@@ -360,19 +379,6 @@ func resolveWebRoot() string {
 				return root
 			}
 		}
-	}
-	// Last resort: assets embedded into the binary (build tag "embedweb").
-	// Lets a bare nova binary serve the frontend with no web/ directory on
-	// disk — useful for go install / single-binary distribution. Extracts to
-	// a temp dir the file-based static handler can serve from.
-	if webfs.HasEmbedded() {
-		root, err := webfs.ExtractEmbedded()
-		if err != nil {
-			slog.ErrorContext(context.Background(), fmt.Sprintf("[startup] failed to extract embedded frontend assets; registering API routes only: %v", err))
-			return ""
-		}
-		slog.InfoContext(context.Background(), fmt.Sprintf("[startup] disk Web directory not found; using embedded frontend assets: %s", root))
-		return root
 	}
 	return ""
 }

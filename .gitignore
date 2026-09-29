@@ -33,6 +33,7 @@ docs/tests/*
 !docs/claude-runtime.md
 !docs/ci-performance.md
 !docs/skills-library.md
+!docs/automatic-updates.md
 !docs/resource-pack-import-export-design.md
 !docs/speech.md
 !docs/agent-runtime-session-design-audit.md

@@ -21,8 +21,8 @@ if [ -d "web" ]; then
     fi
     pnpm build
     cd ..
-    echo "  复制前端产物到 ${OUTPUT_DIR}/web/"
-    cp -r web/dist "${OUTPUT_DIR}/web"
+    # Keep the directory required by v0.5.1 package validation.
+    mkdir -p "${OUTPUT_DIR}/web"
     echo "  准备内嵌前端资源（go:embed，构建标签 embedweb）"
     rm -rf internal/webfs/dist
     cp -r web/dist internal/webfs/dist

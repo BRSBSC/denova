@@ -6,7 +6,7 @@ import { APP_VERSION } from '@/app-version'
 import { InlineErrorNotice } from '@/components/common/inline-error-notice'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { applyUpdate, checkForUpdate, installUpdateStream, uploadUpdate } from './api'
+import { applyUpdate, getUpdateStatus, checkForUpdate, installUpdateStream, uploadUpdate } from './api'
 import type { UpdateCheckResult, UpdateInstallProgress, UpdateInstallResult } from './types'
 import { markAutoUpdateChecked, notifyUpdateCheckResult, shouldRunAutoUpdateCheck } from './update-check-cache'
 import { scheduleFrontendReloadAfterUpdate } from './update-reload'
@@ -20,8 +20,58 @@ export function useUpdateSettings({ autoCheckEnabled }: { autoCheckEnabled: bool
   const [updateStatus, setUpdateStatus] = useState<UpdateCheckResult | null>(null)
   const [updateInstallResult, setUpdateInstallResult] = useState<UpdateInstallResult | null>(null)
   const [updateInstallProgress, setUpdateInstallProgress] = useState<UpdateInstallProgress | null>(null)
-  const [operation, setOperation] = useState<UpdateOperation>('idle')
+  const [operation, setOperation] = useState<UpdateOperation>('checking')
   const [updateError, setUpdateError] = useState<string | null>(null)
+  const cancelReload = useRef<(() => void) | undefined>(undefined)
+  const monitorRestart = useCallback((target: { id: string; version: string }) => {
+    cancelReload.current?.()
+    setOperation('restarting')
+    cancelReload.current = scheduleFrontendReloadAfterUpdate(target, { onError: (reason, status) => {
+      setOperation('idle')
+      setUpdateInstallResult(null)
+      setUpdateError(t(reason === 'timeout' ? 'settings.updates.restartTimeout' : 'settings.updates.failed', { path: status?.log_path || '' }))
+    } })
+  }, [t])
+
+  // The same durable state restores settings on mount and reconciles ambiguous
+  // request failures (the server may have staged or applied before disconnecting).
+  const syncUpdateStatus = useCallback(async (signal?: AbortSignal) => {
+    const status = await getUpdateStatus(AbortSignal.any([AbortSignal.timeout(5000), ...(signal ? [signal] : [])]))
+    if (signal?.aborted) return
+    setOperation('idle')
+    setUpdateInstallResult(null)
+    switch (status.phase) {
+      case 'idle': case 'succeeded': break
+      case 'staged':
+        setUpdateInstallResult({ previous_version: status.current_version, installed_version: status.version!, installed: false, staged: true, apply_ready: true, restart_required: true, apply_log_path: status.log_path })
+        break
+      case 'failed':
+        setUpdateError(t('settings.updates.failed', { path: status.log_path || '' }))
+        break
+      case 'waiting': case 'backing_up': case 'applying': case 'starting': case 'rolling_back':
+        if (status.id && status.version) {
+          setUpdateError(null)
+          monitorRestart({ id: status.id, version: status.version })
+        }
+        break
+    }
+  }, [monitorRestart, t])
+
+  const recoverUpdateError = useCallback(async (error: unknown) => {
+    setUpdateError((error as Error).message)
+    setUpdateInstallResult(null)
+    try { await syncUpdateStatus() } catch {
+      // Keep the original error when the backend is still unavailable.
+      setOperation('idle')
+    }
+  }, [syncUpdateStatus])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void syncUpdateStatus(controller.signal).catch(e => { if (!controller.signal.aborted) { setOperation('idle'); setUpdateError((e as Error).message) } })
+    return () => { controller.abort(); cancelReload.current?.() }
+  }, [syncUpdateStatus])
+
   const runUpdateCheck = useCallback(async (source: 'auto' | 'manual' = 'manual') => {
     setOperation('checking')
     setUpdateError(null)
@@ -38,10 +88,10 @@ export function useUpdateSettings({ autoCheckEnabled }: { autoCheckEnabled: bool
   }, [])
 
   useEffect(() => {
-    if (!autoCheckEnabled || updateStatus || operation !== 'idle' || updateInstallResult) return
+    if (!autoCheckEnabled || updateError || updateStatus || operation !== 'idle' || updateInstallResult) return
     if (!shouldRunAutoUpdateCheck()) return
     void runUpdateCheck('auto')
-  }, [autoCheckEnabled, operation, updateInstallResult, runUpdateCheck, updateStatus])
+  }, [autoCheckEnabled, updateError, operation, updateInstallResult, runUpdateCheck, updateStatus])
 
   const runUpdateInstall = useCallback(async () => {
     setOperation('installing')
@@ -50,39 +100,41 @@ export function useUpdateSettings({ autoCheckEnabled }: { autoCheckEnabled: bool
     try {
       const stream = await installUpdateStream()
       const reader = stream.getReader()
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const data = JSON.parse(value.data) as Record<string, unknown>
-        if (value.event === 'update_progress') {
-          setUpdateInstallProgress(data as unknown as UpdateInstallProgress)
-        } else if (value.event === 'update_result') {
-          const result = data as unknown as UpdateInstallResult
-          setUpdateInstallResult(result)
-          setUpdateInstallProgress((prev) => prev ? { ...prev, phase: 'staged', percent: 100 } : { phase: 'staged', percent: 100 })
-        } else if (value.event === 'error') {
-          throw new Error(errorMessage(data, t('settings.updates.error')))
+      let receivedResult = false
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const data = JSON.parse(value.data) as Record<string, unknown>
+          if (value.event === 'update_progress') {
+            setUpdateInstallProgress(data as unknown as UpdateInstallProgress)
+          } else if (value.event === 'update_result') {
+            receivedResult = true
+            const result = data as unknown as UpdateInstallResult
+            setUpdateInstallResult(result)
+            setUpdateInstallProgress((prev) => prev ? { ...prev, phase: 'staged', percent: 100 } : { phase: 'staged', percent: 100 })
+          } else if (value.event === 'error') {
+            throw new Error(errorMessage(data, t('settings.updates.error')))
+          }
         }
-      }
-    } catch (e) {
-      setUpdateError((e as Error).message)
-    } finally {
+      } finally { reader.releaseLock() }
+      if (!receivedResult) throw new Error(t('settings.updates.streamInterrupted'))
       setOperation('idle')
+    } catch (e) {
+      await recoverUpdateError(e)
     }
-  }, [t])
+  }, [recoverUpdateError, t])
 
   const runUpdateApply = useCallback(async () => {
     setOperation('applying')
     setUpdateError(null)
     try {
       const result = await applyUpdate()
-      setOperation('restarting')
-      scheduleFrontendReloadAfterUpdate(result.version)
+      monitorRestart(result)
     } catch (e) {
-      setUpdateError((e as Error).message)
-      setOperation('idle')
+      await recoverUpdateError(e)
     }
-  }, [])
+  }, [monitorRestart, recoverUpdateError])
 
   const runLocalUpdate = async (file: File) => {
     setUpdateError(null)
@@ -94,10 +146,9 @@ export function useUpdateSettings({ autoCheckEnabled }: { autoCheckEnabled: bool
     setUpdateInstallProgress(null)
     try {
       setUpdateInstallResult(await uploadUpdate(file))
-    } catch (error) {
-      setUpdateError((error as Error).message)
-    } finally {
       setOperation('idle')
+    } catch (error) {
+      await recoverUpdateError(error)
     }
   }
 

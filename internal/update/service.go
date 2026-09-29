@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
 	"denova/internal/buildinfo"
+	"denova/internal/hostruntime"
+	"golang.org/x/net/http/httpproxy"
 )
 
 const (
@@ -33,7 +36,7 @@ func NewService() *Service {
 	return &Service{
 		repository:     buildinfo.Repository,
 		currentVersion: buildinfo.Version,
-		httpClient:     &http.Client{Timeout: 60 * time.Second},
+		httpClient:     nil,
 		executablePath: exe,
 		githubAPIBase:  githubAPIBase,
 	}
@@ -44,6 +47,10 @@ func (s *Service) Check(ctx context.Context) (CheckResult, error) {
 	if err != nil {
 		return CheckResult{}, err
 	}
+	return s.checkRelease(release), nil
+}
+
+func (s *Service) checkRelease(release githubRelease) CheckResult {
 	platform := platformKey(runtime.GOOS, runtime.GOARCH)
 	asset := selectAsset(release.Assets, platform)
 	current := s.currentVersion
@@ -53,7 +60,7 @@ func (s *Service) Check(ctx context.Context) (CheckResult, error) {
 		CurrentVersion:  current,
 		LatestVersion:   latest,
 		UpdateAvailable: updateAvailable,
-		CanInstall:      updateAvailable && asset != nil,
+		CanInstall:      updateAvailable && asset != nil && selectChecksumAsset(release.Assets) != nil,
 		Platform:        platform,
 		ReleaseURL:      release.HTMLURL,
 		PublishedAt:     release.PublishedAt,
@@ -62,10 +69,39 @@ func (s *Service) Check(ctx context.Context) (CheckResult, error) {
 	if asset != nil {
 		result.Asset = &Asset{Name: asset.Name, Size: asset.Size, DownloadURL: asset.DownloadURL, BrowserDownloadURL: asset.BrowserDownloadURL}
 	}
-	return result, nil
+	return result
+}
+
+func (s *Service) ensureHTTPClient() {
+	if s.httpClient != nil {
+		return
+	}
+	proxy := httpproxy.Config{}
+	for _, entry := range hostruntime.WithSystemProxy(context.Background(), os.Environ()) {
+		key, value, _ := strings.Cut(entry, "=")
+		switch strings.ToUpper(key) {
+		case "HTTP_PROXY":
+			proxy.HTTPProxy = value
+		case "HTTPS_PROXY":
+			proxy.HTTPSProxy = value
+		case "NO_PROXY":
+			proxy.NoProxy = value
+		}
+	}
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		s.httpClient = &http.Client{Timeout: 60 * time.Second}
+		return
+	}
+	transport := base.Clone()
+	proxyURL := proxy.ProxyFunc()
+	transport.Proxy = func(r *http.Request) (*url.URL, error) { return proxyURL(r.URL) }
+
+	s.httpClient = &http.Client{Timeout: 60 * time.Second, Transport: transport}
 }
 
 func (s *Service) latestRelease(ctx context.Context) (githubRelease, error) {
+	s.ensureHTTPClient()
 	url := s.githubLatestReleaseURL()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

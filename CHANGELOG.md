@@ -32,6 +32,9 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Fixed / 修复
 
+- 自动更新固定发布包校验，支持断点续传、安装中断恢复和启动确认；失败保留诊断与程序备份，刷新页面后仍可继续已准备的更新。
+- Automatic updates pin package checksums, resume downloads, recover interrupted installation and verify startup. Failures retain diagnostics and program backups; staged updates survive page reloads.
+
 - 修复大型项目移除时长时间无响应的问题，减少版本状态查询的文件读取，并避免将源码 Git 仓库误当作创作版本历史。
 - Fix long stalls when removing large projects, reduce file reads for version status, and keep source Git repositories separate from creative version history.
 

@@ -652,6 +652,7 @@ export interface UpdateInstallResult {
 }
 
 export interface UpdateApplyResult {
+  id: string
   status: 'restarting' | string
   version: string
   log_path?: string
@@ -664,4 +665,13 @@ export interface UpdateInstallProgress {
   downloaded_bytes?: number
   total_bytes?: number
   percent?: number
+}
+
+export interface UpdateStatus {
+  current_version: string
+  id?: string
+  version?: string
+  phase: 'idle' | 'staged' | 'waiting' | 'backing_up' | 'applying' | 'starting' | 'rolling_back' | 'succeeded' | 'failed'
+  error?: string
+  log_path?: string
 }
