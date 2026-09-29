@@ -429,7 +429,14 @@ func (s *Service) preparePackage(ctx context.Context, dir, root string, manifest
 					return result, err
 				}
 			}
-			if resource.Kind == "project.cover" {
+			if collectionPath(resource.Kind) != "" {
+				var collection portableCollection[json.RawMessage]
+				if err := json.Unmarshal(raw, &collection); err != nil {
+					return result, err
+				}
+				item.Name = manifest.Package.Name
+				item.ItemCount = len(collection.Items)
+			} else if resource.Kind == "project.cover" {
 				item.Name = "Cover"
 			} else if resource.Kind == "style.reference" {
 				item.Name = path.Base(resource.Path)

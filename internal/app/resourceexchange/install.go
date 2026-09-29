@@ -140,7 +140,7 @@ func (s *Service) Apply(ctx context.Context, id string) (Installation, error) {
 			return commit(nil)
 		})
 	}
-	if slices.ContainsFunc(plan.Items, func(item PlanItem) bool { return item.Local.Kind == "lore.item" }) {
+	if slices.ContainsFunc(plan.Items, func(item PlanItem) bool { return item.Local.Kind == "lore.collection" }) {
 		_, layout, err := s.registry.Resolve(plan.Installation.ProjectID, true)
 		if err != nil {
 			return Installation{}, err
@@ -188,6 +188,14 @@ func (s *Service) Installations(ctx context.Context) ([]Installation, error) {
 	for i := range items {
 		items[i].LocalState = "unchanged"
 		for _, binding := range items[i].Bindings {
+			if collectionPath(binding.Local.Kind) != "" {
+				state, err := s.collectionLocalState(ctx, binding)
+				if err != nil {
+					items[i].LocalState = "unavailable"
+				} else if state != "unchanged" {
+					items[i].LocalState = state
+				}
+			}
 			if binding.Local.Kind == "skill" {
 				state, err := s.skillLocalState(ctx, binding)
 				if err != nil {

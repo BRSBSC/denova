@@ -19,6 +19,7 @@ import (
 )
 
 type ExportResource struct {
+	ItemCount   int      `json:"item_count,omitempty"`
 	Local       LocalRef `json:"local"`
 	Name        string   `json:"name"`
 	Description string   `json:"description,omitempty"`
@@ -165,8 +166,19 @@ func (s *Service) ExportResources(ctx context.Context, projectID string) ([]Expo
 		if err != nil {
 			return nil, err
 		}
-		for _, item := range items {
-			result = append(result, ExportResource{Local: LocalRef{Kind: "lore.item", Scope: "project", ProjectID: projectID, ID: item.ID}, Name: item.Name, Description: item.BriefDescription})
+		if len(items) > 0 {
+			result = append(result, ExportResource{Local: LocalRef{Kind: "lore.collection", Scope: "project", ProjectID: projectID, ID: "all"}, Name: "Lore", ItemCount: len(items)})
+		}
+		installations, err := s.installations(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, installation := range installations {
+			for _, binding := range installation.Bindings {
+				if collectionPath(binding.Local.Kind) != "" && binding.Local.ProjectID == projectID {
+					result = append(result, ExportResource{Local: binding.Local, Name: installation.Package.Name, ItemCount: len(binding.Members)})
+				}
+			}
 		}
 		snapshot, err := s.snapshot(ctx, FileTarget{ProjectID: projectID, Path: openingPath})
 		if err != nil {
@@ -177,8 +189,8 @@ func (s *Service) ExportResources(ctx context.Context, projectID string) ([]Expo
 			if err := json.Unmarshal(snapshot.Content, &collection); err != nil {
 				return nil, err
 			}
-			for _, item := range collection.Presets {
-				result = append(result, ExportResource{Local: LocalRef{Kind: "game.opening", Scope: "project", ProjectID: projectID, ID: item.ID}, Name: item.Title})
+			if len(collection.Presets) > 0 {
+				result = append(result, ExportResource{Local: LocalRef{Kind: "game.openings", Scope: "project", ProjectID: projectID, ID: "all"}, Name: "Openings", ItemCount: len(collection.Presets)})
 			}
 		}
 		snapshot, err = s.snapshot(ctx, FileTarget{ProjectID: projectID, Path: coverPath})
@@ -199,8 +211,7 @@ var portableFields = map[string][]string{
 	"preset.events":        {"name", "description", "events"},
 	"preset.rules":         {"name", "description", "actor_state_id", "trpg_system"},
 	"preset.actor_state":   {"name", "description", "actor_state"},
-	"lore.item":            {"enabled", "type", "name", "importance", "tags", "brief_description", "keywords", "load_mode", "content"},
-	"game.opening":         {"title", "content"},
+	"lore.entry":           {"id", "enabled", "type", "name", "importance", "tags", "brief_description", "keywords", "load_mode", "content"},
 }
 
 func portableJSON(kind string, value any) ([]byte, error) {
@@ -278,35 +289,11 @@ func (s *Service) exportResource(ctx context.Context, ref LocalRef) (map[string]
 			return nil, err
 		}
 		return platform.ArchiveFiles(buffer.Bytes())
-	case "lore.item":
-		_, layout, resolveErr := s.registry.Resolve(ref.ProjectID, true)
-		if resolveErr != nil {
-			return nil, resolveErr
-		}
-		item, readErr := lore.NewStore(layout.ContentRoot).ReadAny(ref.ID)
-		if readErr != nil {
-			return nil, readErr
-		}
-		raw, err := portableJSON(ref.Kind, item)
-		if err != nil {
-			return nil, err
-		}
-		return s.exportLoreMaterials(ctx, ref, item, raw)
+	case "lore.collection":
+		return s.exportLoreCollection(ctx, ref)
 
-	case "game.opening":
-		snapshot, readErr := s.snapshot(ctx, FileTarget{ProjectID: ref.ProjectID, Path: openingPath})
-		if readErr != nil {
-			return nil, readErr
-		}
-		var collection openings
-		if err = json.Unmarshal(snapshot.Content, &collection); err != nil {
-			return nil, err
-		}
-		index := slices.IndexFunc(collection.Presets, func(item opening) bool { return item.ID == ref.ID })
-		if index < 0 {
-			return nil, fmt.Errorf("opening not found")
-		}
-		value = collection.Presets[index]
+	case "game.openings":
+		return s.exportOpeningCollection(ctx, ref)
 	case "project.cover":
 		snapshot, err := s.snapshot(ctx, FileTarget{ProjectID: ref.ProjectID, Path: coverPath})
 		if err != nil {
@@ -358,10 +345,20 @@ func (s *Service) Export(ctx context.Context, request ExportRequest) ([]byte, er
 		return nil, fmt.Errorf("package name and portable ID required")
 	}
 	resourceIDs := map[LocalRef]string{}
+	dependencies := map[LocalRef][]LocalRef{}
 	if request.InstallationID != "" {
 		installation, _, err := s.loadInstallation(ctx, request.InstallationID)
 		if err != nil {
 			return nil, err
+		}
+		for _, binding := range installation.Bindings {
+			for _, id := range binding.Requires {
+				at := slices.IndexFunc(installation.Bindings, func(other Binding) bool { return other.ResourceID == id })
+				if at < 0 {
+					return nil, fmt.Errorf("installed dependency missing: %s", id)
+				}
+				dependencies[binding.Local] = append(dependencies[binding.Local], installation.Bindings[at].Local)
+			}
 		}
 		if request.Package.ID == installation.Package.ID {
 			for _, binding := range installation.Bindings {
@@ -376,10 +373,18 @@ func (s *Service) Export(ctx context.Context, request ExportRequest) ([]byte, er
 	manifest := Manifest{Format: "denova.resource-pack", SchemaVersion: 1, Package: request.Package, Resources: []Resource{}}
 	files := map[string][]byte{}
 	seen := map[LocalRef]string{}
+	collectionSelections := map[string]string{}
 	var add func(LocalRef) (string, error)
 	add = func(ref LocalRef) (string, error) {
 		if id, ok := seen[ref]; ok {
 			return id, nil
+		}
+		if collectionPath(ref.Kind) != "" {
+			key := ref.Kind + ":" + ref.ProjectID
+			if previous := collectionSelections[key]; previous != "" && (previous == "all" || ref.ID == "all") {
+				return "", fmt.Errorf("project and installed collections overlap; select one scope")
+			}
+			collectionSelections[key] = ref.ID
 		}
 		if len(seen) >= 256 {
 			return "", fmt.Errorf("too many dependencies")
@@ -396,6 +401,15 @@ func (s *Service) Export(ctx context.Context, request ExportRequest) ([]byte, er
 		seen[ref] = id
 		prefix := "resources/" + id
 		resource := Resource{ID: id, Kind: ref.Kind, Path: prefix}
+		for _, dependency := range dependencies[ref] {
+			depID, err := add(dependency)
+			if err != nil {
+				return "", err
+			}
+			if !slices.Contains(resource.Requires, depID) {
+				resource.Requires = append(resource.Requires, depID)
+			}
+		}
 		if strings.HasPrefix(ref.Kind, "extension.") {
 			file := "denova.plugin.json"
 			if ref.Kind == "extension.game" {
@@ -414,7 +428,9 @@ func (s *Service) Export(ctx context.Context, request ExportRequest) ([]byte, er
 				if err != nil {
 					return "", err
 				}
-				resource.Requires = append(resource.Requires, depID)
+				if !slices.Contains(resource.Requires, depID) {
+					resource.Requires = append(resource.Requires, depID)
+				}
 			}
 		}
 		if raw, ok := content["resource.json"]; ok && !strings.HasPrefix(ref.Kind, "extension.") && ref.Kind != "skill" {
@@ -423,32 +439,7 @@ func (s *Service) Export(ctx context.Context, request ExportRequest) ([]byte, er
 			if err := json.Unmarshal(raw, &body); err != nil {
 				return "", err
 			}
-			if ref.Kind == "lore.item" {
-				var materials portableMaterials
-				if err := json.Unmarshal(body["materials"], &materials); err != nil {
-					return "", err
-				}
-				for i := range materials.Entries {
-					entry := &materials.Entries[i]
-					if entry.URL != "" {
-						continue
-					}
-					old := entry.AssetPath
-					data, ok := content[old]
-					if !ok {
-						return "", fmt.Errorf("missing material payload")
-					}
-					name := path.Join("assets", path.Base(old))
-					files[name] = data
-					delete(content, old)
-					entry.AssetPath = name
-					resource.Assets = append(resource.Assets, name)
-					if materials.CoverPath == old {
-						materials.CoverPath = name
-					}
-				}
-				body["materials"], _ = json.Marshal(materials)
-			} else if ref.Kind == "project.cover" {
+			if ref.Kind == "project.cover" {
 				var attachment portableImage
 				if err := json.Unmarshal(raw, &attachment); err != nil {
 					return "", err
@@ -531,6 +522,17 @@ func (s *Service) Export(ctx context.Context, request ExportRequest) ([]byte, er
 			resource.Path = path.Join(prefix, "resource.md")
 		} else if ref.Kind == "project.cover" {
 			resource.Path = path.Join(prefix, "resource.png")
+		}
+		if ref.Kind == "lore.collection" {
+			for name, data := range content {
+				if name == "resource.json" {
+					continue
+				}
+				files[name] = data
+				resource.Assets = append(resource.Assets, name)
+				delete(content, name)
+			}
+			slices.Sort(resource.Assets)
 		}
 		for name, raw := range content {
 			files[path.Join(prefix, name)] = raw

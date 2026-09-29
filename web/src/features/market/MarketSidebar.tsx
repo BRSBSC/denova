@@ -67,7 +67,7 @@ export function matchesCategory(
       return entry.kinds.includes('skill')
     case 'content':
       return entry.kinds.some((kind) =>
-        ['lore.item', 'game.opening', 'project.cover'].includes(kind),
+        ['lore.collection', 'game.openings', 'project.cover'].includes(kind),
       )
     case 'plugins':
       return entry.kinds.includes('extension.plugin')

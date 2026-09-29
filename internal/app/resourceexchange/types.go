@@ -22,13 +22,30 @@ func New(root string, registry *project.Registry, catalog *resourcecatalog.Servi
 	return &Service{root: root, registry: registry, catalog: catalog, platform: extensions}
 }
 
+// PackageInfo is the single author-maintained identity and presentation record.
+// Text fields use Locale; Translations contains other languages only. Market
+// discovery derives resource kinds and source dates instead of duplicating them.
 type PackageInfo struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Version     string `json:"version,omitempty"`
-	Author      string `json:"author,omitempty"`
-	MinVersion  string `json:"min_denova_version,omitempty"`
+	ID            string                        `json:"id"`
+	Name          string                        `json:"name"`
+	Description   string                        `json:"description,omitempty"`
+	Version       string                        `json:"version,omitempty"`
+	Author        string                        `json:"author,omitempty"`
+	MinVersion    string                        `json:"min_denova_version,omitempty"`
+	Locale        string                        `json:"locale,omitempty"`
+	Translations  map[string]PackageTranslation `json:"translations,omitempty"`
+	Tags          []string                      `json:"tags,omitempty"`
+	Cover         string                        `json:"cover,omitempty"`
+	Usage         string                        `json:"usage,omitempty"`
+	Compatibility string                        `json:"compatibility,omitempty"`
+	UpdatedAt     string                        `json:"updated_at,omitempty"`
+}
+
+type PackageTranslation struct {
+	Name          string `json:"name,omitempty"`
+	Description   string `json:"description,omitempty"`
+	Usage         string `json:"usage,omitempty"`
+	Compatibility string `json:"compatibility,omitempty"`
 }
 
 type Resource struct {
@@ -47,6 +64,7 @@ type Manifest struct {
 }
 
 type PreviewResource struct {
+	ItemCount int `json:"item_count,omitempty"`
 	Resource
 	Root        string              `json:"package_root"`
 	Name        string              `json:"name"`
@@ -77,13 +95,21 @@ type LocalRef struct {
 	ID        string `json:"id"`
 }
 
+// CollectionMember tracks a source item inside a collection without adding a second library.
+type CollectionMember struct {
+	ID     string `json:"id"`
+	Digest string `json:"digest"`
+}
+
 type Binding struct {
-	UpstreamRemoved bool              `json:"upstream_removed,omitempty"`
-	ResourceID      string            `json:"resource_id"`
-	Local           LocalRef          `json:"local"`
-	Ownership       string            `json:"ownership"`
-	SourceDigest    string            `json:"source_digest"`
-	Baseline        map[string]string `json:"baseline"`
+	Requires        []string                    `json:"requires,omitempty"`
+	Members         map[string]CollectionMember `json:"members,omitempty"`
+	UpstreamRemoved bool                        `json:"upstream_removed,omitempty"`
+	ResourceID      string                      `json:"resource_id"`
+	Local           LocalRef                    `json:"local"`
+	Ownership       string                      `json:"ownership"`
+	SourceDigest    string                      `json:"source_digest"`
+	Baseline        map[string]string           `json:"baseline"`
 }
 
 type Installation struct {

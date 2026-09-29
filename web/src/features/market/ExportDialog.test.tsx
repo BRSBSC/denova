@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExportDialog } from './ExportDialog'
-import { exchange, type ExportResource } from './api'
+import { exchange, type Installation, type ExportResource } from './api'
 
 vi.mock('@/lib/api', () => ({ getBooks: vi.fn().mockResolvedValue([]) }))
 vi.mock('./api', async (importOriginal) => ({
@@ -80,4 +80,66 @@ it('shows an empty library without offering an export', async () => {
   render(<ExportDialog onClose={vi.fn()} />)
   expect(await screen.findByText('暂无可导出的资源')).toBeVisible()
   expect(screen.getByRole('button', { name: '预览导出' })).toBeDisabled()
+})
+
+describe.each([['lore.collection', '资料集合', '项目全部资料'], ['game.openings', '开场白集合', '作品中的全部开场白']] as const)('%s export scope', (kind, label, projectLabel) => {
+  const all = { kind, scope: 'project', project_id: 'book', id: 'all' }
+  const acquired = { ...all, id: 'acquired' }
+  beforeEach(() => {
+    vi.mocked(exchange).mockImplementation(async path => path.startsWith('/export-resources') ? [
+      { local: all, name: 'Lore', item_count: 310 },
+      { local: acquired, name: 'Imported lore', item_count: 300 },
+    ] : [])
+  })
+  it('offers the whole project collection without overlapping acquired subsets', async () => {
+    render(<ExportDialog projectID="book" onClose={vi.fn()} />)
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: `全选${label}` })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    expect(screen.getByRole('checkbox', { name: projectLabel })).toBeVisible()
+    expect(screen.queryByText('Imported lore')).not.toBeInTheDocument()
+  })
+  it('reexports an acquired collection without implicitly including unrelated project lore', async () => {
+    const installation = { installation_id: 'installed', package: { id: 'pack', name: 'Imported lore' }, source: { kind: 'file' }, tracking: 'tracked', update_mode: 'manual', updated_at: '', project_id: 'book', bindings: [{ resource_id: 'lore', local: acquired, ownership: 'owned', source_digest: '1' }] } as Installation
+    render(<ExportDialog installation={installation} onClose={vi.fn()} />)
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: `全选${label}` })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    expect(screen.getByRole('checkbox', { name: /Imported lore/ })).toBeChecked()
+    expect(screen.queryByText(projectLabel)).not.toBeInTheDocument()
+  })
+
+})
+
+describe('package presentation metadata', () => {
+  const info = {
+    id: 'localized', name: '中文资源包', description: '中文简介', author: 'Author', version: '1.0.0',
+    locale: 'zh-CN', usage: '导入后选用', compatibility: '需要模型', tags: ['writing'],
+    translations: { 'en-US': { name: 'Creative kit', description: 'Writing resources', usage: 'Select after import' } },
+  }
+  it('preserves the full manifest when reexporting an installation', async () => {
+    const installation = {
+      installation_id: 'installed', package: info, source: { kind: 'file' },
+      tracking: 'tracked', update_mode: 'manual', updated_at: '',
+      bindings: [{ resource_id: 'narrative', local: choices[0].local, ownership: 'owned', source_digest: '1' }],
+    } as Installation
+    render(<ExportDialog installation={installation} onClose={vi.fn()} />)
+    await screen.findByText('已选 1 项')
+    fireEvent.click(screen.getByRole('button', { name: '预览导出' }))
+    await waitFor(() => expect(exchange).toHaveBeenCalledWith('/exports', expect.objectContaining({ package: info })))
+  })
+  it('preserves the full manifest when reusing a saved export definition', async () => {
+    const definition = { package: info, resources: [choices[0].local], revision: '1' }
+    vi.mocked(exchange).mockImplementation(async (path, _body, method) => {
+      if (path === '/export-definitions') return method === 'PUT' ? definition : [definition]
+      if (path === '/export-resources') return choices
+      return { resources: [], files: 2, bytes: 100 }
+    })
+    render(<ExportDialog onClose={vi.fn()} />)
+    await screen.findByText('已保存的导出组合')
+    fireEvent.keyDown(screen.getAllByRole('combobox')[0], { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('option', { name: info.name }))
+    await screen.findByText('已选 1 项')
+    fireEvent.click(screen.getByRole('button', { name: '预览导出' }))
+    await waitFor(() => expect(exchange).toHaveBeenCalledWith('/exports', expect.objectContaining({ package: info })))
+    await waitFor(() => expect(exchange).toHaveBeenCalledWith('/export-definitions', expect.objectContaining({ package: info }), 'PUT'))
+  })
 })

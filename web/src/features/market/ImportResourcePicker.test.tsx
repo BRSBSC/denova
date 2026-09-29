@@ -51,50 +51,11 @@ it('limits group selection to matches and preserves selections outside the searc
   expect(screen.getByText('已选 0 / 4 项')).toBeVisible()
 })
 
-it.each([
-  ['lore.item', '资料'],
-  ['game.opening', '开场白'],
-] as const)('selects %s as a whole group, with collapsed read-only previews and search-independent selection', (kind, label) => {
-  const pack: PackagePreview = { ...candidate, resources: [
-    ...candidate.resources,
-    { id: 'harbor', kind, name: 'Harbor', path: 'harbor.json', digest: '5' },
-    { id: 'island', kind, name: 'Island', path: 'island.json', digest: '6' },
-  ] }
-  const onChange = vi.fn()
-  render(<Picker pack={pack} initial={['ink']} onChange={onChange} />)
-  const group = screen.getByRole('group', { name: label })
-  const checkbox = within(group).getByRole('checkbox', { name: `全选${label}` })
-  const expand = within(group).getByRole('button', { name: label })
-  expect(expand).toHaveAttribute('aria-expanded', 'false')
-  expect(within(group).queryByText('Harbor')).not.toBeInTheDocument()
-  fireEvent.click(expand)
-  expect(within(group).getAllByRole('checkbox')).toHaveLength(1)
-  expect(group.querySelectorAll('[aria-expanded]:not([aria-haspopup="dialog"])')).toHaveLength(1)
-  fireEvent.click(within(group).getByRole('button', { name: '预览 Harbor' }))
-  expect(within(screen.getByRole('dialog', { name: 'Harbor' })).getByText('Readable content')).toBeVisible()
-  fireEvent.click(screen.getByRole('button', { name: '关闭' }))
-  expect(expand).toHaveAttribute('aria-expanded', 'true')
-  expect(onChange).not.toHaveBeenCalled()
-
-  const search = screen.getByRole('textbox', { name: '搜索名称、描述或类型' })
-  fireEvent.change(search, { target: { value: 'Harbor' } })
-  expect(within(group).queryByText('Island')).not.toBeInTheDocument()
-  fireEvent.click(checkbox)
-  expect(onChange).toHaveBeenLastCalledWith(['ink', 'harbor', 'island'])
-  expect(checkbox).toBeChecked()
-  expect(within(group).getByText('2 / 2')).toBeVisible()
-  fireEvent.click(checkbox)
-  expect(onChange).toHaveBeenLastCalledWith(['ink'])
-  fireEvent.change(search, { target: { value: 'no matching content' } })
-  expect(screen.getByText('没有匹配的内容，已有选择保持不变。')).toBeVisible()
-  expect(screen.getByText('已选 1 / 6 项')).toBeVisible()
-})
-
 it('preserves partial lore selections and required items without silently adding the rest of the group', () => {
   const pack: PackagePreview = { ...candidate, resources: [
     { id: 'game', kind: 'preset.game_planning', name: 'Harbor game', path: 'game.json', requires: ['harbor'], digest: '1' },
-    { id: 'harbor', kind: 'lore.item', name: 'Harbor', path: 'harbor.json', digest: '2' },
-    { id: 'island', kind: 'lore.item', name: 'Island', path: 'island.json', digest: '3' },
+    { id: 'harbor', kind: 'lore.collection', name: 'Harbor', path: 'harbor.json', digest: '2' },
+    { id: 'island', kind: 'lore.collection', name: 'Island', path: 'island.json', digest: '3' },
   ] }
   const onChange = vi.fn()
   render(<Picker pack={pack} initial={['game']} onChange={onChange} />)
@@ -112,4 +73,18 @@ it('preserves partial lore selections and required items without silently adding
   fireEvent.click(screen.getByRole('button', { name: '清空选择' }))
   expect(checkbox).not.toBeChecked()
   expect(screen.getByText('已选 0 / 3 项')).toBeVisible()
+})
+
+it.each([['lore.collection', '资料'], ['game.openings', '开场白']] as const)('selects %s collections independently and displays their item counts', (kind, label) => {
+  const pack: PackagePreview = { ...candidate, resources: [
+    { id: 'world', kind, name: 'World', path: 'lore.json', digest: '1', item_count: 300 },
+    { id: 'extra', kind, name: 'Extra world', path: 'extra.json', digest: '2', item_count: 20 },
+  ] }
+  const onChange = vi.fn()
+  render(<Picker pack={pack} initial={[]} onChange={onChange} />)
+  fireEvent.click(screen.getByRole('button', { name: label }))
+  expect(screen.getByText('300 项内容 · 一个集合文件')).toBeVisible()
+  fireEvent.click(screen.getByRole('checkbox', { name: 'World' }))
+  expect(onChange).toHaveBeenLastCalledWith(['world'])
+  expect(screen.getByRole('checkbox', { name: 'Extra world' })).not.toBeChecked()
 })

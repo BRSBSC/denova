@@ -3,7 +3,6 @@ package resourceexchange
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -36,43 +35,35 @@ func (s *Service) PreviewCharacter(ctx context.Context, source Source, data []by
 	}
 	manifest := Manifest{Format: "denova.resource-pack", SchemaVersion: 1, Package: PackageInfo{ID: "character-card", Name: result.Name}}
 	files := map[string][]byte{}
-	for i, item := range items {
-		// Provider/profile and local paths are not portable card data.
-		item.Image, item.Provenance = nil, nil
-		raw, err := portableJSON("lore.item", item)
+	collection := portableCollection[json.RawMessage]{Version: 1, Items: []json.RawMessage{}}
+	for _, item := range items {
+		raw, err := portableJSON("lore.entry", item)
 		if err != nil {
 			return Preview{}, err
 		}
-		id := fmt.Sprintf("lore-%d", i+1)
-		name := "lore/" + id + ".json"
-		files[name] = raw
-		manifest.Resources = append(manifest.Resources, Resource{ID: id, Kind: "lore.item", Path: name})
+		collection.Items = append(collection.Items, raw)
+	}
+	if len(collection.Items) > 0 {
+		files["lore.json"], err = json.Marshal(collection)
+		if err != nil {
+			return Preview{}, err
+		}
+		manifest.Resources = append(manifest.Resources, Resource{ID: "lore", Kind: "lore.collection", Path: "lore.json"})
 	}
 	if result.OpeningPresetCount > 0 {
 		raw, err := os.ReadFile(filepath.Join(dir, "setting", "interactive-openings.json"))
 		if err != nil {
 			return Preview{}, err
 		}
-		var collection struct {
-			Presets []json.RawMessage `json:"presets"`
-		}
-		if err := json.Unmarshal(raw, &collection); err != nil {
+		var native openings
+		if err := json.Unmarshal(raw, &native); err != nil {
 			return Preview{}, err
 		}
-		for i, raw := range collection.Presets {
-			id := fmt.Sprintf("opening-%d", i+1)
-			name := "openings/" + id + ".json"
-			var openingData map[string]any
-			if err := json.Unmarshal(raw, &openingData); err != nil {
-				return Preview{}, err
-			}
-			portable, err := portableJSON("game.opening", openingData)
-			if err != nil {
-				return Preview{}, err
-			}
-			files[name] = portable
-			manifest.Resources = append(manifest.Resources, Resource{ID: id, Kind: "game.opening", Path: name})
+		files["openings.json"], err = json.Marshal(portableCollection[opening]{Version: 1, Items: native.Presets})
+		if err != nil {
+			return Preview{}, err
 		}
+		manifest.Resources = append(manifest.Resources, Resource{ID: "openings", Kind: "game.openings", Path: "openings.json"})
 	}
 	if result.CoverPath != "" {
 		raw, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(result.CoverPath)))

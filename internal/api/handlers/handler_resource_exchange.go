@@ -242,7 +242,7 @@ func (h *Handlers) HandleResourceBackupPlan(ctx context.Context, c *app.RequestC
 }
 
 func (h *Handlers) HandleResourcePreviewFiles(ctx context.Context, c *app.RequestContext) {
-	result, err := h.app.ResourceExchange().PreviewFiles(ctx, c.Param("id"), c.Query("candidate_id"), c.Query("resource_id"), c.Query("path"))
+	result, err := h.app.ResourceExchange().PreviewFiles(ctx, c.Param("id"), c.Query("candidate_id"), c.Query("resource_id"), c.Query("path"), c.Query("item_id"))
 	if err != nil {
 		exchangeError(ctx, c, err)
 		return

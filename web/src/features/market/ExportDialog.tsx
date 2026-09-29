@@ -24,6 +24,7 @@ import { getBooks, type BookRecord } from '@/lib/api'
 import { ExportResourcePicker } from './ExportResourcePicker'
 import {
   exchange,
+  isCollectionKind,
   downloadExport,
   type ExportDefinition,
   type ExportPlan,
@@ -43,7 +44,7 @@ export function ExportDialog({
   installation?: Installation
   onClose: () => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [projectID, setProjectID] = useState(
     defaultProject || installation?.project_id || '',
   )
@@ -98,8 +99,17 @@ export function ExportDialog({
     )
       .then((result) => {
         if (!alive) return
-        setChoices(result)
         const selection = requestedRefs
+        // Each kind exports the project collection or its acquired collections,
+        // never both: the project collection already contains those members.
+        result = result.filter(resource => {
+          if (!isCollectionKind(resource.local.kind)) return true
+          const collections = selection?.filter(ref => ref.kind === resource.local.kind)
+          return collections?.length
+            ? collections.some(ref => ref.id === resource.local.id && ref.project_id === resource.local.project_id)
+            : resource.local.id === 'all'
+        })
+        setChoices(result)
         if (selection)
           setSelected(
             result
@@ -227,6 +237,7 @@ export function ExportDialog({
                   value={projectID || 'global'}
                   onValueChange={(value) => {
                     setProjectID(value === 'global' ? '' : value)
+                    setRequestedRefs(undefined)
                     setSelected([])
                   }}
                 >
@@ -356,10 +367,11 @@ export function ExportDialog({
                   const request = {
                     resources: resources.map((r) => r.local),
                     package: {
+                      ...(definitions.find(item => item.package.id === definitionID)?.package
+                        || installation?.package
+                        || { locale: i18n.resolvedLanguage || i18n.language }),
                       id,
                       name,
-                      version: installation?.package.version,
-                      author: installation?.package.author,
                     },
                     native: nativeAllowed && native,
                     installation_id: installation?.installation_id,

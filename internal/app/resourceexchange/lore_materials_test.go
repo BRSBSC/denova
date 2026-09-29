@@ -80,8 +80,7 @@ func TestLoreMaterialsRoundTripPreservesSharingAndAssociationText(t *testing.T) 
 		}
 	}
 	raw, err := s.Export(ctx, ExportRequest{Package: PackageInfo{ID: "lore-materials", Name: "Lore materials"}, Resources: []LocalRef{
-		{Kind: "lore.item", Scope: "project", ProjectID: projectID, ID: "hero"},
-		{Kind: "lore.item", Scope: "project", ProjectID: projectID, ID: "scene"},
+		{Kind: "lore.collection", Scope: "project", ProjectID: projectID, ID: "all"},
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -179,7 +178,7 @@ func TestRemoteLoreMaterialsRoundTripWithoutFetching(t *testing.T) {
 	}
 	store := lore.NewStore(dirs["remote-source"])
 	const url = "https://unreachable.invalid/portrait.png?token=exact%2Fvalue"
-	refs := []LocalRef{}
+	refs := []LocalRef{{Kind: "lore.collection", Scope: "project", ProjectID: projects["remote-source"], ID: "all"}}
 	for _, id := range []string{"hero", "scene"} {
 		if _, err := store.Create(lore.ItemInput{ID: id, Name: id}); err != nil {
 			t.Fatal(err)
@@ -191,7 +190,6 @@ func TestRemoteLoreMaterialsRoundTripWithoutFetching(t *testing.T) {
 		if _, err := store.MutateMaterial(id, lore.MaterialMutation{Op: "cover", AssetID: item.ResolvedMaterials[0].ID}); err != nil {
 			t.Fatal(err)
 		}
-		refs = append(refs, LocalRef{Kind: "lore.item", Scope: "project", ProjectID: projects["remote-source"], ID: id})
 	}
 	raw, err := service.Export(ctx, ExportRequest{Package: PackageInfo{ID: "remote-materials", Name: "Remote materials"}, Resources: refs})
 	if err != nil {

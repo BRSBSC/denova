@@ -158,12 +158,13 @@ func stageDefinition(resource PreviewResource, id string, raw []byte, refs map[s
 	return filepath.ToSlash(relative), content, err
 }
 
-func (s *Service) stageProject(ctx context.Context, previewDir string, extra *[]FileTarget, resource PreviewResource, local LocalRef, raw []byte, staged map[FileTarget][]byte, expected map[FileTarget]string, importedAssets map[FileTarget]lore.Asset) (FileTarget, error) {
+func (s *Service) stageProject(ctx context.Context, previewDir string, extra *[]FileTarget, resource PreviewResource, binding *Binding, raw []byte, replaceModified bool, staged map[FileTarget][]byte, expected map[FileTarget]string, importedAssets map[FileTarget]lore.Asset) (FileTarget, error) {
+	local := binding.Local
 	target := FileTarget{ProjectID: local.ProjectID}
 	switch resource.Kind {
-	case "lore.item":
+	case "lore.collection":
 		target.Path = lore.ItemsRelativePath
-	case "game.opening":
+	case "game.openings":
 		target.Path = openingPath
 	case "project.cover":
 		target.Path = coverPath
@@ -192,80 +193,14 @@ func (s *Service) stageProject(ctx context.Context, previewDir string, extra *[]
 			return target, fmt.Errorf("Project cover must be a bounded PNG image")
 		}
 		staged[target] = raw
-	case "game.opening":
-		var value opening
-		if err := decode(raw, &value); err != nil {
-			return target, err
-		}
-		value.ID = local.ID
-		if strings.TrimSpace(value.Title) == "" || strings.TrimSpace(value.Content) == "" || len(value.Content) > 64*1024 {
-			return target, fmt.Errorf("invalid game opening")
-		}
-		next := openings{Version: 1, Presets: []opening{}}
-		if len(staged[target]) > 0 {
-			if err := json.Unmarshal(staged[target], &next); err != nil {
-				return target, err
-			}
-		}
-		found := false
-		for i := range next.Presets {
-			if next.Presets[i].ID == value.ID {
-				next.Presets[i] = value
-				found = true
-				break
-			}
-		}
-		if !found {
-			next.Presets = append(next.Presets, value)
-		}
-		content, err := json.MarshalIndent(next, "", "  ")
+	case "game.openings":
+		content, err := stageOpeningCollection(binding, raw, staged[target], replaceModified)
 		if err != nil {
 			return target, err
 		}
 		staged[target] = content
-	case "lore.item":
-		var input lore.ItemInput
-		if err := json.Unmarshal(raw, &input); err != nil {
-			return target, err
-		}
-		input.ID = local.ID
-		input.Provenance = nil
-		input.Image = nil
-		dir, err := os.MkdirTemp("", "denova-lore-")
-		if err != nil {
-			return target, err
-		}
-		defer os.RemoveAll(dir)
-		if len(staged[target]) > 0 {
-			if err := writeFiles(dir, map[string][]byte{target.Path: staged[target]}); err != nil {
-				return target, err
-			}
-		}
-		store := lore.NewStore(dir)
-		items, err := store.ListAll()
-		if err != nil {
-			return target, err
-		}
-		exists := false
-		for _, item := range items {
-			if item.ID == input.ID {
-				exists = true
-				break
-			}
-		}
-		if exists {
-			_, err = store.Update(input.ID, input)
-		} else {
-			_, err = store.Create(input)
-		}
-		if err != nil {
-			return target, err
-		}
-		if err := importLoreMaterials(ctx, dir, previewDir, resource, local, raw, staged, extra, importedAssets); err != nil {
-			return target, err
-		}
-		staged[target], err = os.ReadFile(lore.ItemsPath(dir))
-		if err != nil {
+	case "lore.collection":
+		if err := s.stageLoreCollection(ctx, previewDir, resource, binding, raw, replaceModified, staged, extra, importedAssets); err != nil {
 			return target, err
 		}
 	}

@@ -276,8 +276,8 @@ func TestProjectResourcesAndAttachmentsRoundTrip(t *testing.T) {
 	if err := png.Encode(&picture, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
 		t.Fatal(err)
 	}
-	manifest := Manifest{Format: "denova.resource-pack", SchemaVersion: 1, Package: PackageInfo{ID: "project-fixture", Name: "Project fixture"}, Resources: []Resource{{ID: "lore", Kind: "lore.item", Path: "lore.json", Assets: []string{"image.png"}}, {ID: "opening", Kind: "game.opening", Path: "opening.json"}, {ID: "cover", Kind: "project.cover", Path: "cover.json", Assets: []string{"image.png"}}}}
-	files := map[string][]byte{"denova-pack.json": jsonBytes(t, manifest), "lore.json": []byte(`{"name":"Hero","type":"character","content":"A hero","image":{"asset_path":"image.png","alt_text":"Portrait"}}`), "opening.json": []byte(`{"title":"Arrival","content":"You arrive."}`), "cover.json": []byte(`{"asset_path":"image.png"}`), "image.png": picture.Bytes()}
+	manifest := Manifest{Format: "denova.resource-pack", SchemaVersion: 1, Package: PackageInfo{ID: "project-fixture", Name: "Project fixture"}, Resources: []Resource{{ID: "lore", Kind: "lore.collection", Path: "lore.json", Assets: []string{"image.png"}}, {ID: "opening", Kind: "game.openings", Path: "opening.json"}, {ID: "cover", Kind: "project.cover", Path: "cover.json", Assets: []string{"image.png"}}}}
+	files := map[string][]byte{"denova-pack.json": jsonBytes(t, manifest), "lore.json": []byte(`{"version":1,"items":[{"id":"hero","name":"Hero","type":"character","content":"A hero","materials":{"entries":[{"asset_path":"image.png","description":"Portrait"}],"cover_asset_path":"image.png"}}]}`), "opening.json": []byte(`{"version":1,"items":[{"id":"arrival","title":"Arrival","content":"You arrive."}]}`), "cover.json": []byte(`{"asset_path":"image.png"}`), "image.png": picture.Bytes()}
 	preview, err := s.previewFiles(ctx, Source{Kind: "file", Filename: "project.zip"}, files)
 	if err != nil {
 		t.Fatal(err)

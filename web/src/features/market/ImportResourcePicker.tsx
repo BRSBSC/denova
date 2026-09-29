@@ -25,10 +25,9 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from '@/components/ui/input-group'
-import { dependencySelection, resourceKinds, type PackagePreview } from './api'
+import { dependencySelection, isCollectionKind, resourceKinds, type PackagePreview } from './api'
 import { ResourcePreview } from './ResourcePreview'
 import { ResourceSelectionGroup } from './ResourceSelectionGroup'
-import { cn } from '@/lib/utils'
 
 export function ImportResourcePicker({
   previewID,
@@ -56,12 +55,10 @@ export function ImportResourcePicker({
   const search = query.trim().toLocaleLowerCase()
   const groups = resourceKinds
     .map((kind) => {
-      // Lore and openings are acquired as collections; individual rows are only previews.
-      const selectAsGroup = kind === 'lore.item' || kind === 'game.opening'
       const label = t(
-        kind === 'lore.item'
+        kind === 'lore.collection'
           ? 'market.contents.lore'
-          : kind === 'game.opening'
+          : kind === 'game.openings'
             ? 'market.contents.openings'
             : `market.kinds.${kind}`,
       )
@@ -71,12 +68,10 @@ export function ImportResourcePicker({
           .toLocaleLowerCase()
           .includes(search),
       )
-      // Searching narrows previews, never the contents of a collection selection.
       return {
         kind,
         label,
-        selectAsGroup,
-        items: selectAsGroup ? items : matches,
+        items: matches,
         matches,
       }
     })
@@ -116,18 +111,18 @@ export function ImportResourcePicker({
           {t('market.export.clearSelection')}
         </Button>
       </div>
-      {groups.some(({ selectAsGroup }) => selectAsGroup) && (
+      {groups.some(({ kind }) => isCollectionKind(kind)) && (
         <FieldDescription>{t('market.contents.groupedHelp')}</FieldDescription>
       )}
       {groups.length > 0 && (
         <Accordion
           type="multiple"
           defaultValue={resourceKinds.filter(
-            (kind) => kind !== 'lore.item' && kind !== 'game.opening',
+            (kind) => !isCollectionKind(kind),
           )}
           className="overflow-hidden rounded-xl border"
         >
-          {groups.map(({ kind, label, selectAsGroup, items, matches }) => {
+          {groups.map(({ kind, label, items, matches }) => {
             const count = items.filter((r) => chosen.includes(r.id)).length
             return (
               <ResourceSelectionGroup
@@ -137,7 +132,7 @@ export function ImportResourcePicker({
                 count={count}
                 total={items.length}
                 selectionLabel={t(
-                  search && !selectAsGroup
+                  search
                     ? 'market.export.selectMatches'
                     : 'market.export.selectGroup',
                   { kind: label },
@@ -154,26 +149,22 @@ export function ImportResourcePicker({
                     <Field
                       key={resource.id}
                       orientation="horizontal"
-                      className={cn(
-                        'items-start gap-3 py-2',
-                        selectAsGroup && 'pl-7',
-                      )}
+                      className="items-start gap-3 py-2"
                     >
-                      {!selectAsGroup && (
-                        <Checkbox
-                          className="mt-0.5"
-                          aria-label={resource.name || resource.id}
-                          checked={chosen.includes(resource.id)}
-                          disabled={required.has(resource.id)}
-                          onCheckedChange={(checked) =>
-                            select([resource.id], checked === true)
-                          }
-                        />
-                      )}
+                      <Checkbox
+                        className="mt-0.5"
+                        aria-label={resource.name || resource.id}
+                        checked={chosen.includes(resource.id)}
+                        disabled={required.has(resource.id)}
+                        onCheckedChange={(checked) =>
+                          select([resource.id], checked === true)
+                        }
+                      />
                       <FieldContent className="min-w-0">
                         <FieldTitle className="max-w-full [overflow-wrap:anywhere]">
                           {resource.name || resource.id}
                         </FieldTitle>
+                        {resource.item_count !== undefined && <FieldDescription>{t('market.contents.collectionCount', { count: resource.item_count })}</FieldDescription>}
                         {resource.description && (
                           <FieldDescription className="line-clamp-2 [overflow-wrap:anywhere]">
                             {resource.description}

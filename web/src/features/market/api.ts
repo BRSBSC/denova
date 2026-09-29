@@ -13,13 +13,14 @@ export const resourceKinds = [
   'preset.actor_state',
   'style.reference',
   'skill',
-  'lore.item',
-  'game.opening',
+  'lore.collection',
+  'game.openings',
   'project.cover',
   'extension.plugin',
   'extension.game',
 ] as const
 export type ResourceKind = (typeof resourceKinds)[number]
+export const isCollectionKind = (kind: ResourceKind) => kind === 'lore.collection' || kind === 'game.openings'
 export interface Source {
   kind: 'file' | 'github' | 'https_zip'
   url?: string
@@ -28,6 +29,12 @@ export interface Source {
   commit?: string
   filename?: string
 }
+export interface PackageTranslation {
+  name?: string
+  description?: string
+  usage?: string
+  compatibility?: string
+}
 export interface PackageInfo {
   id: string
   name: string
@@ -35,6 +42,13 @@ export interface PackageInfo {
   version?: string
   author?: string
   min_denova_version?: string
+  locale?: string
+  translations?: Record<string, PackageTranslation>
+  tags?: string[]
+  cover?: string
+  usage?: string
+  compatibility?: string
+  updated_at?: string
 }
 export interface MarketEntry {
   id: string
@@ -58,6 +72,7 @@ export interface Catalog {
   error_key?: string
 }
 export interface PreviewResource {
+  item_count?: number
   id: string
   kind: ResourceKind
   path: string
@@ -81,10 +96,6 @@ export interface Preview {
   candidates: PackagePreview[]
 }
 // A selection always refers to one candidate in the same frozen preview.
-export interface ImportSelection {
-  candidateID: string
-  resourceIDs: string[]
-}
 export function discardPreview(preview: Preview) {
   void exchange(`/previews/${preview.preview_id}`, undefined, 'DELETE').catch((error) => {
     console.error('[market] failed to release preview', error)
@@ -142,6 +153,7 @@ export interface PlanRequest {
   update_mode: string
 }
 export interface ExportResource {
+  item_count?: number
   local: LocalRef
   name: string
   description?: string

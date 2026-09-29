@@ -17,7 +17,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from '@/components/ui/input-group'
-import { resourceKinds, type ExportResource } from './api'
+import { isCollectionKind, resourceKinds, type ExportResource } from './api'
 import { ResourceSelectionGroup } from './ResourceSelectionGroup'
 
 export function ExportResourcePicker({
@@ -32,6 +32,14 @@ export function ExportResourcePicker({
   onCheckedChange: (resources: ExportResource[], checked: boolean) => void
 }) {
   const { t } = useTranslation()
+  const resourceName = (resource: ExportResource) => {
+    if (isCollectionKind(resource.local.kind) && resource.local.id === 'all') {
+      return t(resource.local.kind === 'lore.collection'
+        ? 'market.export.projectLore'
+        : 'market.export.projectOpenings')
+    }
+    return resource.name
+  }
   const id = useId()
   const [query, setQuery] = useState('')
   const [openGroups, setOpenGroups] = useState<string[]>()
@@ -43,7 +51,7 @@ export function ExportResourcePicker({
       items: choices.filter(
         (resource) =>
           resource.local.kind === kind &&
-          `${resource.name} ${resource.description || ''} ${t(`market.kinds.${kind}`)}`
+          `${resourceName(resource)} ${resource.description || ''} ${t(`market.kinds.${kind}`)}`
             .toLowerCase()
             .includes(search),
       ),
@@ -124,7 +132,7 @@ export function ExportResourcePicker({
                           <Checkbox
                             className="mt-0.5"
                             id={resourceID}
-                            aria-label={resource.name}
+                            aria-label={resourceName(resource)}
                             checked={selected.includes(resource)}
                             disabled={busy}
                             onCheckedChange={(checked) =>
@@ -137,11 +145,16 @@ export function ExportResourcePicker({
                           >
                             <FieldContent className="min-w-0">
                               <span className="[overflow-wrap:anywhere]">
-                                {resource.name}
+                                {resourceName(resource)}
                               </span>
                               {resource.description && (
                                 <FieldDescription className="line-clamp-2 [overflow-wrap:anywhere]">
                                   {resource.description}
+                                </FieldDescription>
+                              )}
+                              {resource.item_count !== undefined && (
+                                <FieldDescription>
+                                  {t('market.contents.collectionCount', { count: resource.item_count })}
                                 </FieldDescription>
                               )}
                             </FieldContent>

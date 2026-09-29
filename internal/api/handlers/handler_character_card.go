@@ -5,8 +5,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -238,8 +240,10 @@ func (h *Handlers) installCharacterResources(ctx context.Context, filename strin
 	result := *preview.Character
 	result.ProjectID = projectID
 	for _, binding := range installed.Bindings {
-		if binding.Local.Kind == "lore.item" {
-			result.ItemIDs = append(result.ItemIDs, binding.Local.ID)
+		if binding.Local.Kind == "lore.collection" {
+			for _, sourceID := range slices.Sorted(maps.Keys(binding.Members)) {
+				result.ItemIDs = append(result.ItemIDs, binding.Members[sourceID].ID)
+			}
 		}
 	}
 	return result, nil

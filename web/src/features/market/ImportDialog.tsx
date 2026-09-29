@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -11,22 +11,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
 import { ImportResourcePicker } from './ImportResourcePicker'
 import { CompatibilityReport } from '@/components/workbench/CharacterCardImportDialog'
-import { getBooks, type BookRecord } from '@/lib/api'
+import { createBook, getBooks, type BookRecord } from '@/lib/api'
 import {
   dependencySelection,
   discardPreview,
-  type ImportSelection,
   exchange,
   previewSource,
   type Installation,
@@ -38,8 +46,6 @@ import {
 export interface ImportDialogProps {
   source?: Source
   preview?: Preview
-  selection?: ImportSelection
-  previewOwner?: 'dialog' | 'caller'
   installation?: Installation
   projectID?: string
   initialScope?: string
@@ -49,8 +55,6 @@ export interface ImportDialogProps {
 export function ImportDialog({
   source,
   preview: initialPreview,
-  selection: initialSelection,
-  previewOwner = 'dialog',
   installation,
   projectID: defaultProject,
   initialScope = 'user',
@@ -60,13 +64,13 @@ export function ImportDialog({
   const { t } = useTranslation()
   const [preview, setPreview] = useState(initialPreview)
   const [candidateID, setCandidateID] = useState(
-    initialSelection?.candidateID || initialPreview?.candidates.find(
+    initialPreview?.candidates.find(
       (candidate) =>
         !installation || candidate.package.id === installation.package.id,
     )?.candidate_id || '',
   )
   const [selected, setSelected] = useState(
-    initialSelection?.resourceIDs || initialPreview?.candidates
+    initialPreview?.candidates
       .find(
         (candidate) =>
           !installation || candidate.package.id === installation.package.id,
@@ -89,12 +93,17 @@ export function ImportDialog({
   const [projectID, setProjectID] = useState(
     installation?.project_id || defaultProject || '',
   )
+  const [bookDestination, setBookDestination] = useState<'new' | 'existing'>('existing')
+  const [bookTitle, setBookTitle] = useState('')
   const [scope, setScope] = useState(initialScope)
   const [books, setBooks] = useState<BookRecord[]>([])
   const [grants, setGrants] = useState<Record<string, string[]>>({})
   const [names, setNames] = useState<Record<string, string>>({})
   const [replace, setReplace] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(!!source && !initialPreview)
+  const alive = useRef(false)
+  const pending = useRef<Promise<void> | undefined>(undefined)
+  const downloadedPreview = useRef<Preview | undefined>(undefined)
   const [error, setError] = useState('')
   const candidate = preview?.candidates.find(
     (c) => c.candidate_id === candidateID,
@@ -104,8 +113,10 @@ export function ImportDialog({
     candidate?.resources.filter((r) => chosen.includes(r.id)) || []
   const needsProject =
     resources.some((r) =>
-      ['lore.item', 'game.opening', 'project.cover'].includes(r.kind),
+      ['lore.collection', 'game.openings', 'project.cover'].includes(r.kind),
     ) || (resources.some((r) => r.kind === 'skill') && scope === 'workspace')
+  const canCreateBook = !installation && resources.some((r) => r.kind === 'lore.collection')
+  const creatingBook = canCreateBook && bookDestination === 'new'
   const missingConsent = resources.some((r) =>
     r.extension?.manifest.permissions.required.some(
       (p) => !(grants[r.id] || []).includes(p),
@@ -130,32 +141,50 @@ export function ImportDialog({
     try {
       await action()
     } catch (error) {
-      setError(
+      console.error('[market] import operation failed', error)
+      if (alive.current) setError(
         error instanceof Error
           ? error.message
           : t('market.errors.operationFailed'),
       )
     } finally {
-      setBusy(false)
+      if (alive.current) setBusy(false)
     }
   }
-  const loadPreview = async () => {
-    const result = await previewSource(
-      file ||
-        source || {
-          kind: sourceKind as Source['kind'],
-          url,
-          ref: ref || undefined,
-          path: path || undefined,
-        },
-    )
-    setPreview(result)
-    setCandidateID(result.candidates[0].candidate_id)
-    setSelected(result.candidates[0].resources.map((r) => r.id))
+  const loadPreview = () => {
+    if (pending.current) return pending.current
+    pending.current = (async () => {
+      const result = await previewSource(file || source || {
+        kind: sourceKind as Source['kind'], url,
+        ref: ref || undefined, path: path || undefined,
+      })
+      if (!alive.current) { discardPreview(result); return }
+      downloadedPreview.current = result
+      setPreview(result)
+      setCandidateID(result.candidates[0].candidate_id)
+      setSelected(result.candidates[0].resources.map((r) => r.id))
+    })().finally(() => { pending.current = undefined })
+    return pending.current
   }
+  useEffect(() => {
+    alive.current = true
+    // A supplied source means the user already chose Get. Keep its download
+    // in the import flow and reuse the request during StrictMode effect replay.
+    if (source && !initialPreview) void run(loadPreview)
+    return () => {
+      alive.current = false
+      if (downloadedPreview.current) {
+        discardPreview(downloadedPreview.current)
+        downloadedPreview.current = undefined
+      }
+    }
+  }, [])
   const close = () => {
-    if (busy) return
-    if (preview && previewOwner === 'dialog') discardPreview(preview)
+    if (busy && preview) return
+    if (preview) {
+      discardPreview(preview)
+      downloadedPreview.current = undefined
+    }
     onClose()
   }
   return (
@@ -168,7 +197,7 @@ export function ImportDialog({
       <DialogContent
         className="max-h-[min(90dvh,56rem)] overflow-y-auto"
         onInteractOutside={(event) => {
-          if (busy) event.preventDefault()
+          if (busy && preview) event.preventDefault()
         }}
       >
         <DialogHeader>
@@ -176,40 +205,39 @@ export function ImportDialog({
             {t(plan ? 'market.import.confirmTitle' : 'market.import.title')}
           </DialogTitle>
           <DialogDescription>
-            {t(plan ? 'market.import.confirmHelp' : 'market.import.help')}
+            {t(plan ? 'market.import.confirmHelp' : source ? 'market.contents.selectHelp' : 'market.import.help')}
           </DialogDescription>
         </DialogHeader>
         {preview?.character && (
           <CompatibilityReport preview={preview.character} />
         )}
-        {!preview && (
+        {!preview && source && <p role="status" className="text-sm text-muted-foreground">{t(busy ? 'market.import.downloading' : 'market.contents.failed')}</p>}
+        {!preview && !source && (
           <FieldGroup>
-            {!source && (
-              <Field>
-                <FieldLabel>{t('market.import.source')}</FieldLabel>
-                <Select
-                  value={sourceKind}
-                  onValueChange={(value) => {
-                    setSourceKind(value)
-                    setFile(undefined)
-                  }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="github">GitHub</SelectItem>
-                    <SelectItem value="https_zip">
-                      {t('market.import.url')}
-                    </SelectItem>
-                    <SelectItem value="file">
-                      {t('market.import.file')}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-            {sourceKind === 'file' && !source ? (
+            <Field>
+              <FieldLabel>{t('market.import.source')}</FieldLabel>
+              <Select
+                value={sourceKind}
+                onValueChange={(value) => {
+                  setSourceKind(value)
+                  setFile(undefined)
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="github">GitHub</SelectItem>
+                  <SelectItem value="https_zip">
+                    {t('market.import.url')}
+                  </SelectItem>
+                  <SelectItem value="file">
+                    {t('market.import.file')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            {sourceKind === 'file' ? (
               <Field>
                 <FieldLabel htmlFor="market-file">
                   {t('market.import.file')}
@@ -231,12 +259,10 @@ export function ImportDialog({
                     id="market-url"
                     value={url}
                     onChange={(event) => setURL(event.target.value)}
-                    readOnly={!!source}
                     placeholder="https://github.com/owner/repository"
                   />
                 </Field>
-                {(source?.kind === 'github' ||
-                  (!source && sourceKind === 'github')) && (
+                {sourceKind === 'github' && (
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field>
                       <FieldLabel htmlFor="market-ref">
@@ -245,7 +271,6 @@ export function ImportDialog({
                       <Input
                         id="market-ref"
                         value={ref}
-                        readOnly={!!source}
                         onChange={(event) => setRef(event.target.value)}
                       />
                     </Field>
@@ -256,7 +281,6 @@ export function ImportDialog({
                       <Input
                         id="market-path"
                         value={path}
-                        readOnly={!!source}
                         onChange={(event) => setPath(event.target.value)}
                       />
                     </Field>
@@ -268,7 +292,7 @@ export function ImportDialog({
         )}
         {preview && !plan && (
           <FieldGroup>
-            {preview.candidates.length > 1 && !initialSelection && <Field>
+            {preview.candidates.length > 1 && <Field>
               <FieldLabel>{t('market.import.package')}</FieldLabel>
               <Select
                 value={candidateID}
@@ -295,12 +319,8 @@ export function ImportDialog({
                 </SelectContent>
               </Select>
             </Field>}
-            {!initialSelection && candidate && <ImportResourcePicker previewID={preview.preview_id} candidate={candidate} selected={selected} onChange={setSelected} />}
-            {initialSelection && <div className="space-y-2 rounded-lg border p-3">
-              <p className="text-sm font-medium">{candidate?.package.name} · {t('market.export.selected', { count: chosen.length })}</p>
-              <ul className="space-y-1 text-sm text-muted-foreground">{resources.map((resource) => <li key={resource.id} className="[overflow-wrap:anywhere]">{resource.name} · {t(`market.kinds.${resource.kind}`)}</li>)}</ul>
-              <Button variant="ghost" size="sm" onClick={close}>{t('market.contents.editSelection')}</Button>
-            </div>}
+            {candidate && <ImportResourcePicker previewID={preview.preview_id} candidate={candidate} selected={selected} onChange={setSelected} />}
+
             <div className="space-y-3">
               {resources.filter((resource) => resource.kind === 'skill' || resource.extension).map((resource) => (
                 <div key={resource.id} className="space-y-3 rounded-lg border p-3">
@@ -388,32 +408,63 @@ export function ImportDialog({
                 </Select>
               </Field>
             )}
-            {needsProject && (
-              <Field>
-                <FieldLabel>{t('market.import.project')}</FieldLabel>
+            {canCreateBook && (
+              <FieldSet>
+                <FieldLegend id="market-import-mode" variant="label">{t('market.import.bookDestination')}</FieldLegend>
+                <RadioGroup
+                  aria-labelledby="market-import-mode"
+                  value={bookDestination}
+                  onValueChange={(value) => {
+                    if (value === 'new' || value === 'existing') setBookDestination(value)
+                  }}
+                  disabled={busy}
+                >
+                  <Field orientation="horizontal" data-disabled={busy}>
+                    <RadioGroupItem id="market-new-book" value="new" />
+                    <FieldLabel htmlFor="market-new-book">{t('market.import.newBook')}</FieldLabel>
+                  </Field>
+                  <Field orientation="horizontal" data-disabled={busy}>
+                    <RadioGroupItem id="market-existing-book" value="existing" />
+                    <FieldLabel htmlFor="market-existing-book">{t('market.import.existingBook')}</FieldLabel>
+                  </Field>
+                </RadioGroup>
+              </FieldSet>
+            )}
+            {needsProject && !creatingBook && (
+              <Field data-disabled={busy || !!installation}>
+                <FieldLabel htmlFor="market-target-book">{t('market.import.project')}</FieldLabel>
                 <Select
                   value={projectID}
                   onValueChange={setProjectID}
-                  disabled={!!installation}
+                  disabled={busy || !!installation}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="market-target-book" className="w-full min-w-0">
                     <SelectValue
                       placeholder={t('market.import.selectProject')}
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {books
-                      .filter((book) => book.project_id)
-                      .map((book) => (
-                        <SelectItem
-                          key={book.project_id}
-                          value={book.project_id!}
-                        >
-                          {book.name}
-                        </SelectItem>
-                      ))}
+                    <SelectGroup>
+                      {books
+                        .filter((book) => book.project_id)
+                        .map((book) => (
+                          <SelectItem
+                            key={book.project_id}
+                            value={book.project_id!}
+                          >
+                            {book.name}
+                          </SelectItem>
+                        ))}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
+              </Field>
+            )}
+            {creatingBook && (
+              <Field data-disabled={busy}>
+                <FieldLabel htmlFor="market-book-title">{t('market.import.bookTitle')}</FieldLabel>
+                <Input id="market-book-title" value={bookTitle} disabled={busy} onChange={(event) => setBookTitle(event.target.value)} />
+                <FieldDescription>{t('market.import.newBookHelp')}</FieldDescription>
               </Field>
             )}
             {(installation ||
@@ -467,7 +518,7 @@ export function ImportDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            disabled={busy}
+            disabled={busy && !!preview}
             onClick={plan ? () => setPlan(undefined) : close}
           >
             {t(plan ? 'market.back' : 'common.cancel')}
@@ -479,19 +530,31 @@ export function ImportDialog({
               (!!preview &&
                 !plan &&
                 (!chosen.length ||
-                  (needsProject && !projectID) ||
+                  (needsProject && (creatingBook ? !bookTitle.trim() : !projectID)) ||
                   missingConsent))
             }
             onClick={() =>
               void run(async () => {
                 if (!preview) await loadPreview()
-                else if (!plan)
+                else if (!plan) {
+                  let targetProject = projectID
+                  if (creatingBook) {
+                    const created = await createBook(bookTitle.trim())
+                    targetProject = created.project_id
+                    // Retain the created target even if planning fails, so retry never creates it twice.
+                    setProjectID(targetProject)
+                    setBookDestination('existing')
+                    setBooks((current) => [...current, {
+                      project_id: targetProject, path: created.workspace,
+                      name: created.book_meta.title, author: created.book_meta.author || '', last_opened_at: '',
+                    }])
+                  }
                   setPlan(
                     await exchange<Plan>('/plans', {
                       preview_id: preview.preview_id,
                       candidate_id: candidateID,
                       resources: selected,
-                      project_id: projectID,
+                      project_id: targetProject,
                       skill_scope: scope,
                       installation_id: installation?.installation_id,
                       grants,
@@ -500,14 +563,17 @@ export function ImportDialog({
                       update_mode: installation?.update_mode || 'manual',
                     }),
                   )
-                else {
+                } else {
                   const installed = await exchange<Installation>(
                     `/plans/${plan.plan_id}/apply`,
                     {},
                   )
                   toast.success(t('market.import.done'))
                   await onInstalled(installed)
-                  if (previewOwner === 'dialog') discardPreview(preview)
+                  if (preview) {
+                    discardPreview(preview)
+                    downloadedPreview.current = undefined
+                  }
                   onClose()
                 }
               })
@@ -515,12 +581,12 @@ export function ImportDialog({
           >
             {t(
               busy
-                ? 'market.working'
+                ? !preview ? 'market.import.downloading' : 'market.working'
                 : plan
                   ? 'market.import.install'
                   : preview
-                    ? 'market.import.review'
-                    : 'market.import.preview',
+                    ? creatingBook ? 'market.import.createAndReview' : 'market.import.review'
+                    : source ? 'market.contents.retry' : 'market.import.preview',
             )}
           </Button>
         </DialogFooter>

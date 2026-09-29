@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -148,7 +149,7 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 			}
 		case "style.reference":
 			local.ID += ".md"
-		case "lore.item", "game.opening", "project.cover":
+		case "lore.collection", "game.openings", "project.cover":
 			if resource.Kind == "project.cover" {
 				local.ID = "cover"
 			}
@@ -234,7 +235,8 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 				refs[key] = local.ID
 			}
 		}
-		binding := Binding{ResourceID: resource.ID, Local: local, Ownership: ownership, SourceDigest: resource.Digest, Baseline: map[string]string{}}
+		binding := Binding{Requires: slices.Clone(resource.Requires), ResourceID: resource.ID, Local: local, Ownership: ownership, SourceDigest: resource.Digest, Baseline: map[string]string{}}
+		binding.Members = maps.Clone(oldBindings[resource.ID].Members)
 		plan.Installation.Bindings = append(plan.Installation.Bindings, binding)
 		plan.Items = append(plan.Items, PlanItem{ResourceID: resource.ID, Name: resource.Name, Local: local, Action: action, Extension: resource.Extension, Grants: request.Grants[resource.ID]})
 	}
@@ -292,7 +294,7 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 			var target FileTarget
 			if binding.Local.Scope == "project" {
 				var extra []FileTarget
-				target, err = s.stageProject(ctx, dir, &extra, resource, binding.Local, raw, staged, expected, importedAssets)
+				target, err = s.stageProject(ctx, dir, &extra, resource, binding, raw, request.ReplaceModified, staged, expected, importedAssets)
 				targets[resource.ID] = append(targets[resource.ID], extra...)
 			} else {
 				var content []byte
@@ -324,7 +326,7 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 				}
 				plan.Items[i].Action = "update"
 			}
-			if content := staged[target]; content != nil {
+			if content := staged[target]; content != nil && target.Path != collectionPath(binding.Local.Kind) {
 				binding.Baseline[target.Path] = revisionfile.Revision(content)
 			}
 		}
@@ -346,7 +348,7 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 	for i := range plan.Installation.Bindings {
 		binding := &plan.Installation.Bindings[i]
 		for _, target := range targets[binding.ResourceID] {
-			if staged[target] != nil {
+			if staged[target] != nil && target.Path != collectionPath(binding.Local.Kind) {
 				binding.Baseline[target.Path] = revisionfile.Revision(staged[target])
 			}
 		}

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"denova/config"
 	"denova/internal/agents/canonicalstore"
@@ -491,6 +492,9 @@ func (a *App) Close() {
 		return
 	}
 	a.closeOnce.Do(func() {
+		started := time.Now()
+		slog.Info("app_shutdown_started")
+		defer func() { slog.Info("app_shutdown_finished", "duration", time.Since(started)) }()
 		a.ensureServices()
 		a.mu.Lock()
 		a.closed = true

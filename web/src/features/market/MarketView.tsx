@@ -157,7 +157,7 @@ export function MarketView({
           : kinds.includes('skill')
             ? 'skills'
             : kinds.some(
-                  (kind) => kind === 'lore.item' || kind === 'game.opening',
+                  (kind) => kind === 'lore.collection' || kind === 'game.openings',
                 )
               ? 'lore'
               : kinds.includes('project.cover')
@@ -480,7 +480,7 @@ export function MarketView({
               acquired={installations.filter((item) => item.tracking === 'tracked' && item.source.url === detail.source.url && (item.source.path || '') === (detail.source.path || '')).length}
               onManage={() => { setDetail(undefined); setTab('acquired'); setCategory('all') }}
               onBack={() => setDetail(undefined)}
-              onImport={(preview, selection) => setImporting({ preview, selection, previewOwner: 'caller' })}
+              onImport={(source) => setImporting({ source })}
             />
           )}
         </ResourceWorkspace>

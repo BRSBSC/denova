@@ -917,7 +917,7 @@ function LoreSettingPanel({
               actions={(
                 <>
                   {activeMode === 'lore' && !isOverview && <Button size="icon-sm" variant="ghost" aria-label={t('lore.library.back')} onClick={() => void handleSelectLore(LORE_OVERVIEW_ID)}><LayoutGrid /></Button>}
-                  <ResourceExchangeActions projectID={projectId} resources={isOpeningPresetActive && activeOpeningPresetId ? [{ kind: 'game.opening', scope: 'project', project_id: projectId, id: activeOpeningPresetId }] : draft && !isCreatorActive && !isOverview ? [{ kind: 'lore.item', scope: 'project', project_id: projectId, id: draft.id }] : undefined} beforeOpen={flushActiveAutosave} onImported={async () => { await loadLoreItems(); notifyOpeningPresetUpdated() }} />
+                  <ResourceExchangeActions projectID={projectId} resources={isOpeningPresetActive && activeOpeningPresetId ? [{ kind: 'game.openings', scope: 'project', project_id: projectId, id: 'all' }] : draft && !isCreatorActive && !isOverview ? [{ kind: 'lore.collection', scope: 'project', project_id: projectId, id: 'all' }] : undefined} beforeOpen={flushActiveAutosave} onImported={async () => { await loadLoreItems(); notifyOpeningPresetUpdated() }} />
                   {!isOverview && (isCreatorActive || isOpeningPresetActive || draft) ? (
                     <AutosaveStatusIndicator
                       status={activeAutosaveStatus}

@@ -72,7 +72,7 @@ func TestIndexExamplesValidation(t *testing.T) {
 			for _, binding := range installed.Bindings {
 				refs = append(refs, binding.Local)
 			}
-			exported, err := s.Export(ctx, ExportRequest{Package: installed.Package, Resources: refs})
+			exported, err := s.Export(ctx, ExportRequest{Package: installed.Package, InstallationID: installed.ID, Resources: refs})
 			if err != nil {
 				t.Fatal(err)
 			}

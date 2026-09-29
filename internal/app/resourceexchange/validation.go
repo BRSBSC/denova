@@ -121,7 +121,7 @@ func validateLocalRef(ref LocalRef) error {
 		if ref.Scope != "workspace" && ref.ProjectID != "" {
 			return fmt.Errorf("global Skill cannot have Project identity")
 		}
-	case "lore.item", "game.opening", "project.cover":
+	case "lore.collection", "game.openings", "project.cover":
 		if ref.Scope != "project" || ref.ProjectID == "" {
 			return fmt.Errorf("resource requires Project scope")
 		}
@@ -136,6 +136,14 @@ func validateLocalRef(ref LocalRef) error {
 // Native resource payloads expose portable fields only. Runtime paths, source
 // receipts and model/provider configuration cannot ride along with definitions.
 func validatePayload(kind string, raw []byte) error {
+	if kind == "lore.collection" {
+		_, _, err := readLoreCollection(raw)
+		return err
+	}
+	if kind == "game.openings" {
+		_, err := readOpeningCollection(raw)
+		return err
+	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return err
@@ -144,8 +152,8 @@ func validatePayload(kind string, raw []byte) error {
 	switch kind {
 	case "preset.rules":
 		allowed = append(allowed, "actor_state_ref")
-	case "lore.item":
-		allowed = append(allowed, "image", "materials")
+	case "lore.entry":
+		allowed = append(allowed, "materials")
 	case "project.cover":
 		allowed = []string{"asset_path", "alt_text"}
 	}

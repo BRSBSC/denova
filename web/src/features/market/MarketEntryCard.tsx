@@ -41,7 +41,7 @@ export function MarketEntryCard({
         ? Sparkles
         : entry.kinds.some((kind) => kind.startsWith('preset.'))
           ? SlidersHorizontal
-          : entry.kinds.includes('lore.item')
+          : entry.kinds.includes('lore.collection')
             ? BookOpen
             : Package
   const title = localized(entry.name, i18n.language)

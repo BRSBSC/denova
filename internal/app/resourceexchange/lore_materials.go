@@ -46,7 +46,7 @@ func (s *Service) exportLoreMaterials(ctx context.Context, ref LocalRef, item lo
 		if !snapshot.Exists {
 			return nil, fmt.Errorf("lore material missing: %s", material.Path)
 		}
-		name := "media/" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ref.ProjectID+":"+material.Path)).String() + path.Ext(material.Path)
+		name := "assets/" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ref.ProjectID+":"+material.Path)).String() + path.Ext(material.Path)
 		files[name] = snapshot.Content
 		payload.Entries = append(payload.Entries, portableMaterial{AssetPath: name, SourceURL: material.Source.URL, OriginalName: material.OriginalName, Name: material.Name, Description: material.Description})
 		if item.Image != nil && item.Image.ImagePath == material.Path {
@@ -68,19 +68,16 @@ func (s *Service) exportLoreMaterials(ctx context.Context, ref LocalRef, item lo
 }
 func importLoreMaterials(ctx context.Context, dir, previewDir string, resource PreviewResource, local LocalRef, raw []byte, staged map[FileTarget][]byte, extra *[]FileTarget, importedAssets map[FileTarget]lore.Asset) error {
 	var payload struct {
-		Image     *portableImage     `json:"image"`
 		Materials *portableMaterials `json:"materials"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return err
 	}
 	materials := payload.Materials
-	if materials == nil && payload.Image != nil {
-		materials = &portableMaterials{Entries: []portableMaterial{{AssetPath: payload.Image.AssetPath, Description: payload.Image.AltText}}, CoverPath: payload.Image.AssetPath}
-	}
 	if materials == nil {
-		return nil
+		materials = &portableMaterials{Entries: []portableMaterial{}}
 	}
+
 	if materials.Entries == nil {
 		return fmt.Errorf("material entries must be an array")
 	}
@@ -88,6 +85,9 @@ func importLoreMaterials(ctx context.Context, dir, previewDir string, resource P
 	item, err := store.ReadAny(local.ID)
 	if err != nil {
 		return err
+	}
+	if len(item.ResolvedMaterials) == 0 && len(materials.Entries) == 0 && materials.CoverPath == "" && materials.CoverURL == "" {
+		return nil
 	}
 	// The temporary store is isolated; the outer exchange transaction commits the
 	// final collection and every staged file together.
