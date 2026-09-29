@@ -32,6 +32,9 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Fixed / 修复
 
+- 外部运行时逐条保存控制回执，避免长会话在追加指令、暂停和结束任务时反复保存全部历史回执；升级时备份并转换已有记录，保留未完成任务和命令重试结果。
+- External runtimes persist control receipts incrementally instead of rewriting all historical receipts when accepting guidance, pausing, or finishing tasks. Existing records are backed up and converted while preserving unfinished tasks and command retry results.
+
 - 自动更新固定发布包校验，支持断点续传、安装中断恢复和启动确认；失败保留诊断与程序备份，刷新页面后仍可继续已准备的更新。
 - Automatic updates pin package checksums, resume downloads, recover interrupted installation and verify startup. Failures retain diagnostics and program backups; staged updates survive page reloads.
 
