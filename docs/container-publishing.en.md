@@ -43,7 +43,7 @@ docker compose --env-file docker/.env -f docker/compose.yml up -d
 
 Open `http://localhost:8080` and sign in. Compose publishes only on the host loopback address by default. Use `8080:8080` for LAN access, and an HTTPS reverse proxy for internet access.
 
-The container runs as UID/GID `10001:10001`. The `denova-data` named volume persists `/data`, including application data in `/data/.denova` and logs in `/data/log`. Host bind mounts must be writable by that UID. External Projects require additional mounts; the named volume does not include arbitrary host files.
+The container prepares volume permissions at startup, then runs the application as UID/GID `10001:10001`. The `denova-data` named volume persists `/data`, including application data in `/data/.denova` and logs in `/data/log`. Initialization adjusts ownership inside these two directories while preserving file contents and permission bits; it does not recursively change other directories under `/data` or follow symbolic links. `DENOVA_DIR` must remain inside `/data`. Host bind mounts must allow ownership initialization. Read-only mounts or NFS/NAS filesystems restricting chown require host-side permissions for that UID and Compose `user: "10001:10001"` to skip ownership preparation. External Projects require additional mounts; the named volume does not include arbitrary host files.
 
 The first startup writes network settings and a bcrypt password hash only when no user `config.toml` exists. Existing settings are never replaced. Environment credentials initialize a new volume only; change subsequent passwords through application settings. Imported configurations must enable `allow_lan_access` and provide `remote_access_username` and `remote_access_password_hash`. Disabling LAN access in the application makes the container port unreachable.
 
@@ -62,6 +62,7 @@ To roll back, select an earlier `DENOVA_IMAGE_TAG` and recreate the container. B
 python -B -m unittest discover -s scripts -p test_sync_upstream_release.py
 python -B -m unittest discover -s docker -p test_entrypoint.py
 bash -n docker/smoke-test.sh
+sh -n docker/prepare-data.sh
 ```
 
 The publishing workflow performs actual builds and smoke tests with isolated volumes for both architectures. It does not use development services, real model credentials, or user data. Pull requests run script tests and syntax checks only; they do not publish images.

@@ -43,7 +43,7 @@ docker compose --env-file docker/.env -f docker/compose.yml up -d
 
 打开 `http://localhost:8080`，使用上述账号登录。Compose 默认只发布宿主机回环地址；需要局域网访问时，将端口映射改为 `8080:8080`，需要互联网访问时配合 HTTPS 反向代理。
 
-容器以 UID/GID `10001:10001` 运行，命名卷 `denova-data` 保存 `/data`，其中 `/data/.denova` 是应用数据、`/data/log` 是日志。手动绑定宿主目录时，需要让该 UID 有写权限。外部 Project 如需使用，应另外挂载其目录；命名卷不包含未挂载的宿主文件。
+容器启动时先准备数据卷权限，再以 UID/GID `10001:10001` 运行应用。命名卷 `denova-data` 保存 `/data`，其中 `/data/.denova` 是应用数据、`/data/log` 是日志。初始化会调整这两个目录内文件的属主，保留文件内容和原有权限位，并且不会递归修改 `/data` 下其他目录或跟随符号链接。`DENOVA_DIR` 必须位于 `/data` 内。手动绑定宿主目录时，需要允许初始化修改文件属主；只读挂载或限制 chown 的 NFS/NAS 文件系统需要在宿主机预先设置该 UID 的读写权限，再通过 Compose `user: "10001:10001"` 跳过权限初始化。外部 Project 如需使用，应另外挂载其目录；命名卷不包含未挂载的宿主文件。
 
 首次启动仅在数据目录没有 `config.toml` 时写入网络监听设置和 bcrypt 密码摘要；已有配置不会被覆盖。账号环境变量只用于首次初始化，之后更改密码应使用应用设置。导入旧数据时，需要确保其用户配置已启用 `allow_lan_access`，并设置 `remote_access_username` 与 `remote_access_password_hash`。不要在容器设置中关闭局域网访问，否则容器端口不可达。
 
@@ -62,6 +62,7 @@ docker compose --env-file docker/.env -f docker/compose.yml up -d
 python -B -m unittest discover -s scripts -p test_sync_upstream_release.py
 python -B -m unittest discover -s docker -p test_entrypoint.py
 bash -n docker/smoke-test.sh
+sh -n docker/prepare-data.sh
 ```
 
 真实容器构建和双架构冒烟测试由上述发布工作流执行，使用隔离数据卷，不使用开发服务、真实模型配置或真实用户数据。PR 仅执行脚本测试与语法检查，不发布镜像。

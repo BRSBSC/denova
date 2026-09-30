@@ -45,6 +45,7 @@ jobs:
           python3 -B -m unittest discover -s scripts -p test_sync_upstream_release.py
           python3 -B -m unittest discover -s docker -p test_entrypoint.py
           bash -n docker/smoke-test.sh
+          sh -n docker/prepare-data.sh
 
   mirror:
     needs: verify

@@ -1,6 +1,7 @@
 **
 !docker/
 !docker/entrypoint.py
+!docker/prepare-data.sh
 !dist/
 !dist/upstream/
 !dist/upstream/amd64/

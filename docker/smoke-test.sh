@@ -5,11 +5,15 @@ image="${1:?Usage: smoke-test.sh IMAGE PLATFORM VERSION}"
 platform="${2:?Platform is required}"
 version="${3:?Version is required}"
 container=""
+volume=""
 scratch="$(mktemp -d)"
 cleanup() {
   if [[ -n "${container}" ]]; then
     docker logs "${container}" || true
     docker rm --force --volumes "${container}" >/dev/null || true
+  fi
+  if [[ -n "${volume}" ]]; then
+    docker volume rm "${volume}" >/dev/null || true
   fi
   rm -rf "${scratch}"
 }
@@ -17,8 +21,14 @@ trap cleanup EXIT
 
 actual_version="$(docker run --rm --platform "${platform}" "${image}" --version)"
 [[ "${actual_version}" == "${version#v}" ]]
+volume="$(docker volume create)"
+# Reproduce a reused/externally created volume inaccessible to UID 10001.
+docker run --rm --platform "${platform}" --user 0:0 \
+  --entrypoint /bin/sh --volume "${volume}:/data" "${image}" -c \
+  'mkdir -p /data/.denova; chown 0:0 /data/.denova; chmod 0700 /data/.denova'
 container="$(docker run --detach --platform "${platform}" \
   --publish 127.0.0.1::8080 \
+  --volume "${volume}:/data" \
   --env DENOVA_USERNAME=smoke \
   --env DENOVA_PASSWORD=container-smoke-password \
   "${image}")"
@@ -49,9 +59,25 @@ curl --fail --silent --cookie-jar "${scratch}/cookies" \
 python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["authenticated"]' "${scratch}/login.json"
 curl --fail --silent --cookie "${scratch}/cookies" "${base_url}/api/settings" > /dev/null
 before="$(docker exec "${container}" sha256sum /data/.denova/config.toml)"
+# Preserve the actual password hash and session data while reproducing the
+# reported read failure on an existing private configuration.
+docker exec --user 0:0 "${container}" sh -c \
+  'chown -R 0:0 /data/.denova; chmod 0700 /data/.denova; chmod 0600 /data/.denova/config.toml'
 docker restart "${container}" > /dev/null
 wait_for_server
-after="$(docker exec "${container}" sha256sum /data/.denova/config.toml)"
+after="$(docker exec --user 10001:10001 "${container}" sha256sum /data/.denova/config.toml)"
 [[ "${before}" == "${after}" ]]
 curl --fail --silent --cookie "${scratch}/cookies" "${base_url}/api/settings" > /dev/null
+docker exec --user 0:0 "${container}" python3 -c '
+from pathlib import Path
+uids = []
+for comm in Path("/proc").glob("[0-9]*/comm"):
+    try:
+        if comm.read_text().strip() == "denova":
+            status = comm.with_name("status").read_text().splitlines()
+            uids.append(next(line.split()[1:] for line in status if line.startswith("Uid:")))
+    except FileNotFoundError:
+        pass
+assert uids == [["10001"] * 4], uids
+'
 echo "Container smoke test passed: ${platform} ${version}"
