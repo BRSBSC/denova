@@ -86,9 +86,6 @@ func (s *Service) UpdateDue(ctx context.Context, now time.Time, apply func(conte
 		}
 		func() {
 			defer s.DiscardPreview(preview.ID)
-			if item.LocalState != "unchanged" {
-				return
-			}
 			current, _, err := s.loadInstallation(ctx, item.ID)
 			if err != nil || current.RemoteState != "update_available" || current.UpdateMode != "auto_apply" || !automaticKinds(current.Bindings) {
 				return
@@ -101,17 +98,28 @@ func (s *Service) UpdateDue(ctx context.Context, now time.Time, apply func(conte
 			// Never add resources or remove bindings under an earlier automatic grant.
 			selected := []string{}
 			for _, binding := range current.Bindings {
-				if !slices.ContainsFunc(candidate.Resources, func(resource PreviewResource) bool {
-					return resource.ID == binding.ResourceID && resource.Kind == binding.Local.Kind
-				}) {
-					return
+				closure, err := selectResources(candidate.Resources, []string{binding.ResourceID})
+				if err != nil {
+					continue
 				}
-				selected = append(selected, binding.ResourceID)
+				allowed := slices.ContainsFunc(candidate.Resources, func(resource PreviewResource) bool {
+					return resource.ID == binding.ResourceID && resource.Kind == binding.Local.Kind
+				})
+				for _, resource := range closure {
+					if !slices.ContainsFunc(current.Bindings, func(existing Binding) bool {
+						return existing.ResourceID == resource.ID && existing.Local.Kind == resource.Kind
+					}) {
+						allowed = false
+					}
+				}
+				if allowed {
+					selected = append(selected, binding.ResourceID)
+				}
 			}
-			closure, err := selectResources(candidate.Resources, selected)
-			if err != nil || len(closure) != len(selected) {
+			if len(selected) == 0 {
 				return
 			}
+
 			plan, err := s.Plan(ctx, PlanRequest{automatic: true, PreviewID: preview.ID, CandidateID: candidate.ID, Resources: selected, InstallationID: current.ID, UpdateMode: "auto_apply", ProjectID: current.ProjectID})
 			if err != nil {
 				slog.InfoContext(ctx, "resource_auto_update_deferred", "installation", item.ID, "error", err)

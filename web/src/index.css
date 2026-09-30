@@ -2847,19 +2847,19 @@ html[data-nova-motion="off"] .nova-change-review-layer {
   color: var(--nova-text);
 }
 
-/* Dense auto-fill field grid; column basis adapts per group kind. */
+/* Fit populated columns to the available width; column basis adapts per group kind. */
 .story-state-ledger__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 10px 20px;
 }
 
 .story-state-ledger__grid[data-group='overview'] {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
 }
 
 .story-state-ledger__grid[data-group='details'] {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
 }
 
 .story-state-ledger__field {
@@ -3118,17 +3118,58 @@ html[data-nova-motion="off"] .nova-change-review-layer {
   --nova-user-message-bg-to: var(--nova-stage-user-message-bg-to);
 }
 
-/* Share the stage's reading scrim without fading text or stacking opaque cards. */
+/* Keep prose on the reading scrim; only outer panels add a translucent surface. */
 .nova-story-stage-content[data-artwork="true"] :is(
   .nova-chat-canvas,
-  .story-state-ledger,
   .story-state-ledger__tabs-list,
-  .nova-tool-surface,
   .nova-tool-content
 ) {
   background: transparent;
 }
 
+.nova-story-stage-content[data-artwork="true"] :is(.story-state-ledger, .nova-tool-surface) {
+  border-color: color-mix(in srgb, var(--nova-text) 18%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--nova-text) 4%, transparent), transparent 3rem),
+    color-mix(in srgb, var(--nova-surface) 50%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--nova-text) 5%, transparent),
+    0 4px 14px rgba(0, 0, 0, 0.1);
+}
+
+/* Tool details already sit inside a panel, so they must not stack another surface. */
+.nova-story-stage-content[data-artwork="true"] .nova-tool-surface .nova-tool-surface {
+  background: transparent;
+  box-shadow: none;
+}
+
+.nova-story-stage-content[data-artwork="true"] .story-state-ledger__section[data-decorated] {
+  border-color: color-mix(in srgb, var(--nova-text) 9%, transparent);
+  background: color-mix(in srgb, var(--nova-text) 3%, transparent);
+}
+
 .nova-story-stage-content[data-artwork="true"] .nova-tool-surface {
   --nova-hover: color-mix(in srgb, var(--nova-surface-3) 25%, transparent);
+}
+
+/* Character layout follows the stage width, including when the console is open. */
+.nova-story-artwork { container-type: inline-size; }
+.nova-stage-characters {
+  position: absolute;
+  inset: 12% 0 0;
+  display: flex;
+  justify-content: center;
+}
+.nova-stage-character { position: relative; height: 100%; min-width: 0; flex: 1; }
+.nova-stage-characters[data-single] .nova-stage-character { max-width: 70%; }
+@container (min-width: 768px) {
+  .nova-stage-characters:not([data-layout="center"]) .nova-stage-character {
+    /* Preserve useful sprite widths when the text fills most of the stage. */
+    --side-width: clamp(22%, calc((100cqw - var(--nova-story-text-max-width, 896px)) / 2), 35%);
+    position: absolute;
+    width: calc(var(--side-width) / var(--side-count));
+    max-width: none;
+  }
+  .nova-stage-character[data-side="left"] { left: calc(var(--side-index) * var(--side-width) / var(--side-count)); }
+  .nova-stage-character[data-side="right"] { right: calc((var(--side-count) - 1 - var(--side-index)) * var(--side-width) / var(--side-count)); }
 }

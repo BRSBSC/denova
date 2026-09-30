@@ -99,12 +99,19 @@ type LocalRef struct {
 }
 
 // CollectionMember tracks a source item inside a collection without adding a second library.
+// Digest is the last applied local content; SourceDigest is the last reviewed
+// upstream content. Keeping a local edit advances only SourceDigest.
 type CollectionMember struct {
-	ID     string `json:"id"`
-	Digest string `json:"digest"`
+	ID              string `json:"id"`
+	Digest          string `json:"digest"`
+	SourceDigest    string `json:"source_digest,omitempty"`
+	UpstreamRemoved bool   `json:"upstream_removed,omitempty"`
 }
 
 type Binding struct {
+	// AppliedRelease retains the extension baseline when a newer source is
+	// acknowledged without replacing the user's current release.
+	AppliedRelease  string                      `json:"applied_release,omitempty"`
 	Requires        []string                    `json:"requires,omitempty"`
 	Members         map[string]CollectionMember `json:"members,omitempty"`
 	UpstreamRemoved bool                        `json:"upstream_removed,omitempty"`
@@ -116,6 +123,9 @@ type Binding struct {
 }
 
 type Installation struct {
+	// ReviewedSource describes the last reviewed package, including unselected
+	// resources. It prevents repeated notices for deliberately omitted additions.
+	ReviewedSource   string                       `json:"reviewed_source,omitempty"`
 	GameDefaults     *config.GameCreationDefaults `json:"game_defaults,omitempty"`
 	PendingPreviewID string                       `json:"pending_preview_id,omitempty"`
 	ID               string                       `json:"installation_id"`
@@ -133,7 +143,13 @@ type Installation struct {
 }
 
 type PlanRequest struct {
-	GameDefaultsFields []string `json:"game_defaults_fields,omitempty"`
+	// SharedResources selects reuse (default) or independent copies on new imports.
+	// Extensions retain their fixed identity and cannot be copied.
+	SharedResources string `json:"shared_resources,omitempty"`
+	// Resolutions are explicit conflict choices, keyed by resource and member ID.
+	// The empty member ID addresses an indivisible resource (e.g. a Skill).
+	Resolutions        map[string]map[string]string `json:"resolutions,omitempty"`
+	GameDefaultsFields []string                     `json:"game_defaults_fields,omitempty"`
 	automatic          bool
 	PreviewID          string              `json:"preview_id"`
 	CandidateID        string              `json:"candidate_id"`
@@ -157,6 +173,8 @@ type PlanItem struct {
 }
 
 type Plan struct {
+	Updates             []UpdateItem                 `json:"updates,omitempty"`
+	SkillGuards         []Binding                    `json:"skill_guards,omitempty"`
 	GameDefaultsBefore  *config.GameCreationDefaults `json:"game_defaults_before,omitempty"`
 	GameDefaultsApplied *config.GameCreationDefaults `json:"game_defaults_applied,omitempty"`
 	BackupID            string                       `json:"backup_id,omitempty"`
@@ -171,4 +189,4 @@ type Plan struct {
 }
 
 // PublicPlan excludes staged bytes and filesystem locations from API responses.
-func (p Plan) PublicPlan() Plan { p.Changes = nil; return p }
+func (p Plan) PublicPlan() Plan { p.Changes = nil; p.SkillGuards = nil; return p }

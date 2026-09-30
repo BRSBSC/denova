@@ -3,7 +3,6 @@ package resourceexchange
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -148,12 +147,14 @@ func TestOpeningCollectionLifecycle(t *testing.T) {
 	if err != nil || states[0].LocalState != "modified" {
 		t.Fatal("missed local edit", err, states)
 	}
+	items[0].Content = "New upstream revision"
 	p = preview()
 	request.PreviewID = p.ID
-	if _, err := s.Plan(ctx, request); !errors.Is(err, ErrLocalModified) {
+	protected, err := s.Plan(ctx, request)
+	if err != nil || protected.Updates[0].State != "conflict" {
 		t.Fatal("local edit not protected", err)
 	}
-	request.ReplaceModified = true
+	request.Resolutions = map[string]map[string]string{"openings": {"start-0": "remote"}}
 	replaced, err := s.Plan(ctx, request)
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +195,8 @@ func TestOpeningCollectionAdmissionAndCharacterConversion(t *testing.T) {
 	incoming := []byte(`{"version":1,"items":[{"id":"开场-甲","title":"入门","content":"Upstream"}]}`)
 	old.Content = "User edit"
 	current := jsonBytes(t, openings{Version: 1, Presets: []opening{old}})
-	if _, err := stageOpeningCollection(&binding, incoming, current, false); !errors.Is(err, ErrLocalModified) {
+	review := &updateReview{}
+	if _, err := stageOpeningCollection(&binding, incoming, current, review); err != nil || review.items[0].State != "conflict" {
 		t.Fatal("snapshot edit not protected", err)
 	}
 	s := testService(t)

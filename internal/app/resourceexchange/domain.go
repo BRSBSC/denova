@@ -160,7 +160,7 @@ func stageDefinition(resource PreviewResource, id string, raw []byte, refs map[s
 	return filepath.ToSlash(relative), content, err
 }
 
-func (s *Service) stageProject(ctx context.Context, previewDir string, extra *[]FileTarget, resource PreviewResource, binding *Binding, raw []byte, replaceModified bool, staged map[FileTarget][]byte, expected map[FileTarget]string, importedAssets map[FileTarget]lore.Asset) (FileTarget, error) {
+func (s *Service) stageProject(ctx context.Context, previewDir string, extra *[]FileTarget, resource PreviewResource, binding *Binding, raw []byte, review *updateReview, staged map[FileTarget][]byte, expected map[FileTarget]string, importedAssets map[FileTarget]lore.Asset) (FileTarget, error) {
 	local := binding.Local
 	target := FileTarget{ProjectID: local.ProjectID}
 	switch resource.Kind {
@@ -203,13 +203,13 @@ func (s *Service) stageProject(ctx context.Context, previewDir string, extra *[]
 		}
 		staged[target] = raw
 	case "game.openings":
-		content, err := stageOpeningCollection(binding, raw, staged[target], replaceModified)
+		content, err := stageOpeningCollection(binding, raw, staged[target], review)
 		if err != nil {
 			return target, err
 		}
 		staged[target] = content
 	case "lore.collection":
-		if err := s.stageLoreCollection(ctx, previewDir, resource, binding, raw, replaceModified, staged, extra, importedAssets); err != nil {
+		if err := s.stageLoreCollection(ctx, previewDir, resource, binding, raw, review, staged, extra, importedAssets); err != nil {
 			return target, err
 		}
 	}

@@ -142,7 +142,16 @@ export interface PlanItem {
   extension?: Candidate
   grants?: string[]
 }
+export interface UpdateItem {
+  resource_id: string
+  member_id?: string
+  name: string
+  state: 'create' | 'update' | 'unchanged' | 'keep' | 'conflict' | 'blocked' | 'upstream_removed'
+  conflict?: boolean
+  resolution?: string
+}
 export interface Plan {
+  updates?: UpdateItem[]
   game_defaults_before?: GameCreationDefaults
   game_defaults_applied?: GameCreationDefaults
   plan_id: string
@@ -151,6 +160,8 @@ export interface Plan {
   expires_at: string
 }
 export interface PlanRequest {
+  shared_resources?: 'reuse' | 'copy'
+  resolutions?: Record<string, Record<string, string>>
   game_defaults_fields?: GameDefaultField[]
   preview_id: string
   candidate_id: string

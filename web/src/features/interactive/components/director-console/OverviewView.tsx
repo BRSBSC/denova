@@ -2,13 +2,17 @@ import { useMemo } from 'react'
 import { Activity } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { InlineErrorNotice } from '@/components/common/inline-error-notice'
-import type { BranchPlan, Snapshot } from '../../types'
+import type { LoreItem } from '@/lib/api-client/types'
+import type { BranchPlan, Snapshot, StoryProtagonist } from '../../types'
 import { ChangesSummary } from '../story-state/ChangesSummary'
 import { buildStoryStateModel, type ActorStateEntry } from '../story-state/model'
 import { BranchPlanSummary } from './BranchPlanView'
 import { StateDetailsDialog } from '../story-state/StateDetailsDialog'
 
 interface OverviewViewProps {
+  projectId?: string
+  loreItems?: LoreItem[]
+  protagonist?: StoryProtagonist
   snapshot: Snapshot | null
   stateError?: string
   plan?: BranchPlan
@@ -17,7 +21,7 @@ interface OverviewViewProps {
   onBranchPlanUpdate?: (markdown: string, baseRevision: string) => void | Promise<void>
 }
 
-export function OverviewView({ snapshot, stateError, plan, planningEnabled, branchPlanEditingDisabled = false, onBranchPlanUpdate }: OverviewViewProps) {
+export function OverviewView({ projectId, loreItems, protagonist, snapshot, stateError, plan, planningEnabled, branchPlanEditingDisabled = false, onBranchPlanUpdate }: OverviewViewProps) {
   const { t } = useTranslation()
   const model = useMemo(() => buildStoryStateModel(snapshot), [snapshot])
   const actors = useMemo<ActorStateEntry[]>(() => [
@@ -46,7 +50,7 @@ export function OverviewView({ snapshot, stateError, plan, planningEnabled, bran
             </div>
           )}
         </section>
-        <StateDetailsDialog snapshot={snapshot} stateError={stateError} />
+        <StateDetailsDialog projectId={projectId} loreItems={loreItems} protagonist={protagonist} snapshot={snapshot} stateError={stateError} />
       </div>
     </div>
   )

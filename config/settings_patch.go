@@ -94,6 +94,11 @@ func ApplySettingsMergePatch(existing Settings, changes json.RawMessage) (Settin
 	if err := next.GameCreationDefaults.Validate(); err != nil {
 		return Settings{}, fmt.Errorf("%w: %v", ErrInvalidSettingsPatch, err)
 	}
+	switch next.InteractiveStageCharacterLayout {
+	case "", "center", "left", "right", "sides":
+	default:
+		return Settings{}, fmt.Errorf("%w: invalid stage character layout %q", ErrInvalidSettingsPatch, next.InteractiveStageCharacterLayout)
+	}
 	return next, nil
 }
 
@@ -108,7 +113,7 @@ func ValidateWorkspaceSettingsPatch(changes json.RawMessage) error {
 		switch field {
 		case "agent_runtimes", "agent_tools", "agent_prompts", "agent_skills", "agent_context",
 			"general_sub_agents", "sub_agents", "default_image_agent_id",
-			"agent_tool_parallelism", "agent_subagent_parallelism", "game_creation_defaults":
+			"agent_tool_parallelism", "agent_subagent_parallelism", "game_creation_defaults", "interactive_stage_character_layout":
 		default:
 			return fmt.Errorf("%w: field %q is not workspace-scoped", ErrInvalidSettingsPatch, field)
 		}

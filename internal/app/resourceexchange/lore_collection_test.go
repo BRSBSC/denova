@@ -3,7 +3,6 @@ package resourceexchange
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -96,9 +95,10 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 	staged := map[FileTarget][]byte{{ProjectID: record.ID, Path: lore.ItemsRelativePath}: jsonBytes(t, edited)}
 	var extra []FileTarget
 	copyBinding := binding
-	err = s.stageLoreCollection(ctx, "", p.Candidates[0].Resources[0], &copyBinding, jsonBytes(t, collection), false, staged, &extra, map[FileTarget]lore.Asset{})
-	if !errors.Is(err, ErrLocalModified) {
-		t.Fatalf("staged edit not protected: %v", err)
+	review := &updateReview{}
+	err = s.stageLoreCollection(ctx, "", p.Candidates[0].Resources[0], &copyBinding, jsonBytes(t, collection), review, staged, &extra, map[FileTarget]lore.Asset{})
+	if err != nil || review.items[0].State != "keep" {
+		t.Fatalf("staged edit not protected: %+v %v", review.items, err)
 	}
 	exported, err := s.Export(ctx, ExportRequest{Package: installed.Package, InstallationID: installed.ID, Resources: []LocalRef{binding.Local}})
 	if err != nil {
@@ -169,12 +169,14 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 	if _, err := store.Update(item.ID, lore.ItemInput{Name: item.Name, Content: "Personal edit"}); err != nil {
 		t.Fatal(err)
 	}
+	collection.Items[0] = jsonBytes(t, map[string]any{"id": "item-0", "name": "Item 0", "type": "world", "content": "Another upstream edit"})
 	p = preview()
 	request.PreviewID = p.ID
-	if _, err := s.Plan(ctx, request); !errors.Is(err, ErrLocalModified) {
+	protected, err := s.Plan(ctx, request)
+	if err != nil || protected.Updates[0].State != "conflict" {
 		t.Fatalf("local edit not protected: %v", err)
 	}
-	request.ReplaceModified = true
+	request.Resolutions = map[string]map[string]string{"lore": {"item-0": "remote"}}
 	replaced, err := s.Plan(ctx, request)
 	if err != nil {
 		t.Fatal(err)

@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { UpdateReview } from './UpdateReview'
 import { ImportResourcePicker } from './ImportResourcePicker'
 import { useBookCreation } from '@/components/workbench/book-creation'
 import { CompatibilityReport } from '@/components/workbench/CharacterCardImportDialog'
@@ -44,6 +45,8 @@ import {
   previewSource,
   type Installation,
   type Plan,
+  type PlanRequest,
+  type UpdateItem,
   type Preview,
   type Source,
 } from './api'
@@ -91,6 +94,8 @@ export function ImportDialog({
       .map((r) => r.id) || [],
   )
   const [plan, setPlan] = useState<Plan>()
+  const [planRequest, setPlanRequest] = useState<PlanRequest>()
+  const [resolutions, setResolutions] = useState<Record<string, Record<string, string>>>({})
   const [sourceKind, setSourceKind] = useState('github')
   const [url, setURL] = useState(source?.url || '')
   const [ref, setRef] = useState(source?.ref || '')
@@ -106,6 +111,7 @@ export function ImportDialog({
   const [books, setBooks] = useState<BookRecord[]>([])
   const [grants, setGrants] = useState<Record<string, string[]>>({})
   const [names, setNames] = useState<Record<string, string>>({})
+  const [sharedResources, setSharedResources] = useState<'reuse' | 'copy'>('reuse')
   const [replace, setReplace] = useState(false)
   const [defaultsSelection, setDefaultsSelection] = useState<GameDefaultField[] | null>(null)
   const [busy, setBusy] = useState(!!source && !initialPreview)
@@ -341,6 +347,20 @@ export function ImportDialog({
             </Field>}
             {candidate && <ImportResourcePicker previewID={preview.preview_id} candidate={{ ...candidate, resources: availableResources }} selected={selected} onChange={(ids) => { setSelected(ids); setReplace(false) }} />}
 
+            {!installation && resources.some(resource => resource.kind.startsWith('preset.') || resource.kind === 'style.reference' || resource.kind === 'skill' && scope === 'user') && (
+              <Field>
+                <FieldLabel htmlFor="market-shared-resources">{t('market.import.sharedResources')}</FieldLabel>
+                <Select value={sharedResources} onValueChange={(value: 'reuse' | 'copy') => setSharedResources(value)}>
+                  <SelectTrigger id="market-shared-resources" className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="reuse">{t('market.import.reuseShared')}</SelectItem>
+                    <SelectItem value="copy">{t('market.import.copyShared')}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>{t('market.import.sharedHelp')}</FieldDescription>
+              </Field>
+            )}
+
             <div className="space-y-3">
               {resources.filter((resource) => resource.kind === 'skill' || resource.extension).map((resource) => (
                 <div key={resource.id} className="space-y-3 rounded-lg border p-3">
@@ -488,7 +508,7 @@ export function ImportDialog({
               </Field>
             )}
             {candidate && defaultOptions.length > 0 && <ImportGameDefaults candidate={candidate} resources={chosen} projectID={projectID} newBook={!!creatingBook} selected={defaultFields} onChange={setDefaultsSelection} />}
-            {(installation ||
+            {(!installation &&
               resources.some(
                 (resource) => resource.kind === 'project.cover' || resource.kind === 'project.creator',
               )) && (
@@ -508,14 +528,20 @@ export function ImportDialog({
         {plan && (
           <div className="space-y-3">
             <h3 className="font-medium">{plan.installation.package.name}</h3>
-            <ul className="divide-y rounded-lg border">
+            {installation && plan.updates ? <UpdateReview items={plan.updates} busy={busy} onResolve={(item: UpdateItem, choice: string) => {
+              const next = { ...resolutions, [item.resource_id]: { ...resolutions[item.resource_id], [item.member_id || '']: choice } }
+              void run(async () => {
+                const reviewed = await exchange<Plan>('/plans', { ...planRequest, resolutions: next })
+                setResolutions(next); setPlan(reviewed)
+              })
+            }} /> : <ul className="divide-y rounded-lg border">
               {plan.items.map((item) => (
                 <li
                   key={item.resource_id}
                   className="flex flex-wrap justify-between gap-2 p-3"
                 >
                   <span className="break-words">
-                    {item.name || item.local.id}
+                    {item.local.kind === 'skill' ? item.local.id : item.name || item.local.id}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {t(`market.actions.${item.action}`)} ·{' '}
@@ -523,7 +549,7 @@ export function ImportDialog({
                   </span>
                 </li>
               ))}
-            </ul>
+            </ul>}
             <p className="text-xs text-muted-foreground break-all">
               {preview?.source.commit
                 ? t('market.import.commit', { commit: preview.source.commit })
@@ -583,8 +609,7 @@ export function ImportDialog({
                     // Creation already selects the book on the server, even if planning later fails.
                     await bookCreation.onCreated(created.workspace)
                   }
-                  setPlan(
-                    await exchange<Plan>('/plans', {
+                  const request: PlanRequest = {
                       preview_id: preview.preview_id,
                       candidate_id: candidateID,
                       resources: selected.filter((id) => chosen.includes(id)),
@@ -593,11 +618,13 @@ export function ImportDialog({
                       installation_id: installation?.installation_id,
                       grants,
                       names,
+                      shared_resources: sharedResources,
                       replace_modified: replace,
                       update_mode: installation?.update_mode || 'manual',
                       ...(defaultFields.length ? { game_defaults_fields: defaultFields } : {}),
-                    }),
-                  )
+                  }
+                  const reviewed = await exchange<Plan>('/plans', request)
+                  setPlanRequest(request); setResolutions({}); setPlan(reviewed)
                 } else {
                   const installed = await exchange<Installation>(
                     `/plans/${plan.plan_id}/apply`,
@@ -625,7 +652,7 @@ export function ImportDialog({
               busy
                 ? !preview ? 'market.import.downloading' : 'market.working'
                 : plan
-                  ? 'market.import.install'
+                  ? installation ? 'market.update.apply' : 'market.import.install'
                   : preview
                     ? creatingBook ? 'market.import.createAndReview' : 'market.import.review'
                     : source ? 'market.contents.retry' : 'market.import.preview',

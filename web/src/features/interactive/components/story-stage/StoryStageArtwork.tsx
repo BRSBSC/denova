@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react'
+import type { StageCharacterLayout } from '@/features/settings/types'
 import { useEffect, useState } from 'react'
 import { CoverImage } from '@/components/cover-image'
 import { projectFileAssetURL } from '@/lib/api-client/project-files'
@@ -13,12 +15,13 @@ interface StoryStageArtworkProps {
   latest: boolean
   settings?: StoryPresentationSettings
   textHidden: boolean
+  characterLayout?: StageCharacterLayout
   scrimOpacity: number
 }
 
 // Key this component by project/story/branch. Only an immediate continuation at
 // the live head may retain a previously loaded image while its replacement loads.
-export function StoryStageArtwork({ projectId, turn, previousTurnId, latest, settings, textHidden, scrimOpacity }: StoryStageArtworkProps) {
+export function StoryStageArtwork({ projectId, turn, previousTurnId, latest, settings, textHidden, scrimOpacity, characterLayout = 'center' }: StoryStageArtworkProps) {
   const scene = `${turn?.id || ''}:${turn?.version_idx ?? 0}`
   const [continuity, setContinuity] = useState({ scene, turnId: turn?.id, latest, epoch: 0 })
   if (continuity.scene !== scene || continuity.latest !== latest) {
@@ -32,14 +35,20 @@ export function StoryStageArtwork({ projectId, turn, previousTurnId, latest, set
   if (!background && !characters.length) return null
 
   return (
-    <div data-testid="story-stage-artwork" className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+    <div data-testid="story-stage-artwork" className="nova-story-artwork pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
       {background && <StageImage fallbackKey={`${continuity.epoch}:${backgroundSlot}`} projectId={projectId} material={background} layer="background" />}
-      <div className="absolute inset-x-0 bottom-0 flex h-[88%] items-end justify-center">
-        {characters.map(character => (
-          <div key={character.item_id} className="relative h-full min-w-0 flex-1" style={{ maxWidth: characters.length === 1 ? '70%' : undefined }}>
-            <StageImage fallbackKey={String(continuity.epoch)} projectId={projectId} material={character} layer="character" />
-          </div>
-        ))}
+      <div className="nova-stage-characters" data-layout={characterLayout} data-single={characters.length === 1 || undefined}>
+        {characters.map((character, index) => {
+          // Wide stages use stable list positions; narrow stages retain cast order.
+          const side = characterLayout === 'sides' ? (characters.length === 1 || index % 2 === 1 ? 'right' : 'left') : characterLayout
+          const count = characterLayout === 'sides' ? Math.ceil(characters.length / 2) : characters.length
+          return (
+            <div key={character.item_id} className="nova-stage-character" data-side={side}
+              style={{ '--side-count': count, '--side-index': characterLayout === 'sides' ? Math.floor(index / 2) : index } as CSSProperties}>
+              <StageImage fallbackKey={String(continuity.epoch)} projectId={projectId} material={character} layer="character" />
+            </div>
+          )
+        })}
       </div>
       <div data-testid="story-stage-scrim" className="absolute inset-0 bg-[var(--nova-surface-2)] transition-opacity duration-200 motion-reduce:transition-none" style={{ opacity: textHidden ? 0 : scrimOpacity }} />
     </div>

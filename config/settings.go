@@ -136,7 +136,9 @@ type Settings struct {
 	InteractiveStageFontSize     *int     `toml:"interactive_stage_font_size,omitempty" json:"interactive_stage_font_size,omitempty"`
 	InteractiveStageScrimOpacity *float64 `toml:"interactive_stage_scrim_opacity,omitempty" json:"interactive_stage_scrim_opacity,omitempty"`
 	InteractiveStageLineHeight   *float64 `toml:"interactive_stage_line_height,omitempty" json:"interactive_stage_line_height,omitempty"`
-	InteractiveStageTextMaxWidth *int     `toml:"interactive_stage_text_max_width,omitempty" json:"interactive_stage_text_max_width,omitempty"`
+	// Character layout is a display preference with optional Project overrides.
+	InteractiveStageCharacterLayout string `toml:"interactive_stage_character_layout,omitempty" json:"interactive_stage_character_layout,omitempty"`
+	InteractiveStageTextMaxWidth    *int   `toml:"interactive_stage_text_max_width,omitempty" json:"interactive_stage_text_max_width,omitempty"`
 }
 
 func boolPtr(v bool) *bool        { return &v }
@@ -224,22 +226,23 @@ func DefaultSettings() Settings {
 			VersionSummary:   AgentModelOverride{ThinkingLevel: string(providers.ThinkingLevelOff)},
 			ToolAgent:        AgentModelOverride{ThinkingLevel: string(providers.ThinkingLevelOff)},
 		},
-		AgentTools:                   DefaultAgentToolSettings(),
-		WebAccess:                    DefaultWebAccessSettings(),
-		Labs:                         DefaultLabSettings(),
-		AgentSkills:                  AgentSkillSettings{},
-		AgentContexts:                DefaultAgentContextSettings(),
-		GeneralSubAgents:             DefaultAgentGeneralSubAgentSettings(),
-		SubAgents:                    nil,
-		PlanModeDefault:              boolPtr(false),
-		IDEStoryTellerID:             style.DefaultID,
-		IDEImagePresetID:             "game-cg",
-		WritingSkillDefault:          DefaultWritingSkillName,
-		InteractiveStoryTellerID:     style.DefaultID,
-		InteractiveStageFontSize:     intPtr(16),
-		InteractiveStageLineHeight:   floatPtr(1.78),
-		InteractiveStageScrimOpacity: floatPtr(0.75),
-		InteractiveStageTextMaxWidth: intPtr(896),
+		AgentTools:                      DefaultAgentToolSettings(),
+		WebAccess:                       DefaultWebAccessSettings(),
+		Labs:                            DefaultLabSettings(),
+		AgentSkills:                     AgentSkillSettings{},
+		AgentContexts:                   DefaultAgentContextSettings(),
+		GeneralSubAgents:                DefaultAgentGeneralSubAgentSettings(),
+		SubAgents:                       nil,
+		PlanModeDefault:                 boolPtr(false),
+		IDEStoryTellerID:                style.DefaultID,
+		IDEImagePresetID:                "game-cg",
+		WritingSkillDefault:             DefaultWritingSkillName,
+		InteractiveStoryTellerID:        style.DefaultID,
+		InteractiveStageFontSize:        intPtr(16),
+		InteractiveStageLineHeight:      floatPtr(1.78),
+		InteractiveStageScrimOpacity:    floatPtr(0.75),
+		InteractiveStageTextMaxWidth:    intPtr(896),
+		InteractiveStageCharacterLayout: "center",
 	}
 }
 
@@ -467,6 +470,9 @@ func Merge(parent, child Settings) Settings {
 	}
 	if child.InteractiveStageTextMaxWidth != nil {
 		out.InteractiveStageTextMaxWidth = child.InteractiveStageTextMaxWidth
+	}
+	if child.InteractiveStageCharacterLayout != "" {
+		out.InteractiveStageCharacterLayout = child.InteractiveStageCharacterLayout
 	}
 	return out
 }
@@ -862,12 +868,13 @@ func withResolvedLabs(settings Settings) Settings {
 	return settings
 }
 
-// PrepareWorkspaceAgentSettingsForWrite replaces only the Agent overrides that
+// PrepareWorkspaceAgentSettingsForWrite replaces only the overrides that
 // are intentionally workspace-scoped. Legacy general settings remain on disk so
 // the transition is reversible, but LoadLayered no longer applies them.
 func PrepareWorkspaceAgentSettingsForWrite(existing, incoming Settings) Settings {
 	scoped := workspaceAgentSettings(incoming)
 	existing.GameCreationDefaults = scoped.GameCreationDefaults
+	existing.InteractiveStageCharacterLayout = scoped.InteractiveStageCharacterLayout
 	existing.AgentRuntimes = scoped.AgentRuntimes
 	existing.AgentTools = scoped.AgentTools
 	existing.AgentPrompts = scoped.AgentPrompts
@@ -883,20 +890,21 @@ func PrepareWorkspaceAgentSettingsForWrite(existing, incoming Settings) Settings
 
 // workspaceAgentSettings defines the narrow workspace configuration boundary.
 // Native model selection and general Settings remain user-scoped. External
-// runtime preferences are Agent configuration and may have workspace overrides.
+// runtime preferences and stage character layout may have workspace overrides.
 func workspaceAgentSettings(settings Settings) Settings {
 	return Settings{
-		GameCreationDefaults:     settings.GameCreationDefaults,
-		AgentRuntimes:            settings.AgentRuntimes,
-		AgentTools:               settings.AgentTools,
-		AgentPrompts:             settings.AgentPrompts,
-		AgentSkills:              settings.AgentSkills,
-		AgentContexts:            settings.AgentContexts,
-		GeneralSubAgents:         settings.GeneralSubAgents,
-		SubAgents:                settings.SubAgents,
-		DefaultImageAgentID:      settings.DefaultImageAgentID,
-		AgentToolParallelism:     settings.AgentToolParallelism,
-		AgentSubAgentParallelism: settings.AgentSubAgentParallelism,
+		GameCreationDefaults:            settings.GameCreationDefaults,
+		InteractiveStageCharacterLayout: settings.InteractiveStageCharacterLayout,
+		AgentRuntimes:                   settings.AgentRuntimes,
+		AgentTools:                      settings.AgentTools,
+		AgentPrompts:                    settings.AgentPrompts,
+		AgentSkills:                     settings.AgentSkills,
+		AgentContexts:                   settings.AgentContexts,
+		GeneralSubAgents:                settings.GeneralSubAgents,
+		SubAgents:                       settings.SubAgents,
+		DefaultImageAgentID:             settings.DefaultImageAgentID,
+		AgentToolParallelism:            settings.AgentToolParallelism,
+		AgentSubAgentParallelism:        settings.AgentSubAgentParallelism,
 	}
 }
 

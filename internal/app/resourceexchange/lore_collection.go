@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -118,7 +119,7 @@ func (s *Service) exportLoreCollection(ctx context.Context, ref LocalRef) (map[s
 	return files, nil
 }
 
-func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, resource PreviewResource, binding *Binding, raw []byte, replaceModified bool, staged map[FileTarget][]byte, extra *[]FileTarget, importedAssets map[FileTarget]lore.Asset) error {
+func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, resource PreviewResource, binding *Binding, raw []byte, review *updateReview, staged map[FileTarget][]byte, extra *[]FileTarget, importedAssets map[FileTarget]lore.Asset) error {
 	portable, incoming, err := readLoreCollection(raw)
 	if err != nil {
 		return err
@@ -139,11 +140,6 @@ func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, re
 	if err != nil {
 		return err
 	}
-	// Check exactly the snapshot that will be merged and guarded by the commit
-	// revision. A separate live read here could miss an intervening user edit.
-	if !replaceModified && loreMembersState(current, *binding) != "unchanged" {
-		return ErrLocalModified
-	}
 	var collection lore.Collection
 	if len(staged[target]) > 0 {
 		if err := json.Unmarshal(staged[target], &collection); err != nil {
@@ -155,6 +151,7 @@ func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, re
 	if binding.Members == nil {
 		binding.Members = map[string]CollectionMember{}
 	}
+	applied := map[string]bool{}
 	// Merge by receipt identity, never by name. Missing upstream items remain local.
 	for i := range incoming {
 		sourceID := incoming[i].ID
@@ -162,6 +159,79 @@ func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, re
 		if !found {
 			member.ID = uuid.NewString()
 		}
+		var payload struct {
+			Materials *portableMaterials `json:"materials"`
+		}
+		if err := json.Unmarshal(portable.Items[i], &payload); err != nil {
+			return err
+		}
+		materials := portableMaterials{}
+		if payload.Materials != nil {
+			materials = *payload.Materials
+		}
+		sourceDigest, err := loreUpdateDigest(incoming[i], materials, func(name string) ([]byte, error) { return resourceAsset(previewDir, resource, name) })
+		if err != nil {
+			return err
+		}
+		currentDigest, localComparable := "missing", "missing"
+		var currentItem lore.Item
+		localBaselines := map[string]string{}
+		for _, item := range current {
+			if item.ID != member.ID {
+				continue
+			}
+			currentItem = item
+			currentDigest = loreDigest(item)
+			for _, material := range item.ResolvedMaterials {
+				if material.Path == "" {
+					continue
+				}
+				snapshot, readErr := s.snapshot(ctx, FileTarget{ProjectID: binding.Local.ProjectID, Path: material.Path})
+				if readErr != nil {
+					return readErr
+				}
+				localBaselines[material.Path] = snapshot.Revision
+				if baseline, tracked := binding.Baseline[material.Path]; tracked && snapshot.Revision != baseline {
+					currentDigest = "modified-material:" + snapshot.Revision
+				}
+			}
+			localComparable, err = s.localLoreUpdateDigest(ctx, binding.Local.ProjectID, item)
+			if err != nil {
+				if !os.IsNotExist(err) {
+					return err
+				}
+				localComparable = "missing-material"
+			}
+		}
+		// Local digests retain identity to detect deletions/edits; semantic
+		// equality with upstream additionally ignores generated material IDs.
+		incomingDigest := sourceDigest
+		if localComparable == sourceDigest {
+			incomingDigest = currentDigest
+		}
+		apply, acknowledge := review.decide(binding.ResourceID, sourceID, incoming[i].Name, member.SourceDigest, sourceDigest, member.Digest, currentDigest, incomingDigest)
+		if acknowledge {
+			member.SourceDigest = sourceDigest
+		}
+		member.UpstreamRemoved = false
+		if !apply {
+			if localComparable == sourceDigest {
+				member.Digest = loreDigest(currentItem)
+				maps.Copy(binding.Baseline, localBaselines)
+				// Reuse stable material identities when only package recommendations
+				// change. No content or Project settings are rewritten by adoption.
+				if payload.Materials != nil {
+					for i, material := range payload.Materials.Entries {
+						if material.AssetPath != "" && i < len(currentItem.ResolvedMaterials) {
+							importedAssets[FileTarget{ProjectID: binding.Local.ProjectID, Path: path.Join(resource.Root, material.AssetPath)}] = currentItem.ResolvedMaterials[i].Asset
+						}
+					}
+				}
+			}
+			binding.Members[sourceID] = member
+			continue
+		}
+		applied[sourceID] = true
 		incoming[i].ID = member.ID
 		at := slices.IndexFunc(collection.Items, func(item lore.Item) bool { return item.ID == member.ID })
 		if at >= 0 {
@@ -186,6 +256,9 @@ func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, re
 		return err
 	}
 	for i, item := range incoming {
+		if !applied[collectionSourceID(portable.Items[i])] {
+			continue
+		}
 		var payload struct {
 			Materials *portableMaterials `json:"materials"`
 		}
@@ -214,7 +287,32 @@ func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, re
 			ID string `json:"id"`
 		}
 		_ = json.Unmarshal(raw, &identity)
-		binding.Members[identity.ID] = CollectionMember{ID: incoming[i].ID, Digest: loreDigest(byID[incoming[i].ID])}
+		if !applied[identity.ID] {
+			continue
+		}
+		member := binding.Members[identity.ID]
+		member.Digest = loreDigest(byID[incoming[i].ID])
+		binding.Members[identity.ID] = member
+	}
+	retainedPaths := map[string]bool{}
+	for _, member := range binding.Members {
+		for _, material := range byID[member.ID].ResolvedMaterials {
+			if material.Path != "" {
+				retainedPaths[material.Path] = true
+			}
+		}
+	}
+	for name := range binding.Baseline {
+		if !retainedPaths[name] {
+			delete(binding.Baseline, name)
+		}
+	}
+	for id, member := range binding.Members {
+		if !slices.ContainsFunc(portable.Items, func(raw json.RawMessage) bool { return collectionSourceID(raw) == id }) {
+			member.UpstreamRemoved = true
+			binding.Members[id] = member
+			review.items = append(review.items, UpdateItem{ResourceID: binding.ResourceID, MemberID: id, Name: id, State: "upstream_removed"})
+		}
 	}
 	staged[target], err = os.ReadFile(filepath.Join(dir, filepath.FromSlash(target.Path)))
 	return err

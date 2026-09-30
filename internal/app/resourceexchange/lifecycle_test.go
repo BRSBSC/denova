@@ -180,9 +180,9 @@ func TestAutomaticUpdateReusesPendingPreviewAndPreservesLocalWork(t *testing.T) 
 		t.Fatal(err)
 	}
 	third := updateFixture(t, s, "Third", true)
-	_, err = s.Plan(ctx, PlanRequest{PreviewID: third.ID, CandidateID: third.Candidates[0].ID, Resources: []string{"skill"}, InstallationID: installed.ID})
-	if !errors.Is(err, ErrLocalModified) {
-		t.Fatalf("untracked local file was not protected: %v", err)
+	conflicted, err := s.Plan(ctx, PlanRequest{PreviewID: third.ID, CandidateID: third.Candidates[0].ID, Resources: []string{"skill"}, InstallationID: installed.ID})
+	if err != nil || len(conflicted.Updates) != 1 || conflicted.Updates[0].State != "conflict" {
+		t.Fatalf("untracked local file was not protected: %+v %v", conflicted.Updates, err)
 	}
 	if err := s.SetUpdateMode(ctx, installed.ID, "manual"); err != nil {
 		t.Fatal(err)

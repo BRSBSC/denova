@@ -785,7 +785,6 @@ export function ModeRouter(props: ModeRouterProps) {
       )}
 
       <SharedWorkbenchRoutes
-        onSwitchProject={quickSwitchBook}
         route={presentedMainRoute}
         isMounted={routeHost.isMounted}
         loadingLabel={t('router.loading')}

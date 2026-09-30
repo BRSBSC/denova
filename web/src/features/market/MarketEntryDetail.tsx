@@ -1,10 +1,12 @@
+import type { ReactNode } from 'react'
 import { ArrowLeft, Download, ExternalLink, Package } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { localized, type MarketEntry, type Source } from './api'
 
-export function MarketEntryDetail({ detail, acquired, onBack, onImport, onManage }: {
+export function MarketEntryDetail({ detail, acquired, onBack, onImport, onManage, updates }: {
+  updates?: ReactNode
   detail: MarketEntry
   acquired: number
   onBack: () => void
@@ -37,8 +39,9 @@ export function MarketEntryDetail({ detail, acquired, onBack, onImport, onManage
             <h2 className="text-sm font-semibold">{t('market.contents.get')}</h2>
             <p className="text-xs leading-relaxed text-muted-foreground">{t('market.contents.selectHelp')}</p>
           </div>
-          <Button className="h-auto min-h-9 w-full whitespace-normal" onClick={() => onImport(detail.source)}>
-            <Download data-icon="inline-start" />{t('market.contents.get')}
+          {updates}
+          <Button variant={acquired > 0 ? 'outline' : 'default'} className="h-auto min-h-9 w-full whitespace-normal" onClick={() => onImport(detail.source)}>
+            <Download data-icon="inline-start" />{t(acquired > 0 ? 'market.update.importElsewhere' : 'market.contents.get')}
           </Button>
           {acquired > 0 && <Button variant="outline" className="w-full" onClick={onManage}>{t('market.contents.acquired', { count: acquired })}</Button>}
           {detail.compatibility && <div className="space-y-2 @4xl:border-t @4xl:pt-4"><h3 className="hidden text-xs font-medium @4xl:block">{t('market.contents.compatibility')}</h3><p className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">{localized(detail.compatibility, i18n.language)}</p></div>}

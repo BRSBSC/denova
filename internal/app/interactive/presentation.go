@@ -45,11 +45,16 @@ func buildPresentationContext(workspace string, settings *interactive.StoryPrese
 	stageJSON, _ := json.Marshal(stage)
 	var content strings.Builder
 	fmt.Fprintf(&content, "Stage settings (background permits Agent background changes; default_background seeds only the opening; characters enables sprites): %s\nCurrent parent turn stage: %s\n", settingsJSON, stageJSON)
-	source := interactiveContextSource{Source: "LoreMaterials", Title: "Turn Presentation Materials", Purpose: "select optional background and character images for the completed turn", Limit: presentationContextMaxBytes}
+	source := interactiveContextSource{Source: "LoreMaterials", Title: "Turn Presentation Materials", Purpose: "select enabled stage images for characters present in the completed turn and optional background changes", Limit: presentationContextMaxBytes}
 	if !settings.Background && !settings.Characters {
 		content.WriteString("Both layers are disabled for Agent selection. Omit presentation; preserve the current background.\n")
 		source.Content = content.String()
 		return source
+	}
+	// Keep the enabled-layer requirement beside the catalog so opening turns do
+	// not treat an empty inherited cast as a reason to skip character selection.
+	if settings.Characters {
+		content.WriteString("Character images are enabled. For characters present in the final scene of this turn, including the opening, select matching available Lore images and submit presentation.characters changes with exact item_id/asset_id pairs. Preserve unchanged images; remove characters who have left with asset_id:null. Mere mentions or memories do not establish presence. If a character has no matching available image, omit that character; never invent a reference.\n")
 	}
 	items, err := lore.NewStore(workspace).List()
 	if err != nil {

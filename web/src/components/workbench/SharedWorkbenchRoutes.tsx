@@ -20,7 +20,6 @@ interface SharedWorkbenchRoutesProps {
   loadingLabel: string
   home: ComponentProps<typeof HomeView>
   automations: ComponentProps<typeof AutomationsView>
-  onSwitchProject: (path: string) => Promise<boolean>
   resourceTarget: ResourceTarget
   toolNavigationIntent: ToolNavigationIntent | null
 }
@@ -33,12 +32,11 @@ export function SharedWorkbenchRoutes({
   home,
   automations,
   resourceTarget,
-  onSwitchProject,
   toolNavigationIntent,
 }: SharedWorkbenchRoutesProps) {
   return (
     <>
-      {isMounted('market') && <WorkbenchRouteLayer visible={route === 'market'} loadingLabel={loadingLabel}><MarketView visible={route === 'market'} onSwitchProject={onSwitchProject} /></WorkbenchRouteLayer>}
+      {isMounted('market') && <WorkbenchRouteLayer visible={route === 'market'} loadingLabel={loadingLabel}><MarketView projectID={resourceTarget.kind === 'project' ? resourceTarget.projectId : undefined} visible={route === 'market'} /></WorkbenchRouteLayer>}
       {isMounted('extensions') && (
         <WorkbenchRouteLayer visible={route === 'extensions'} loadingLabel={loadingLabel}>
           <ExtensionsView visible={route === 'extensions'} />

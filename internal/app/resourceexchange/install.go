@@ -78,7 +78,7 @@ func (s *Service) Apply(ctx context.Context, id string) (Installation, error) {
 	selections := []platform.InstallSelection{}
 	leases := []skills.MutationTarget{}
 	for _, item := range plan.Items {
-		if item.Action == "keep" {
+		if item.Action == "keep" || item.Action == "reference" && item.Extension == nil {
 			continue
 		}
 		if item.Extension != nil && plan.BackupID == "" {
@@ -125,6 +125,15 @@ func (s *Service) Apply(ctx context.Context, id string) (Installation, error) {
 	}
 	mutate := func() error {
 		return skills.WithMutationLeases(ctx, leases, func() error {
+			for _, guard := range plan.SkillGuards {
+				state, err := s.skillLocalState(ctx, guard)
+				if err != nil {
+					return err
+				}
+				if state != "unchanged" && !(state == "missing" && len(guard.Baseline) == 0) {
+					return ErrLocalModified
+				}
+			}
 			if plan.BackupID != "" && plan.PlatformState != "" {
 				refs := []platform.PackageRef{}
 				for _, item := range plan.Items {
@@ -213,7 +222,7 @@ func (s *Service) Installations(ctx context.Context) ([]Installation, error) {
 				}
 				if !snapshot.Exists {
 					items[i].LocalState = "missing"
-				} else if snapshot.Revision != digest {
+				} else if fileContentDigest(binding.Local.Kind, snapshot.Content) != digest {
 					items[i].LocalState = "modified"
 				}
 			}
@@ -224,7 +233,7 @@ func (s *Service) Installations(ctx context.Context) ([]Installation, error) {
 				}
 				if found := slices.IndexFunc(installed, func(value platform.Installed) bool { return value.ID == binding.Local.ID && !value.Removed }); found < 0 {
 					items[i].LocalState = "missing"
-				} else if installed[found].CurrentRelease != binding.SourceDigest {
+				} else if installed[found].CurrentRelease != extensionBaseline(binding) {
 					items[i].LocalState = "modified"
 				} else if binding.Ownership == "reference" && !installed[found].Enabled {
 					items[i].LocalState = "unavailable"
@@ -296,6 +305,12 @@ func (s *Service) CheckUpdate(ctx context.Context, id string) (Preview, error) {
 			continue
 		}
 		state = "unchanged"
+		if item.ReviewedSource != "" {
+			if item.ReviewedSource != reviewedSource(candidate) {
+				state = "update_available"
+			}
+			continue
+		}
 		for _, binding := range item.Bindings {
 			if !slices.ContainsFunc(candidate.Resources, func(resource PreviewResource) bool {
 				return resource.ID == binding.ResourceID && resource.Digest == binding.SourceDigest

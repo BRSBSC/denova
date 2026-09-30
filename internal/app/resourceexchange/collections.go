@@ -93,3 +93,12 @@ func (s *Service) collectionSourceIDs(ctx context.Context, ref LocalRef) (map[st
 	}
 	return nil, fmt.Errorf("collection not found")
 }
+
+// Collection payloads have already passed identity validation before staging.
+func collectionSourceID(raw json.RawMessage) string {
+	var value struct {
+		ID string `json:"id"`
+	}
+	_ = json.Unmarshal(raw, &value)
+	return value.ID
+}

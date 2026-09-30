@@ -43,7 +43,7 @@ func openingMembersState(items []opening, binding Binding) string {
 	return collectionMembersState(digests, binding)
 }
 
-func stageOpeningCollection(binding *Binding, raw, current []byte, replaceModified bool) ([]byte, error) {
+func stageOpeningCollection(binding *Binding, raw, current []byte, review *updateReview) ([]byte, error) {
 	incoming, err := readOpeningCollection(raw)
 	if err != nil {
 		return nil, err
@@ -54,10 +54,6 @@ func stageOpeningCollection(binding *Binding, raw, current []byte, replaceModifi
 			return nil, err
 		}
 	}
-	// Compare the exact staged snapshot, which is revision-guarded on commit.
-	if !replaceModified && openingMembersState(next.Presets, *binding) != "unchanged" {
-		return nil, ErrLocalModified
-	}
 	if binding.Members == nil {
 		binding.Members = map[string]CollectionMember{}
 	}
@@ -67,14 +63,36 @@ func stageOpeningCollection(binding *Binding, raw, current []byte, replaceModifi
 		if !found {
 			member.ID = uuid.NewString()
 		}
+		sourceDigest := openingDigest(item)
 		item.ID = member.ID
 		index := slices.IndexFunc(next.Presets, func(existing opening) bool { return existing.ID == item.ID })
-		if index < 0 {
-			next.Presets = append(next.Presets, item)
-		} else {
-			next.Presets[index] = item
+		currentDigest := "missing"
+		if index >= 0 {
+			currentDigest = openingDigest(next.Presets[index])
 		}
-		binding.Members[sourceID] = CollectionMember{ID: item.ID, Digest: openingDigest(item)}
+		apply, acknowledge := review.decide(binding.ResourceID, sourceID, item.Title, member.SourceDigest, sourceDigest, member.Digest, currentDigest, openingDigest(item))
+		if apply {
+			if index < 0 {
+				next.Presets = append(next.Presets, item)
+			} else {
+				next.Presets[index] = item
+			}
+			member.Digest = openingDigest(item)
+		} else if currentDigest == openingDigest(item) {
+			member.Digest = currentDigest
+		}
+		if acknowledge {
+			member.SourceDigest = sourceDigest
+		}
+		member.UpstreamRemoved = false
+		binding.Members[sourceID] = member
+	}
+	for id, member := range binding.Members {
+		if !slices.ContainsFunc(incoming.Items, func(item opening) bool { return item.ID == id }) {
+			member.UpstreamRemoved = true
+			binding.Members[id] = member
+			review.items = append(review.items, UpdateItem{ResourceID: binding.ResourceID, MemberID: id, Name: id, State: "upstream_removed"})
+		}
 	}
 	// Entries omitted upstream remain local, matching Lore collection updates.
 	return json.MarshalIndent(next, "", "  ")

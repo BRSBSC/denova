@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { Snapshot } from '../../types'
 import { ChangesSummary } from './ChangesSummary'
 import { ActorArchiveList } from './ActorArchiveList'
+import { ActorLorePreview, type ActorLoreContext } from './ActorLorePreview'
 import type { StoryStateDisplayPreference } from './display-preference'
 import { applyStoryStateLayout, readStoryStateLayouts, writeStoryStateTemplateLayout, type StoryStateLayouts, type StoryStateTemplateLayout } from './layout-preference'
 import { LedgerFieldView } from './ledger-fields'
@@ -193,9 +194,9 @@ export function StoryStateLedger({ snapshot, displayPreference, onDisplayPrefere
 /**
  * Full-width state projection for secondary surfaces such as the Game Console
  * dialog. It reuses the stage ledger's grouping, field renderers, saved layout,
- * and Actor/world navigation without repeating the narrow sidebar treatment.
+ * and Actor/world navigation with an optional persistent character Lore sidebar.
  */
-export function StoryStateDetails({ snapshot }: { snapshot: Snapshot | null }) {
+export function StoryStateDetails({ snapshot, actorLore }: { snapshot: Snapshot | null; actorLore?: ActorLoreContext }) {
   const { t } = useTranslation()
   const { model, actorLedgers, worldLedger, allActors, actorTabs, hasWorldFacts, storyId } = useStoryStateLedgerData(snapshot)
   const layouts = useMemo(() => readStoryStateLayouts(storyId), [storyId])
@@ -221,6 +222,7 @@ export function StoryStateDetails({ snapshot }: { snapshot: Snapshot | null }) {
         selectedTab={selectedTab}
         layouts={layouts}
         panelMode={panelMode === 'expanded' ? 'expanded' : 'preview'}
+        actorLore={actorLore}
         onSelectedTabChange={setSelectedTab}
         onPanelModeChange={setPanelMode}
       />
@@ -275,6 +277,7 @@ function StateEntityPanels({
   panelMode,
   onSelectedTabChange,
   onPanelModeChange,
+  actorLore,
 }: {
   actorLedgers: StateLedgerPresentation[]
   actorTabs: Array<{ id: string; name: string }>
@@ -285,6 +288,7 @@ function StateEntityPanels({
   panelMode: 'preview' | 'expanded'
   onSelectedTabChange: (tab: string) => void
   onPanelModeChange: (mode: StoryStatePanelMode) => void
+  actorLore?: ActorLoreContext
 }) {
   const reducedMotion = useReducedMotionConfig()
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -312,17 +316,19 @@ function StateEntityPanels({
   if (actorLedgers.length === 0 && !showWorld) return null
 
   return (
-    <Tabs value={selectedTab} onValueChange={selectTab} className="gap-0">
+    <Tabs value={selectedTab} onValueChange={selectTab} className="@container/state gap-0">
       <StateEntityTabs actors={actorTabs} showWorld={showWorld} />
       <motion.div ref={viewportRef} style={{ height, overflow: 'hidden' }}>
         <div ref={contentRef}>
           {actorLedgers.map((ledger) => (
             <TabsContent key={ledger.id} value={ledger.id} forceMount hidden={selectedTab !== ledger.id} className="mt-0">
               <motion.div
+                className="grid min-w-0 items-start @min-[44rem]/state:has-[>aside]:grid-cols-[minmax(0,0.8fr)_minmax(0,2fr)] [&>div]:min-w-0"
                 initial={false}
                 animate={{ opacity: selectedTab === ledger.id ? 1 : 0 }}
                 transition={{ duration: reducedMotion ? 0 : 0.14, ease: novaEase }}
               >
+                {actorLore ? <ActorLorePreview actorId={ledger.id} name={ledger.name} context={actorLore} /> : null}
                 <ActorLedgerBody
                   ledger={ledger}
                   layout={layouts[ledger.templateId]}

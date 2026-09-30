@@ -1,0 +1,72 @@
+import { expect, test } from '../support/fixtures'
+import { createAndOpenBook, createStartedStory } from '../support/api'
+
+for (const theme of ['dark', 'light']) {
+  test(`character layouts persist and adapt in ${theme}`, async ({ page, request }) => {
+    test.setTimeout(120_000)
+    await request.patch('/api/settings', { data: { layer: 'user', changes: { theme, language: 'zh-CN', interactive_stage_character_layout: 'center', interactive_stage_scrim_opacity: 0.25 } } })
+    const book = await createAndOpenBook(request, `Character layout ${theme}`)
+    await createStartedStory(request, '角色布局验证')
+    let castCount = 3
+    // Rendering fixtures exercise arbitrary cast sizes without depending on model image selection.
+    await page.route('**/api/**/snapshot*', async route => {
+      const response = await route.fetch()
+      const snapshot = await response.json()
+      const characters = Array.from({ length: castCount }, (_, i) => ({ item_id: `cast-${i}`, asset_id: `sprite-${i}`, path: `sprite-${i}.svg`, name: 'Long character name '.repeat(10) }))
+      for (const turn of [snapshot.current_turn, ...(snapshot.turns || [])]) {
+        if (turn?.turn_result) turn.turn_result.presentation = { characters }
+      }
+      await route.fulfill({ response, json: snapshot })
+    })
+    await page.route('**/*sprite-*.svg*', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="420"><circle cx="90" cy="70" r="55" fill="#c69b69"/><path d="M45 140H135L175 420H5Z" fill="#708ca0"/></svg>' }))
+    await page.setViewportSize({ width: 1800, height: 1000 })
+    await page.goto('/')
+    await page.getByLabel('工作台侧边栏').getByRole('button', { name: '游戏', exact: true }).click()
+    await page.getByRole('tab', { name: '控制', exact: true }).click()
+    const defaults = page.getByRole('group', { name: '角色布局默认值', exact: true })
+    const project = page.getByRole('group', { name: '当前项目角色布局', exact: true })
+    const cast = page.locator('.nova-stage-characters')
+    await expect(cast.locator('img')).toHaveCount(3)
+    await defaults.getByRole('radio', { name: '靠左', exact: true }).click()
+    await expect(cast).toHaveAttribute('data-layout', 'left')
+    await project.getByRole('radio', { name: '两侧', exact: true }).click()
+    await expect(cast).toHaveAttribute('data-layout', 'sides')
+    const settingsURL = `/api/projects/${book.projectId}/settings`
+    await expect.poll(async () => (await (await request.get(settingsURL)).json()).workspace.interactive_stage_character_layout).toBe('sides')
+    await page.reload()
+    await expect(cast).toHaveAttribute('data-layout', 'sides')
+    await expect(cast.locator('img')).toHaveCount(3)
+    const stage = (await cast.boundingBox())!
+    const first = (await cast.locator('.nova-stage-character').nth(0).boundingBox())!
+    const second = (await cast.locator('.nova-stage-character').nth(1).boundingBox())!
+    expect(first.x + first.width).toBeLessThan(stage.x + stage.width / 2)
+    expect(second.x).toBeGreaterThan(stage.x + stage.width / 2)
+    await project.scrollIntoViewIfNeeded()
+    await page.screenshot({ path: test.info().outputPath(`characters-${theme}-wide.png`) })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect(cast.locator('.nova-stage-character').first()).toHaveCSS('position', 'relative')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: test.info().outputPath(`characters-${theme}-narrow.png`) })
+    await page.getByRole('button', { name: '显示控制台', exact: true }).click()
+    const consolePanel = page.getByRole('dialog', { name: '控制台', exact: true })
+    await consolePanel.getByRole('tab', { name: '控制', exact: true }).click()
+    await project.scrollIntoViewIfNeeded()
+    await expect(project.getByRole('radio', { name: '两侧', exact: true })).toBeVisible()
+    await page.screenshot({ path: test.info().outputPath(`character-controls-${theme}-narrow.png`) })
+    await page.setViewportSize({ width: 1800, height: 1000 })
+    await expect(cast.locator('.nova-stage-character').first()).toHaveCSS('position', 'absolute')
+    castCount = 1
+    await page.reload()
+    await expect(cast.locator('img')).toHaveCount(1)
+    await expect(cast.locator('.nova-stage-character')).toHaveAttribute('data-side', 'right')
+    await project.getByRole('radio', { name: '靠右', exact: true }).click()
+    await expect(cast).toHaveAttribute('data-layout', 'right')
+    await project.getByRole('radio', { name: '使用默认', exact: true }).click()
+    await expect(cast).toHaveAttribute('data-layout', 'left')
+    await expect.poll(async () => (await (await request.get(settingsURL)).json()).workspace.interactive_stage_character_layout).toBeUndefined()
+    castCount = 0
+    await page.reload()
+    await expect(page.getByTestId('story-stage-artwork')).toHaveCount(0)
+    await expect(project).toBeVisible()
+  })
+}

@@ -523,6 +523,7 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
                   story={storyStage}
                   console={<DirectorPanel
                       projectId={projectId}
+                      loreItems={loreItems}
                       storyId={currentStoryId}
                       story={currentStory}
                       planningTemplates={planningTemplates}

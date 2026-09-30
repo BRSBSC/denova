@@ -1,10 +1,33 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, Download, Package } from 'lucide-react'
+import {
+  ArchiveRestore,
+  ChevronDown,
+  Download,
+  FileArchive,
+  Link2,
+  Package,
+  RefreshCw,
+  Settings2,
+  Unlink,
+  Upload,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   Empty,
   EmptyDescription,
@@ -12,13 +35,16 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { exchange, type Installation, type Preview } from './api'
@@ -31,14 +57,12 @@ export function AcquiredResources({
   onChanged,
   onImport,
   onExport,
-  onManage,
   onDiscover,
 }: {
   installations: Installation[]
   onChanged: () => Promise<void>
   onImport: (props: Omit<ImportDialogProps, 'onClose' | 'onInstalled'>) => void
   onExport: (props: { installation?: Installation }) => void
-  onManage: (item: Installation) => Promise<void>
   onDiscover: () => void
 }) {
   const { t } = useTranslation()
@@ -55,6 +79,10 @@ export function AcquiredResources({
     try {
       await action()
     } catch (error) {
+      console.error('[market] installed package action failed', {
+        installationID: id,
+        error,
+      })
       toast.error(
         error instanceof Error
           ? error.message
@@ -67,138 +95,179 @@ export function AcquiredResources({
   return (
     <>
       {installations.length ? (
-        <div className="space-y-3">
-          {installations.map((item) => (
-            <Card key={item.installation_id} className="gap-0 py-0">
-              <button
-                className="flex w-full items-center gap-3 p-4 text-left"
-                aria-expanded={expanded === item.installation_id}
-                onClick={() =>
-                  setExpanded(
-                    expanded === item.installation_id
-                      ? undefined
-                      : item.installation_id,
-                  )
+        <div className="flex min-w-0 flex-col gap-3">
+          {installations.map((item) => {
+            const canCheckUpdate =
+              item.tracking === 'tracked' && item.source.kind !== 'file'
+            return (
+              <Collapsible
+                key={item.installation_id}
+                open={expanded === item.installation_id}
+                onOpenChange={(open) =>
+                  setExpanded(open ? item.installation_id : undefined)
                 }
+                asChild
               >
-                <Package className="size-5 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1">
-                  <span className="block font-medium break-words">
-                    {item.package.name}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {item.bindings.length} ·{' '}
-                    {t(
-                      `market.states.${item.tracking === 'detached' ? 'detached' : item.local_state || 'unchanged'}`,
-                    )}
-                  </span>
-                </span>
-                {item.remote_state === 'update_available' && (
-                  <Badge>{t('market.updateAvailable')}</Badge>
-                )}
-                {item.remote_state &&
-                  ['check_failed', 'identity_changed'].includes(
-                    item.remote_state,
-                  ) && (
-                    <Badge variant="outline">
-                      {t(`market.states.${item.remote_state}`)}
-                    </Badge>
-                  )}
-                <ChevronDown
-                  className={cn(
-                    'size-4 transition-transform',
-                    expanded === item.installation_id && 'rotate-180',
-                  )}
-                />
-              </button>
-              {expanded === item.installation_id && (
-                <CardContent className="space-y-4 border-t pt-4">
-                  <p className="break-all text-xs text-muted-foreground">
-                    {item.source.url || item.source.filename}
-                  </p>
-                  <ul className="space-y-1 text-sm">
-                    {item.bindings.map((binding) => (
-                      <li
-                        key={binding.resource_id}
-                        className="flex flex-wrap gap-2"
-                      >
-                        <span>{t(`market.kinds.${binding.local.kind}`)}</span>
-                        <span className="break-all text-muted-foreground">
-                          {binding.local.id}
+                <Card
+                  size="sm"
+                  data-testid="market-installation-card"
+                  className="@container/installation min-w-0 gap-0 py-0"
+                >
+                  <CardHeader className="relative grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 p-3 transition-colors hover:bg-muted/40 has-focus-visible:ring-2 has-focus-visible:ring-inset has-focus-visible:ring-ring has-data-[slot=card-description]:grid-rows-1 sm:p-4">
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                      <Package className="size-4" />
+                    </div>
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <CardTitle>
+                        <CollapsibleTrigger className="text-left [overflow-wrap:anywhere] after:absolute after:inset-0 focus:outline-none">
+                          {item.package.name}
+                        </CollapsibleTrigger>
+                      </CardTitle>
+                      <CardDescription className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <span>
+                          {t('market.acquired.resourceCount', {
+                            count: item.bindings.length,
+                          })}
                         </span>
-                        {binding.upstream_removed && (
-                          <Badge variant="outline">
-                            {t('market.states.upstream_removed')}
-                          </Badge>
+                        {item.package.version && (
+                          <span className="[overflow-wrap:anywhere]">
+                            v{item.package.version}
+                          </span>
                         )}
-                        {binding.ownership === 'reference' && (
-                          <Badge variant="outline">
-                            {t('market.actions.reference')}
-                          </Badge>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                  {item.tracking === 'tracked' &&
-                    item.source.kind !== 'file' && (
-                      <Select
-                        value={item.update_mode}
-                        onValueChange={(mode) =>
-                          void run(item.installation_id, async () => {
-                            await exchange(
-                              `/installations/${item.installation_id}/policy`,
-                              { update_mode: mode },
-                            )
-                            await onChanged()
-                          })
-                        }
-                      >
-                        <SelectTrigger aria-label={t('market.updatePolicy')}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="manual">
-                            {t('market.policy.manual')}
-                          </SelectItem>
-                          <SelectItem value="notify">
-                            {t('market.policy.notify')}
-                          </SelectItem>
-                          {item.bindings.every(
-                            (binding) =>
-                              binding.local.kind === 'skill' ||
-                              binding.local.kind === 'style.reference' ||
-                              binding.local.kind.startsWith('preset.'),
-                          ) && (
-                            <SelectItem value="auto_apply">
-                              {t('market.policy.auto_apply')}
-                            </SelectItem>
+                        <Badge variant="secondary">
+                          {t(
+                            `market.states.${item.tracking === 'detached' ? 'detached' : item.local_state || 'unchanged'}`,
                           )}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  <div className="flex flex-wrap gap-2">
-                    {item.game_defaults && Object.keys(item.game_defaults).length > 0 && <Button variant="outline" onClick={() => setDefaults(item)}>{t('gameDefaults.adopt')}</Button>}
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        void run(item.installation_id, () => onManage(item))
-                      }
-                    >
-                      {t('market.manage')}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => onExport({ installation: item })}
-                    >
-                      {t('market.export.title')}
-                    </Button>
-                    <Button variant="outline" onClick={() => setBackup(item)}>
-                      {t('market.backups.title')}
-                    </Button>
-                    {item.tracking === 'tracked' &&
-                      item.source.kind !== 'file' && (
+                        </Badge>
+                        {item.remote_state === 'update_available' &&
+                          item.tracking === 'tracked' && (
+                            <Badge>
+                              <RefreshCw data-icon="inline-start" />
+                              {t('market.updateAvailable')}
+                            </Badge>
+                          )}
+                        {item.remote_state &&
+                          ['check_failed', 'identity_changed'].includes(item.remote_state) && (
+                            <Badge variant="outline">
+                              {t(`market.states.${item.remote_state}`)}
+                            </Badge>
+                          )}
+                      </CardDescription>
+                    </div>
+                    <ChevronDown
+                      aria-hidden
+                      className={cn(
+                        'size-4 shrink-0 text-muted-foreground transition-transform',
+                        expanded === item.installation_id && 'rotate-180',
+                      )}
+                    />
+                  </CardHeader>
+                  <CollapsibleContent>
+                    <Separator />
+                    <CardContent className="grid min-w-0 gap-4 p-3 sm:p-4 @2xl/installation:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                      <div className="flex min-w-0 flex-col gap-3">
+                        <div className="flex min-w-0 flex-col gap-2">
+                          <h3 className="flex items-center gap-2 text-sm font-medium">
+                            {item.source.kind === 'file' ? (
+                              <FileArchive className="size-4 text-muted-foreground" />
+                            ) : (
+                              <Link2 className="size-4 text-muted-foreground" />
+                            )}
+                            {t('market.acquired.source')}
+                          </h3>
+                          <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                            {item.source.url || item.source.filename}
+                          </p>
+                        </div>
+                        {canCheckUpdate && (
+                          <FieldGroup>
+                            <Field>
+                              <FieldLabel htmlFor={`market-policy-${item.installation_id}`}>
+                                {t('market.updatePolicy')}
+                              </FieldLabel>
+                              <Select
+                                value={item.update_mode}
+                                disabled={!!pending}
+                                onValueChange={(mode) =>
+                                  void run(item.installation_id, async () => {
+                                    await exchange(
+                                      `/installations/${item.installation_id}/policy`,
+                                      { update_mode: mode },
+                                    )
+                                    await onChanged()
+                                  })
+                                }
+                              >
+                                <SelectTrigger
+                                  id={`market-policy-${item.installation_id}`}
+                                  className="w-full min-w-0 [&_[data-slot=select-value]]:truncate"
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectGroup>
+                                    <SelectItem value="manual">
+                                      {t('market.policy.manual')}
+                                    </SelectItem>
+                                    <SelectItem value="notify">
+                                      {t('market.policy.notify')}
+                                    </SelectItem>
+                                    {item.bindings.every((binding) =>
+                                      binding.local.kind === 'skill' ||
+                                      binding.local.kind === 'style.reference' ||
+                                      binding.local.kind.startsWith('preset.'),
+                                    ) && (
+                                      <SelectItem value="auto_apply">
+                                        {t('market.policy.auto_apply')}
+                                      </SelectItem>
+                                    )}
+                                  </SelectGroup>
+                                </SelectContent>
+                              </Select>
+                            </Field>
+                          </FieldGroup>
+                        )}
+                      </div>
+                      <div className="flex min-w-0 flex-col gap-2">
+                        <h3 className="text-sm font-medium">{t('market.contents.title')}</h3>
+                        <ul className="grid min-w-0 gap-x-4 gap-y-2 @xl/installation:grid-cols-2">
+                          {item.bindings.map((binding) => (
+                            <li
+                              key={binding.resource_id}
+                              className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                            >
+                              <span className="max-w-full text-sm">
+                                {t(`market.kinds.${binding.local.kind}`)}
+                              </span>
+                              <span
+                                title={binding.local.id}
+                                className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
+                              >
+                                {binding.local.id}
+                              </span>
+                              {(binding.upstream_removed || binding.ownership === 'reference') && (
+                                <div className="flex basis-full flex-wrap gap-1.5">
+                                  {binding.upstream_removed && (
+                                    <Badge variant="outline" className="h-auto whitespace-normal">
+                                      {t('market.states.upstream_removed')}
+                                    </Badge>
+                                  )}
+                                  {binding.ownership === 'reference' && (
+                                    <Badge variant="outline" className="h-auto whitespace-normal">
+                                      {t('market.actions.reference')}
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </CardContent>
+                    <CardFooter className="flex-wrap gap-2 p-3 sm:px-4">
+                      {canCheckUpdate && (
                         <Button
-                          variant="outline"
+                          size="sm"
                           disabled={!!pending}
                           onClick={() =>
                             void run(item.installation_id, async () => {
@@ -214,32 +283,50 @@ export function AcquiredResources({
                             })
                           }
                         >
+                          <RefreshCw data-icon="inline-start" />
                           {t('market.checkUpdate')}
                         </Button>
                       )}
-                    {item.tracking === 'tracked' && (
                       <Button
-                        variant="ghost"
+                        size="sm"
+                        variant="outline"
                         disabled={!!pending}
-                        onClick={() =>
-                          void run(item.installation_id, async () => {
-                            await exchange(
-                              `/installations/${item.installation_id}/detach`,
-                              {},
-                            )
+                        onClick={() => onExport({ installation: item })}
+                      >
+                        <Upload data-icon="inline-start" />
+                        {t('market.export.title')}
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={!!pending} onClick={() => setBackup(item)}>
+                        <ArchiveRestore data-icon="inline-start" />
+                        {t('market.backups.title')}
+                      </Button>
+                      {item.game_defaults && Object.keys(item.game_defaults).length > 0 && (
+                        <Button size="sm" variant="outline" disabled={!!pending} onClick={() => setDefaults(item)}>
+                          <Settings2 data-icon="inline-start" />
+                          {t('gameDefaults.adopt')}
+                        </Button>
+                      )}
+                      {item.tracking === 'tracked' && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={!!pending}
+                          onClick={() => void run(item.installation_id, async () => {
+                            await exchange(`/installations/${item.installation_id}/detach`, {})
                             await onChanged()
                             toast.success(t('market.detached'))
-                          })
-                        }
-                      >
-                        {t('market.detach')}
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-          ))}
+                          })}
+                        >
+                          <Unlink data-icon="inline-start" />
+                          {t('market.detach')}
+                        </Button>
+                      )}
+                    </CardFooter>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            )
+          })}
         </div>
       ) : (
         <Empty>

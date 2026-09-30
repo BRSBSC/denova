@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"path"
@@ -58,12 +59,19 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 	if err != nil {
 		return Plan{}, err
 	}
+	if request.SharedResources != "" && request.SharedResources != "reuse" && request.SharedResources != "copy" {
+		return Plan{}, fmt.Errorf("invalid shared resource import choice")
+	}
 	mode := request.UpdateMode
 	if mode == "" {
 		mode = "manual"
 	}
 	if mode != "manual" && mode != "notify" && mode != "auto_apply" {
 		return Plan{}, fmt.Errorf("invalid update mode")
+	}
+	review := &updateReview{choices: request.Resolutions}
+	if err := review.validate(); err != nil {
+		return Plan{}, err
 	}
 	now := time.Now().UTC()
 	installation := Installation{ID: uuid.NewString(), Package: candidate.Package, Source: preview.Source, ProjectID: request.ProjectID, Tracking: "tracked", UpdateMode: mode, CreatedAt: now, UpdatedAt: now, Bindings: []Binding{}}
@@ -83,7 +91,7 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 			return Plan{}, ErrSourceChanged
 		}
 		installation.ID, installation.CreatedAt, installation.ProjectID = old.ID, old.CreatedAt, old.ProjectID
-		installation.CheckedAt, installation.RemoteState = old.CheckedAt, "unchanged"
+		installation.CheckedAt, installation.RemoteState = now, "unchanged"
 		if request.UpdateMode == "" {
 			mode, installation.UpdateMode = old.UpdateMode, old.UpdateMode
 		}
@@ -125,6 +133,7 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 	}
 	// Assign every identity before rewriting typed references, independent of order.
 	for _, resource := range selected {
+		var referenceBaseline map[string]string
 		local := LocalRef{Kind: resource.Kind, Scope: "global", ID: uuid.NewString()}
 		ownership := "owned"
 		action := "create"
@@ -174,11 +183,25 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 				return Plan{}, err
 			}
 		}
-		if selectedLocals[local] {
+		if old.ID == "" {
+			var reused bool
+			local, referenceBaseline, reused, err = s.sharedImport(ctx, local, resource, installation, all, selectedLocals, request.SharedResources)
+			if err != nil {
+				return Plan{}, err
+			}
+			if reused {
+				ownership, action = "reference", "reference"
+				slog.InfoContext(ctx, "resource_import_reused", "installation", installation.ID, "resource", resource.ID, "kind", local.Kind, "local_id", local.ID)
+			}
+		} else if ownership == "reference" && resource.Extension == nil {
+			action = "reference"
+			referenceBaseline = maps.Clone(oldBindings[resource.ID].Baseline)
+		}
+		if selectedLocals[local] && ownership != "reference" {
 			return Plan{}, fmt.Errorf("multiple resources resolve to the same local identity; rename duplicate Skills")
 		}
 		selectedLocals[local] = true
-		if resource.Extension == nil && localOwners[local] != "" && localOwners[local] != installation.ID {
+		if resource.Extension == nil && ownership != "reference" && localOwners[local] != "" && localOwners[local] != installation.ID {
 			return Plan{}, ErrResourceOwned
 		}
 		if resource.Extension != nil {
@@ -238,26 +261,55 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 			}
 		}
 		binding := Binding{Requires: slices.Clone(resource.Requires), ResourceID: resource.ID, Local: local, Ownership: ownership, SourceDigest: resource.Digest, Baseline: map[string]string{}}
+		if ownership == "reference" && resource.Extension == nil {
+			binding.Baseline = referenceBaseline
+		}
 		binding.Members = maps.Clone(oldBindings[resource.ID].Members)
+		if collectionPath(resource.Kind) != "" {
+			binding.Baseline = maps.Clone(oldBindings[resource.ID].Baseline)
+			if binding.Baseline == nil {
+				binding.Baseline = map[string]string{}
+			}
+		}
+		if resource.Extension != nil {
+			binding.AppliedRelease = resource.Extension.Digest
+		}
 		plan.Installation.Bindings = append(plan.Installation.Bindings, binding)
 		plan.Items = append(plan.Items, PlanItem{ResourceID: resource.ID, Name: resource.Name, Local: local, Action: action, Extension: resource.Extension, Grants: request.Grants[resource.ID]})
 	}
+	blockedNew := map[string]bool{}
 	for i, resource := range selected {
 		binding := &plan.Installation.Bindings[i]
+		if binding.Ownership == "reference" && resource.Extension == nil {
+			review.items = append(review.items, UpdateItem{ResourceID: resource.ID, Name: resource.Name, State: "unchanged"})
+			continue
+		}
+		if oldBindings[resource.ID].SourceDigest != resource.Digest && slices.ContainsFunc(resource.Requires, review.pending) {
+			review.items = append(review.items, UpdateItem{ResourceID: resource.ID, Name: resource.Name, State: "blocked"})
+			plan.Items[i].Action = "keep"
+			if previous, ok := oldBindings[resource.ID]; ok {
+				*binding = previous
+			} else {
+				blockedNew[resource.ID] = true
+			}
+			continue
+		}
 		location := filepath.Join(dir, "files", filepath.FromSlash(resource.Path))
 		if resource.Extension != nil {
+			if previous, ok := oldBindings[resource.ID]; ok && previous.Ownership == "owned" {
+				if err := s.reviewExtension(previous, binding, &plan.Items[i], review); err != nil {
+					return Plan{}, err
+				}
+			} else {
+				state := plan.Items[i].Action
+				if state == "reference" {
+					state = "unchanged"
+				}
+				review.items = append(review.items, UpdateItem{ResourceID: resource.ID, Name: resource.Name, State: state})
+			}
 			continue
 		}
 		if resource.Kind == "skill" {
-			if previous, ok := oldBindings[resource.ID]; ok && !request.ReplaceModified {
-				state, err := s.skillLocalState(ctx, previous)
-				if err != nil {
-					return Plan{}, err
-				}
-				if state != "unchanged" {
-					return Plan{}, ErrLocalModified
-				}
-			}
 			files, err := readFiles(location)
 			if err != nil {
 				return Plan{}, err
@@ -296,7 +348,7 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 			var target FileTarget
 			if binding.Local.Scope == "project" {
 				var extra []FileTarget
-				target, err = s.stageProject(ctx, dir, &extra, resource, binding, raw, request.ReplaceModified, staged, expected, importedAssets)
+				target, err = s.stageProject(ctx, dir, &extra, resource, binding, raw, review, staged, expected, importedAssets)
 				targets[resource.ID] = append(targets[resource.ID], extra...)
 			} else {
 				var content []byte
@@ -316,27 +368,50 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 			if _, ok := expected[target]; !ok {
 				expected[target] = snapshot.Revision
 			}
-			if binding.Local.Kind == "project.creator" && snapshot.Exists {
+			if binding.Local.Kind == "project.creator" && snapshot.Exists && old.ID == "" {
 				if !request.ReplaceModified {
 					return Plan{}, ErrLocalModified
 				}
 				plan.Items[i].Action = "update"
 			}
-			if oldBinding, ok := oldBindings[resource.ID]; ok {
-				if baseline, tracked := oldBinding.Baseline[target.Path]; (tracked && snapshot.Revision != baseline || !tracked && snapshot.Exists && binding.Local.Kind == "skill") && !request.ReplaceModified {
-					return Plan{}, ErrLocalModified
-				}
-			} else if snapshot.Exists && binding.Local.Kind == "skill" {
+			if _, updating := oldBindings[resource.ID]; !updating && snapshot.Exists && binding.Local.Kind == "skill" {
 				return Plan{}, ErrSkillExists
-			} else if snapshot.Exists && binding.Local.Kind == "project.cover" {
+			} else if snapshot.Exists && binding.Local.Kind == "project.cover" && old.ID == "" {
 				if !request.ReplaceModified {
 					return Plan{}, ErrLocalModified
 				}
 				plan.Items[i].Action = "update"
 			}
 			if content := staged[target]; content != nil && target.Path != collectionPath(binding.Local.Kind) {
-				binding.Baseline[target.Path] = revisionfile.Revision(content)
+				binding.Baseline[target.Path] = fileContentDigest(binding.Local.Kind, content)
 			}
+		}
+		if previous, ok := oldBindings[resource.ID]; ok {
+			if collectionPath(resource.Kind) == "" {
+				if err := s.reviewFiles(ctx, previous, binding, &plan.Items[i], targets[resource.ID], staged, expected, review, &plan); err != nil {
+					return Plan{}, err
+				}
+			} else if review.pending(resource.ID) {
+				binding.SourceDigest = previous.SourceDigest
+			}
+		} else if collectionPath(resource.Kind) == "" {
+			review.items = append(review.items, UpdateItem{ResourceID: resource.ID, Name: resource.Name, State: "create"})
+		}
+	}
+	plan.Installation.Bindings = slices.DeleteFunc(plan.Installation.Bindings, func(binding Binding) bool { return blockedNew[binding.ResourceID] })
+	plan.Updates = review.items
+	plan.Installation.ReviewedSource = reviewedSource(candidate)
+	// Automatic grants cannot acknowledge additions or dependency changes that
+	// require the user to review a broader resource selection.
+	if request.automatic && len(selected) < len(candidate.Resources) {
+		plan.Installation.ReviewedSource = old.ReviewedSource
+		plan.Installation.RemoteState = "update_available"
+	}
+	for _, item := range review.items {
+		if item.State == "conflict" || item.State == "blocked" {
+			plan.Installation.RemoteState = "update_available"
+			plan.Installation.ReviewedSource = old.ReviewedSource
+			break
 		}
 	}
 	// Only resources selected in this plan can be adopted during import.
@@ -344,6 +419,12 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 		available, err := resolvePackageGameDefaults(candidate, plan.Installation.Bindings, importedAssets)
 		if err != nil {
 			return Plan{}, err
+		}
+		if available != nil && candidate.GameDefaults != nil && candidate.GameDefaults.DefaultBackground != nil && old.GameDefaults != nil && available.DefaultBackground == nil {
+			bg := candidate.GameDefaults.DefaultBackground
+			if slices.ContainsFunc(selected, func(resource PreviewResource) bool { return resource.ID == bg.ResourceID }) && !review.pending(bg.ResourceID) {
+				available.DefaultBackground = old.GameDefaults.DefaultBackground
+			}
 		}
 		if _, err := available.Select(request.GameDefaultsFields); err != nil {
 			return Plan{}, err
@@ -358,6 +439,11 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 		binding.UpstreamRemoved = !slices.ContainsFunc(candidate.Resources, func(resource PreviewResource) bool { return resource.ID == binding.ResourceID })
 		plan.Installation.Bindings = append(plan.Installation.Bindings, binding)
 		plan.Items = append(plan.Items, PlanItem{ResourceID: binding.ResourceID, Name: binding.Local.ID, Local: binding.Local, Action: "keep"})
+		state := "keep"
+		if binding.UpstreamRemoved {
+			state = "upstream_removed"
+		}
+		plan.Updates = append(plan.Updates, UpdateItem{ResourceID: binding.ResourceID, Name: binding.Local.ID, State: state})
 	}
 	if !slices.ContainsFunc(plan.Installation.Bindings, func(binding Binding) bool { return binding.Local.ProjectID != "" }) {
 		plan.Installation.ProjectID = ""
@@ -371,22 +457,13 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 	if candidate.GameDefaults != nil && candidate.GameDefaults.DefaultBackground != nil && old.GameDefaults != nil && old.GameDefaults.DefaultBackground != nil && plan.Installation.GameDefaults.DefaultBackground == nil {
 		bg := candidate.GameDefaults.DefaultBackground
 		for _, binding := range old.Bindings {
-			if binding.ResourceID == bg.ResourceID && binding.Members[bg.ItemID].ID == old.GameDefaults.DefaultBackground.ItemID && !slices.ContainsFunc(selected, func(resource PreviewResource) bool { return resource.ID == bg.ResourceID }) {
+			if binding.ResourceID == bg.ResourceID && binding.Members[bg.ItemID].ID == old.GameDefaults.DefaultBackground.ItemID {
 				plan.Installation.GameDefaults.DefaultBackground = old.GameDefaults.DefaultBackground
 			}
 		}
 	}
 	if err := s.stageGameDefaults(ctx, request, &plan, staged, expected); err != nil {
 		return Plan{}, err
-	}
-	// Shared collection baselines describe the final collection, after all members.
-	for i := range plan.Installation.Bindings {
-		binding := &plan.Installation.Bindings[i]
-		for _, target := range targets[binding.ResourceID] {
-			if staged[target] != nil && target.Path != collectionPath(binding.Local.Kind) {
-				binding.Baseline[target.Path] = revisionfile.Revision(staged[target])
-			}
-		}
 	}
 	if slices.ContainsFunc(plan.Items, func(item PlanItem) bool { return item.Extension != nil }) {
 		plan.PlatformState, err = s.platform.InstallState()
@@ -396,6 +473,15 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 	}
 	if err := validateUpdateMode(mode, plan.Installation); err != nil {
 		return Plan{}, err
+	}
+	if old.ID != "" {
+		conflicts := 0
+		for _, item := range plan.Updates {
+			if item.State == "conflict" || item.State == "blocked" {
+				conflicts++
+			}
+		}
+		slog.InfoContext(ctx, "resource_update_planned", "installation", old.ID, "units", len(plan.Updates), "pending", conflicts)
 	}
 	record, err := json.Marshal(plan.Installation)
 	if err != nil {

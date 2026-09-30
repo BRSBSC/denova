@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fetchProjectSettings } from '@/features/settings/api'
-import { projectSettingsTarget, subscribeSettingsTarget } from '@/features/settings/query'
+import type { StageCharacterLayout } from '@/features/settings/types'
+import { fetchSettings, fetchProjectSettings } from '@/features/settings/api'
+import { GLOBAL_SETTINGS_TARGET, projectSettingsTarget, subscribeSettingsTarget } from '@/features/settings/query'
 
 const DEFAULT_STAGE_LINE_HEIGHT = 1.78
-const DEFAULT_STAGE_PREFERENCES = { lineHeight: DEFAULT_STAGE_LINE_HEIGHT, scrimOpacity: 0.75, textMaxWidth: 896 }
+const DEFAULT_STAGE_PREFERENCES = {
+  lineHeight: DEFAULT_STAGE_LINE_HEIGHT,
+  scrimOpacity: 0.75,
+  textMaxWidth: 896,
+  characterLayout: 'center' as StageCharacterLayout,
+  globalCharacterLayout: 'center' as StageCharacterLayout,
+  projectCharacterLayout: undefined as StageCharacterLayout | undefined,
+}
 
 export function useStagePreferences(projectId: string) {
   const [preferences, setPreferences] = useState(DEFAULT_STAGE_PREFERENCES)
@@ -14,13 +22,16 @@ export function useStagePreferences(projectId: string) {
     setPreferences({
       lineHeight: clampNumber(effective.interactive_stage_line_height, 1.35, 2.4, DEFAULT_STAGE_LINE_HEIGHT),
       scrimOpacity: clampNumber(effective.interactive_stage_scrim_opacity, 0, 1, 0.75),
+      characterLayout: effective.interactive_stage_character_layout || 'center',
+      globalCharacterLayout: settings.inherited?.workspace?.interactive_stage_character_layout || settings.user?.interactive_stage_character_layout || 'center',
+      projectCharacterLayout: settings.workspace?.interactive_stage_character_layout || undefined,
       textMaxWidth: clampNumber(effective.interactive_stage_text_max_width, 480, 1600, 896),
     })
   }, [])
 
   const load = useCallback(async () => {
     try {
-      applySettings(await fetchProjectSettings(normalizedProjectId))
+      applySettings(await (normalizedProjectId ? fetchProjectSettings(normalizedProjectId) : fetchSettings()))
     } catch (error) {
       console.warn('[use-stage-preferences.ts] failed to load story stage display settings', error)
       setPreferences(DEFAULT_STAGE_PREFERENCES)
@@ -28,12 +39,8 @@ export function useStagePreferences(projectId: string) {
   }, [applySettings, normalizedProjectId])
 
   useEffect(() => {
-    if (!normalizedProjectId) {
-      setPreferences(DEFAULT_STAGE_PREFERENCES)
-      return
-    }
     void load()
-    return subscribeSettingsTarget(projectSettingsTarget(normalizedProjectId), applySettings)
+    return subscribeSettingsTarget(normalizedProjectId ? projectSettingsTarget(normalizedProjectId) : GLOBAL_SETTINGS_TARGET, applySettings)
   }, [applySettings, load, normalizedProjectId])
 
   return preferences

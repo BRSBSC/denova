@@ -42,11 +42,11 @@ import {
   type MarketSection,
   type MarketCategory,
 } from './MarketSidebar'
+import { MarketInstallationUpdates } from './MarketInstallationUpdates'
 import { MarketEntryDetail } from './MarketEntryDetail'
 import { MarketEntryCard } from './MarketEntryCard'
 import { useWorkspaceStore } from '@/stores/workspace-store'
 import { cn } from '@/lib/utils'
-import { getBooks } from '@/lib/api'
 import { ImportDialog, type ImportDialogProps } from './ImportDialog'
 import { ExportDialog } from './ExportDialog'
 import { AcquiredResources } from './AcquiredResources'
@@ -60,11 +60,11 @@ import {
 } from './api'
 
 export function MarketView({
+  projectID,
   visible,
-  onSwitchProject,
 }: {
+  projectID?: string
   visible: boolean
-  onSwitchProject: (path: string) => Promise<boolean>
 }) {
   const { t, i18n } = useTranslation()
   const requestedInstallation = useWorkspaceStore(
@@ -140,31 +140,6 @@ export function MarketView({
   useEffect(() => {
     setPage(1)
   }, [query, category, tag, sort])
-  const openDomain = async (item: Installation) => {
-    if (item.project_id) {
-      const book = (await getBooks()).find(
-        (book) => book.project_id === item.project_id,
-      )
-      if (!book) throw new Error(t('market.states.unavailable'))
-      if (!(await onSwitchProject(book.path))) return
-    }
-    const kinds = item.bindings.map((b) => b.local.kind)
-    useWorkspaceStore
-      .getState()
-      .setMode(
-        kinds.some((k) => k.startsWith('extension.'))
-          ? 'extensions'
-          : kinds.includes('skill')
-            ? 'skills'
-            : kinds.some(
-                  (kind) => kind === 'lore.collection' || kind === 'game.openings' || kind === 'project.creator',
-                )
-              ? 'lore'
-              : kinds.includes('project.cover')
-                ? 'books'
-                : 'presets',
-      )
-  }
   const updates = installations.filter(
     (item) =>
       item.tracking === 'tracked' && item.remote_state === 'update_available',
@@ -466,7 +441,6 @@ export function MarketView({
                     onChanged={refreshInstalled}
                     onImport={setImporting}
                     onExport={setExporting}
-                    onManage={openDomain}
                     onDiscover={() => setTab('discover')}
                   />
                 )
@@ -477,6 +451,7 @@ export function MarketView({
             <MarketEntryDetail
               key={detail.id}
               detail={detail}
+              updates={<MarketInstallationUpdates projectID={projectID} installations={installations.filter(item => item.tracking === 'tracked' && item.package.id === detail.id && item.source.kind === detail.source.kind && item.source.url === detail.source.url && (item.source.ref || '') === (detail.source.ref || '') && (item.source.path || '') === (detail.source.path || ''))} onImport={setImporting} onChanged={refreshInstalled} />}
               acquired={installations.filter((item) => item.tracking === 'tracked' && item.source.url === detail.source.url && (item.source.path || '') === (detail.source.path || '')).length}
               onManage={() => { setDetail(undefined); setTab('acquired'); setCategory('all') }}
               onBack={() => setDetail(undefined)}

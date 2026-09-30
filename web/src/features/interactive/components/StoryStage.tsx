@@ -638,7 +638,7 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
 
   return (
     <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--nova-surface-2)]" style={{ '--nova-story-text-max-width': `${stagePreferences.textMaxWidth}px` } as CSSProperties}>
-      {!storySetupVisible && <StoryStageArtwork key={`${projectId}:${stageKey}`} previousTurnId={previousPresentationTurnId} projectId={projectId} turn={presentationTurn} latest={historyWindow.followLatest && presentationTurn?.id === snapshot?.current_turn?.id} settings={story?.presentation_settings} textHidden={artworkOnly} scrimOpacity={stagePreferences.scrimOpacity} />}
+      {!storySetupVisible && <StoryStageArtwork key={`${projectId}:${stageKey}`} previousTurnId={previousPresentationTurnId} projectId={projectId} turn={presentationTurn} latest={historyWindow.followLatest && presentationTurn?.id === snapshot?.current_turn?.id} settings={story?.presentation_settings} textHidden={artworkOnly} scrimOpacity={stagePreferences.scrimOpacity} characterLayout={stagePreferences.characterLayout} />}
       <div data-testid="story-stage-card" className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <StoryStageHeader isMobile={isMobile} controls={stageControls} />
         <div className="nova-story-speech-playback shrink-0 px-3" style={{ visibility: artworkOnly ? 'hidden' : undefined }} inert={artworkOnly}><SpeechPlayback owner={stageKey} /></div>
@@ -726,7 +726,7 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
                     displayPreference={stateDisplayPreference}
                     onDisplayPreferenceChange={onStateDisplayPreferenceChange}
                     detailsAction={
-                      <StateDetailsDialog snapshot={snapshot} trigger={
+                      <StateDetailsDialog projectId={projectId} loreItems={loreItems} protagonist={story?.protagonist} snapshot={snapshot} trigger={
                         <Button type="button" variant="ghost" size="sm" aria-label={t('storyStage.state.viewAll')}>
                           <Maximize2 data-icon="inline-start" />
                           <span className="story-state-ledger__details-label">{t('storyStage.state.viewAll')}</span>

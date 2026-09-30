@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { LoreItem } from '@/lib/api-client/types'
 import type {
   BranchSummary,
   GamePlanningTemplate,
@@ -22,6 +23,7 @@ export interface DirectorConsoleProps {
   projectId?: string
   storyId?: string
   story?: StorySummary
+  loreItems?: LoreItem[]
   planningTemplates?: GamePlanningTemplate[]
   tellers?: Teller[]
   imagePresets?: ImagePreset[]
@@ -45,6 +47,7 @@ export function DirectorConsole({
   projectId,
   storyId,
   story,
+  loreItems,
   planningTemplates = [],
   tellers = [],
   imagePresets = [],
@@ -113,6 +116,9 @@ export function DirectorConsole({
     activeView = (
       <OverviewView
         key={branchId}
+        projectId={projectId}
+        loreItems={loreItems}
+        protagonist={story?.protagonist}
         snapshot={snapshot}
         stateError={stateError}
         plan={snapshot?.branch_plan}
