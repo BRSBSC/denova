@@ -15,6 +15,7 @@ import { AgentTaskControls } from '@/components/Chat/AgentTaskControls'
 import { CONTEXT_ANALYSIS_SIMULATED_MESSAGE } from '@/components/Chat/ContextAnalysisDialog'
 import { MessageList, type TurnScrollRequest } from '@/components/Chat/MessageList'
 import { AgentSubAgentSessionPanel } from '@/components/Chat/AgentSubAgentSessionPanel'
+import { useToolNavigation } from '@/components/Chat/tool-navigation'
 import type { ComposerTokenInputHandle, ComposerTokenSpec, ComposerTrigger } from '@/components/Chat/composer-token-input'
 import type { ContextAnalysis } from '@/lib/api'
 import type { AgentUIMessage } from '@/lib/agent-ui'
@@ -55,6 +56,7 @@ const DEFAULT_READING_FONT_SIZE = 18
 const EMPTY_STAGE_RUN = emptyStoryStageRun()
 
 export function StoryStage({ active = true, projectId, workspace, styleSceneSuggestions = [], stories = [], story, tellers = [], planningTemplates = [], imagePresets = [], recentNarrativeStyleID = DEFAULT_NARRATIVE_STYLE_ID, narrativeStyleLoading = false, storyId, branchId, snapshot, snapshotLoading = false, loreItems = [], bookOpeningPresets = [], directorPanelVisible = true, stateDisplayPreference = DEFAULT_STORY_STATE_DISPLAY, onStorySelect = noop, onStoryCreate = noop, onStorySetupUpdate = noop, onStoryDelete = noop, onStoryRename, onRequestLoreInit, onOpenDirectorConfig, onToggleDirectorPanel, onRequestCreateBranch, onStateDisplayPreferenceChange = noopStateDisplayPreferenceChange, onTurnPersisted = noopTurnPersisted, onDone }: StoryStageProps) {
+  const navigation = useToolNavigation()
   const { t } = useTranslation()
   const gameStories = useGameStories()
   const [localCreating, setLocalCreating] = useState(false)
@@ -723,6 +725,12 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
                 afterContent={historyWindow.followLatest && !streaming && storyStateModel.hasState && stateDisplayPreference !== 'director-only' ? (
                   <StoryStateLedger
                     snapshot={snapshot}
+                    actorLore={{
+                      projectId,
+                      items: loreItems,
+                      protagonist: story?.protagonist,
+                      onOpenItem: navigation ? (id) => navigation.open({ kind: 'lore_item', id }) : undefined,
+                    }}
                     displayPreference={stateDisplayPreference}
                     onDisplayPreferenceChange={onStateDisplayPreferenceChange}
                     detailsAction={

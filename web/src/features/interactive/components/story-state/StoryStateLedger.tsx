@@ -49,6 +49,7 @@ interface StoryStateLedgerProps {
   displayPreference: StoryStateDisplayPreference
   onDisplayPreferenceChange: (value: StoryStateDisplayPreference) => void
   detailsAction?: ReactNode
+  actorLore?: ActorLoreContext
 }
 
 interface StateLedgerPresentation {
@@ -67,7 +68,7 @@ interface StateLedgerPresentation {
  * sections with a "show all" affordance; the turn's state delta surfaces once in the
  * summary row plus per-field change chips.
  */
-export function StoryStateLedger({ snapshot, displayPreference, onDisplayPreferenceChange, detailsAction }: StoryStateLedgerProps) {
+export function StoryStateLedger({ snapshot, displayPreference, onDisplayPreferenceChange, detailsAction, actorLore }: StoryStateLedgerProps) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
   const { model, actorLedgers, worldLedger, allActors, actorTabs, hasWorldFacts, storyId } = useStoryStateLedgerData(snapshot)
@@ -139,6 +140,7 @@ export function StoryStateLedger({ snapshot, displayPreference, onDisplayPrefere
               type="button"
               variant="ghost"
               size="icon-sm"
+              className="story-state-ledger__action"
               aria-label={collapsed ? t('storyStage.state.expand') : t('storyStage.state.collapse')}
             >
               {collapsed ? <ChevronDown data-icon="inline-start" /> : <ChevronUp data-icon="inline-start" />}
@@ -159,6 +161,7 @@ export function StoryStateLedger({ snapshot, displayPreference, onDisplayPrefere
               showWorld={hasWorldFacts}
               selectedTab={selectedTab}
               layouts={layouts}
+              actorLore={actorLore}
               panelMode={panelMode === 'expanded' ? 'expanded' : 'preview'}
               onSelectedTabChange={setSelectedTab}
               onPanelModeChange={setPanelMode}
@@ -223,6 +226,7 @@ export function StoryStateDetails({ snapshot, actorLore }: { snapshot: Snapshot 
         layouts={layouts}
         panelMode={panelMode === 'expanded' ? 'expanded' : 'preview'}
         actorLore={actorLore}
+        lorePresentation="details"
         onSelectedTabChange={setSelectedTab}
         onPanelModeChange={setPanelMode}
       />
@@ -278,6 +282,7 @@ function StateEntityPanels({
   onSelectedTabChange,
   onPanelModeChange,
   actorLore,
+  lorePresentation = 'cover',
 }: {
   actorLedgers: StateLedgerPresentation[]
   actorTabs: Array<{ id: string; name: string }>
@@ -289,6 +294,7 @@ function StateEntityPanels({
   onSelectedTabChange: (tab: string) => void
   onPanelModeChange: (mode: StoryStatePanelMode) => void
   actorLore?: ActorLoreContext
+  lorePresentation?: 'cover' | 'details'
 }) {
   const reducedMotion = useReducedMotionConfig()
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -328,11 +334,12 @@ function StateEntityPanels({
                 animate={{ opacity: selectedTab === ledger.id ? 1 : 0 }}
                 transition={{ duration: reducedMotion ? 0 : 0.14, ease: novaEase }}
               >
-                {actorLore ? <ActorLorePreview actorId={ledger.id} name={ledger.name} context={actorLore} /> : null}
+                {actorLore && lorePresentation === 'details' ? <ActorLorePreview actorId={ledger.id} name={ledger.name} context={actorLore} /> : null}
                 <ActorLedgerBody
                   ledger={ledger}
                   layout={layouts[ledger.templateId]}
                   panelMode={panelMode}
+                  cover={actorLore && lorePresentation === 'cover' ? <ActorLorePreview actorId={ledger.id} name={ledger.name} context={actorLore} variant="cover" /> : undefined}
                   onPanelModeChange={onPanelModeChange}
                 />
               </motion.div>
@@ -465,7 +472,7 @@ function buildWorldLedger(facts: Array<[string, unknown]>, changes: StoryStateCh
   }
 }
 
-function ActorLedgerBody({ ledger, layout, panelMode, onPanelModeChange }: { ledger: StateLedgerPresentation; layout?: StoryStateTemplateLayout; panelMode: 'preview' | 'expanded'; onPanelModeChange: (mode: StoryStatePanelMode) => void }) {
+function ActorLedgerBody({ ledger, layout, panelMode, onPanelModeChange, cover }: { ledger: StateLedgerPresentation; layout?: StoryStateTemplateLayout; panelMode: 'preview' | 'expanded'; onPanelModeChange: (mode: StoryStatePanelMode) => void; cover?: ReactNode }) {
   const { t } = useTranslation()
   const groups = applyStoryStateLayout(ledger.groups, layout)
 
@@ -473,8 +480,15 @@ function ActorLedgerBody({ ledger, layout, panelMode, onPanelModeChange }: { led
     <div>
       {ledger.traits.length > 0 ? <ActorTraits traits={ledger.traits} /> : null}
       {groups.length > 0
-        ? <LedgerSections groups={groups} mode={panelMode} onModeChange={onPanelModeChange} />
-        : <StateSectionEmpty label={t('storyStage.state.actorEmpty')} />}
+        ? <LedgerSections groups={groups} mode={panelMode} onModeChange={onPanelModeChange} cover={cover} />
+        : (
+          <div className="story-state-ledger__sections">
+            <div className="story-state-ledger__preview">
+              {cover}
+              <StateSectionEmpty label={t('storyStage.state.actorEmpty')} />
+            </div>
+          </div>
+        )}
     </div>
   )
 }
@@ -491,7 +505,7 @@ function WorldLedgerBody({ ledger, layout, panelMode, onPanelModeChange }: { led
  * preview mode only the first two ordered sections show, with a mode toggle that
  * reveals the rest without any height-clamped tricks.
  */
-function LedgerSections({ groups, mode, onModeChange }: { groups: LedgerFieldGroup[]; mode: 'preview' | 'expanded'; onModeChange: (mode: StoryStatePanelMode) => void }) {
+function LedgerSections({ groups, mode, onModeChange, cover }: { groups: LedgerFieldGroup[]; mode: 'preview' | 'expanded'; onModeChange: (mode: StoryStatePanelMode) => void; cover?: ReactNode }) {
   const { t } = useTranslation()
   const { preview, hidden } = useMemo(() => splitLedgerGroupsForPreview(groups), [groups])
   const expanded = mode === 'expanded'
@@ -501,9 +515,14 @@ function LedgerSections({ groups, mode, onModeChange }: { groups: LedgerFieldGro
   const decorated = groups.length > 1
   return (
     <div className="story-state-ledger__sections">
-      {preview.map((group) => (
-        <LedgerSectionBlock key={group.key} group={group} decorated={decorated} />
-      ))}
+      <div className="story-state-ledger__preview">
+        {cover}
+        <div className="flex min-w-0 flex-col gap-2">
+          {preview.map((group) => (
+            <LedgerSectionBlock key={group.key} group={group} decorated={decorated} />
+          ))}
+        </div>
+      </div>
       {hidden.length > 0 ? (
         // Offset the extra flex gap while closed; include group spacing in the animated height.
         <StateReveal open={expanded} className="-my-1">

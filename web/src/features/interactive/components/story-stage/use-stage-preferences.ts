@@ -9,8 +9,6 @@ const DEFAULT_STAGE_PREFERENCES = {
   scrimOpacity: 0.75,
   textMaxWidth: 896,
   characterLayout: 'center' as StageCharacterLayout,
-  globalCharacterLayout: 'center' as StageCharacterLayout,
-  projectCharacterLayout: undefined as StageCharacterLayout | undefined,
 }
 
 export function useStagePreferences(projectId: string) {
@@ -23,8 +21,6 @@ export function useStagePreferences(projectId: string) {
       lineHeight: clampNumber(effective.interactive_stage_line_height, 1.35, 2.4, DEFAULT_STAGE_LINE_HEIGHT),
       scrimOpacity: clampNumber(effective.interactive_stage_scrim_opacity, 0, 1, 0.75),
       characterLayout: effective.interactive_stage_character_layout || 'center',
-      globalCharacterLayout: settings.inherited?.workspace?.interactive_stage_character_layout || settings.user?.interactive_stage_character_layout || 'center',
-      projectCharacterLayout: settings.workspace?.interactive_stage_character_layout || undefined,
       textMaxWidth: clampNumber(effective.interactive_stage_text_max_width, 480, 1600, 896),
     })
   }, [])

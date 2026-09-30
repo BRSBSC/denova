@@ -2,7 +2,7 @@ import { useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Images } from 'lucide-react'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import type { StageCharacterLayout, SettingsLayer } from '@/features/settings/types'
+import type { StageCharacterLayout } from '@/features/settings/types'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { Field, FieldDescription, FieldTitle } from '@/components/ui/field'
@@ -26,17 +26,17 @@ interface StoryPresentationControlsProps {
 
 export function StoryPresentationControls({ projectId, value, disabled, onChange, currentTurn, onBackgroundChange, backgroundDisabled = false }: StoryPresentationControlsProps) {
   const { t } = useTranslation()
-  const { scrimOpacity, textMaxWidth, globalCharacterLayout, projectCharacterLayout } = useStagePreferences(projectId || '')
+  const { scrimOpacity, textMaxWidth, characterLayout } = useStagePreferences(projectId || '')
   const [savingLayout, setSavingLayout] = useState(false)
-  const saveLayout = async (layout: StageCharacterLayout | null, layer: SettingsLayer) => {
+  const saveLayout = async (layout: StageCharacterLayout) => {
     setSavingLayout(true)
     try {
       const changes = { interactive_stage_character_layout: layout }
-      if (projectId) await patchProjectSettings(projectId, layer, changes)
+      if (projectId) await patchProjectSettings(projectId, 'user', changes)
       else await patchSettings('user', changes)
-      console.info('[story-presentation] character layout saved', { projectId, layer, layout })
+      console.info('[story-presentation] user character layout saved', { layout })
     } catch (error) {
-      console.warn('[story-presentation] failed to save character layout', { projectId, layer, error })
+      console.warn('[story-presentation] failed to save user character layout', { error })
       toast.error(t('storyStage.presentation.saveFailed'))
     } finally {
       setSavingLayout(false)
@@ -126,21 +126,18 @@ export function StoryPresentationControls({ projectId, value, disabled, onChange
       <TuningRow title={t('storyStage.presentation.characters')} description={t('storyStage.presentation.charactersHelp')}>
         <Switch aria-label={t('storyStage.presentation.characters')} checked={settings.characters} disabled={disabled} onCheckedChange={characters => onChange({ ...settings, characters })} />
       </TuningRow>
-      {(['user', ...(projectId ? ['workspace'] as const : [])] as const).map(layer => (
-        <Field key={layer} className="director-control-row min-w-0 gap-2 px-2.5 py-2">
-          <FieldTitle>{t(layer === 'user' ? 'storyStage.presentation.layoutDefault' : 'storyStage.presentation.layoutProject')}</FieldTitle>
-          <ToggleGroup type="single" variant="outline" size="sm" className="w-full flex-wrap" disabled={savingLayout}
-            aria-label={t(layer === 'user' ? 'storyStage.presentation.layoutDefault' : 'storyStage.presentation.layoutProject')}
-            value={layer === 'user' ? globalCharacterLayout : projectCharacterLayout ?? 'inherit'}
-            onValueChange={value => { if (value) void saveLayout(value === 'inherit' ? null : value as StageCharacterLayout, layer) }}>
-            {layer === 'workspace' && <ToggleGroupItem value="inherit">{t('storyStage.presentation.layoutInherit')}</ToggleGroupItem>}
-            {(['center', 'left', 'right', 'sides'] as const).map(layout => (
-              <ToggleGroupItem key={layout} value={layout}>{t(`storyStage.presentation.layout.${layout}`)}</ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-          <FieldDescription>{t(layer === 'user' ? 'storyStage.presentation.layoutHelp' : 'storyStage.presentation.layoutProjectHelp')}</FieldDescription>
-        </Field>
-      ))}
+      <Field className="director-control-row min-w-0 gap-2 px-2.5 py-2">
+        <FieldTitle>{t('storyStage.presentation.characterLayout')}</FieldTitle>
+        <ToggleGroup type="single" variant="outline" size="sm" className="w-full flex-wrap" disabled={savingLayout}
+          aria-label={t('storyStage.presentation.characterLayout')}
+          value={characterLayout}
+          onValueChange={value => { if (value) void saveLayout(value as StageCharacterLayout) }}>
+          {(['center', 'left', 'right', 'sides'] as const).map(layout => (
+            <ToggleGroupItem key={layout} value={layout}>{t(`storyStage.presentation.layout.${layout}`)}</ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+        <FieldDescription>{t('storyStage.presentation.layoutHelp')}</FieldDescription>
+      </Field>
       <TuningRow title={t('storyStage.presentation.textMaxWidth')} description={t('storyStage.presentation.textMaxWidthHelp')}>
         <NumberSettingInput label={t('storyStage.presentation.textMaxWidth')} value={widthDraft ?? textMaxWidth} min={480} max={1600} disabled={savingWidth} onCommit={value => void saveTextMaxWidth(value)} />
       </TuningRow>

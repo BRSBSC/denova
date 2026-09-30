@@ -1,13 +1,10 @@
 const storyStage = {
-  'storyStage.presentation.layoutDefault': '角色布局默认值',
-  'storyStage.presentation.layoutProject': '当前项目角色布局',
-  'storyStage.presentation.layoutInherit': '使用默认',
+  'storyStage.presentation.characterLayout': '角色布局',
   'storyStage.presentation.layout.center': '居中',
   'storyStage.presentation.layout.left': '靠左',
   'storyStage.presentation.layout.right': '靠右',
   'storyStage.presentation.layout.sides': '两侧',
-  'storyStage.presentation.layoutHelp': '未单独设置的项目使用此默认值。窄屏自动紧凑排列；两侧布局下，单人显示在右侧。',
-  'storyStage.presentation.layoutProjectHelp': '对当前项目的所有故事生效。选择“使用默认”跟随全局设置。',
+  'storyStage.presentation.layoutHelp': '作为用户偏好，对所有项目生效。窄屏自动紧凑排列；两侧布局下，单人显示在右侧。',
 
   'storyStage.presentation.focus': '设置背景焦点',
   'storyStage.presentation.focusHelp': '在原图上点击或拖动，选择希望保留的主体。裁切会随屏幕比例调整；极端比例仍可能遮住部分主体。仅应用于当前背景。',
@@ -83,6 +80,7 @@ const storyStage = {
   'storyStage.state.lore.title': '角色资料',
   'storyStage.state.lore.current': '资料库当前设定 · 与当前回合状态分别保存',
   'storyStage.state.lore.noDescription': '暂无简介',
+  'storyStage.state.lore.viewCover': '查看 {{name}} 的封面',
   'storyStage.state.lore.open': '打开资料项',
   'storyStage.state.displayPreference': '状态显示偏好',
   'storyStage.state.stageDisplay': '主舞台状态',

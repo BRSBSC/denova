@@ -2798,6 +2798,40 @@ html[data-nova-motion="off"] .nova-change-review-layer {
   padding: 4px 10px 10px;
 }
 
+.story-state-ledger__action {
+  background: color-mix(in srgb, var(--nova-surface-2) 45%, transparent);
+}
+
+.story-state-ledger__action:hover {
+  background: color-mix(in srgb, var(--nova-surface-2) 65%, transparent);
+}
+
+/* The cover accompanies only the first two ordered sections; later sections keep full width. */
+.story-state-ledger__preview {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+@container state (min-width: 32rem) {
+  .story-state-ledger__preview:has(> aside) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+    align-items: stretch;
+  }
+
+  .story-state-ledger__cover {
+    max-width: none;
+  }
+
+  /* Let the two state sections set the row height, then fill that entire portrait slot. */
+  .story-state-ledger__cover > [data-slot='dialog-trigger'] {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    aspect-ratio: auto;
+  }
+}
+
 .story-state-ledger__section[data-decorated] {
   padding: 8px 10px 10px;
   border: 1px solid var(--nova-border-soft);

@@ -1,5 +1,6 @@
 import { BookUser, ArrowUpRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { ImagePreviewDialog } from '@/components/common/ImagePreviewDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { MaterialImage } from '@/features/lore/MaterialImage'
@@ -15,10 +16,12 @@ export interface ActorLoreContext {
   onOpenItem?: (id: string) => void
 }
 
-export function ActorLorePreview({ actorId, name, context }: {
+export function ActorLorePreview({ actorId, name, context, variant = 'details' }: {
   actorId: string
   name: string
   context: ActorLoreContext
+  /** The stage uses only the cover; details surfaces also show the current Lore summary. */
+  variant?: 'details' | 'cover'
 }) {
   const { t } = useTranslation()
   // Protagonists already have provenance; other Actors use the library's unique
@@ -30,6 +33,39 @@ export function ActorLorePreview({ actorId, name, context }: {
     ? entry.id === id : entry.name.trim().toLowerCase() === nameKey))
   if (!item) return null
   const image = loreImageURL(context.projectId, item)
+  const cover = image ? (
+    <ImagePreviewDialog src={image} title={item.name} alt={item.name}>
+      <button
+        type="button"
+        aria-label={t('storyStage.state.lore.viewCover', { name: item.name })}
+        className="block aspect-[3/4] w-full cursor-zoom-in overflow-hidden rounded-md bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <MaterialImage key={image} src={image} alt={item.name} className="h-full w-full object-cover" />
+      </button>
+    </ImagePreviewDialog>
+  ) : null
+
+  if (variant === 'cover') {
+    if (!cover) return null
+    return (
+      <aside aria-label={t('storyStage.state.lore.title')} className="story-state-ledger__cover relative mx-auto w-full min-w-0 max-w-48">
+        {cover}
+        {context.onOpenItem ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            className="story-state-ledger__action absolute right-1.5 top-1.5 shadow-sm"
+            aria-label={t('storyStage.state.lore.open')}
+            title={t('storyStage.state.lore.open')}
+            onClick={() => context.onOpenItem?.(item.id)}
+          >
+            <ArrowUpRight />
+          </Button>
+        ) : null}
+      </aside>
+    )
+  }
 
   return (
     <aside aria-label={t('storyStage.state.lore.title')} className="min-w-0 p-3">
@@ -42,10 +78,8 @@ export function ActorLorePreview({ actorId, name, context }: {
           <CardDescription>{t('storyStage.state.lore.current')}</CardDescription>
         </CardHeader>
         <CardContent className="flex min-w-0 flex-col gap-3">
-          {image ? (
-            <div className="mx-auto aspect-[3/4] w-full max-w-48 overflow-hidden rounded-md bg-muted">
-              <MaterialImage key={image} src={image} alt={item.name} className="h-full w-full object-cover" />
-            </div>
+          {cover ? (
+            <div className="mx-auto w-full max-w-48">{cover}</div>
           ) : null}
           <p className="font-medium [overflow-wrap:anywhere]">{item.name}</p>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">

@@ -1,13 +1,10 @@
 const storyStage = {
-  'storyStage.presentation.layoutDefault': 'Character layout default',
-  'storyStage.presentation.layoutProject': 'Character layout for this project',
-  'storyStage.presentation.layoutInherit': 'Use default',
+  'storyStage.presentation.characterLayout': 'Character layout',
   'storyStage.presentation.layout.center': 'Center',
   'storyStage.presentation.layout.left': 'Left',
   'storyStage.presentation.layout.right': 'Right',
   'storyStage.presentation.layout.sides': 'Both sides',
-  'storyStage.presentation.layoutHelp': 'Applies to projects without an override. Narrow stages use a compact layout; a lone character in Both sides appears on the right.',
-  'storyStage.presentation.layoutProjectHelp': 'Applies to all stories in this project. Use default follows the global setting.',
+  'storyStage.presentation.layoutHelp': 'Saved as your preference for all projects. Narrow stages use a compact layout; a lone character in Both sides appears on the right.',
 
   'storyStage.presentation.focus': 'Set background focus',
   'storyStage.presentation.focusHelp': 'Click or drag on the original image to choose the subject to keep visible. Cropping adapts to the screen; extreme proportions can still hide parts of the subject. Applies to the current background.',
@@ -83,6 +80,7 @@ const storyStage = {
   'storyStage.state.lore.title': 'Character Lore',
   'storyStage.state.lore.current': 'Current library setting · Saved separately from turn state',
   'storyStage.state.lore.noDescription': 'No description yet',
+  'storyStage.state.lore.viewCover': 'View cover for {{name}}',
   'storyStage.state.lore.open': 'Open Lore item',
   'storyStage.state.displayPreference': 'State display preference',
   'storyStage.state.stageDisplay': 'Main-stage state',

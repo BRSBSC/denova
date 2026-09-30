@@ -136,7 +136,7 @@ type Settings struct {
 	InteractiveStageFontSize     *int     `toml:"interactive_stage_font_size,omitempty" json:"interactive_stage_font_size,omitempty"`
 	InteractiveStageScrimOpacity *float64 `toml:"interactive_stage_scrim_opacity,omitempty" json:"interactive_stage_scrim_opacity,omitempty"`
 	InteractiveStageLineHeight   *float64 `toml:"interactive_stage_line_height,omitempty" json:"interactive_stage_line_height,omitempty"`
-	// Character layout is a display preference with optional Project overrides.
+	// Character layout is a user display preference shared by all Projects.
 	InteractiveStageCharacterLayout string `toml:"interactive_stage_character_layout,omitempty" json:"interactive_stage_character_layout,omitempty"`
 	InteractiveStageTextMaxWidth    *int   `toml:"interactive_stage_text_max_width,omitempty" json:"interactive_stage_text_max_width,omitempty"`
 }
@@ -874,7 +874,6 @@ func withResolvedLabs(settings Settings) Settings {
 func PrepareWorkspaceAgentSettingsForWrite(existing, incoming Settings) Settings {
 	scoped := workspaceAgentSettings(incoming)
 	existing.GameCreationDefaults = scoped.GameCreationDefaults
-	existing.InteractiveStageCharacterLayout = scoped.InteractiveStageCharacterLayout
 	existing.AgentRuntimes = scoped.AgentRuntimes
 	existing.AgentTools = scoped.AgentTools
 	existing.AgentPrompts = scoped.AgentPrompts
@@ -889,22 +888,21 @@ func PrepareWorkspaceAgentSettingsForWrite(existing, incoming Settings) Settings
 }
 
 // workspaceAgentSettings defines the narrow workspace configuration boundary.
-// Native model selection and general Settings remain user-scoped. External
-// runtime preferences and stage character layout may have workspace overrides.
+// Native model selection and display preferences remain user-scoped. External
+// runtime preferences may have workspace overrides.
 func workspaceAgentSettings(settings Settings) Settings {
 	return Settings{
-		GameCreationDefaults:            settings.GameCreationDefaults,
-		InteractiveStageCharacterLayout: settings.InteractiveStageCharacterLayout,
-		AgentRuntimes:                   settings.AgentRuntimes,
-		AgentTools:                      settings.AgentTools,
-		AgentPrompts:                    settings.AgentPrompts,
-		AgentSkills:                     settings.AgentSkills,
-		AgentContexts:                   settings.AgentContexts,
-		GeneralSubAgents:                settings.GeneralSubAgents,
-		SubAgents:                       settings.SubAgents,
-		DefaultImageAgentID:             settings.DefaultImageAgentID,
-		AgentToolParallelism:            settings.AgentToolParallelism,
-		AgentSubAgentParallelism:        settings.AgentSubAgentParallelism,
+		GameCreationDefaults:     settings.GameCreationDefaults,
+		AgentRuntimes:            settings.AgentRuntimes,
+		AgentTools:               settings.AgentTools,
+		AgentPrompts:             settings.AgentPrompts,
+		AgentSkills:              settings.AgentSkills,
+		AgentContexts:            settings.AgentContexts,
+		GeneralSubAgents:         settings.GeneralSubAgents,
+		SubAgents:                settings.SubAgents,
+		DefaultImageAgentID:      settings.DefaultImageAgentID,
+		AgentToolParallelism:     settings.AgentToolParallelism,
+		AgentSubAgentParallelism: settings.AgentSubAgentParallelism,
 	}
 }
 
