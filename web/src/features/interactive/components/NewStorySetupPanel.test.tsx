@@ -2,9 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationConfigController, ConversationConfigSnapshot } from '@/features/conversation-config/types'
-import type { LoreItem } from '@/lib/api'
+import { getProjectLoreItems, type LoreItem } from '@/lib/api'
 import type { GamePlanningTemplate, StorySummary, Teller } from '../types'
 import { NewStorySetupPanel } from './NewStorySetupPanel'
+
+vi.mock('@/lib/api', async (original) => ({ ...await original<typeof import('@/lib/api')>(), getProjectLoreItems: vi.fn() }))
 
 const settingsMocks = vi.hoisted(() => ({
   fetchSettings: vi.fn(),
@@ -161,9 +163,12 @@ describe('NewStorySetupPanel', () => {
       ...loreCharacter, id: 'station', type: 'location', name: '车站', tags: [],
       resolved_materials: [{ id: 'day', path: 'assets/day.png', name: '白昼', original_name: 'day.png', mime_type: 'image/png', size_bytes: 10, source: { kind: 'uploaded' } }],
     }
-    render(<NewStorySetupPanel projectId="project-1" tellers={[teller]} planningTemplates={[planningTemplate]} imagePresets={[]} loreItems={[loreCharacter, location]} conversationConfig={conversationConfigController()} onCancel={vi.fn()} onCreate={onCreate} />)
-    await user.click(screen.getByRole('button', { name: '默认背景' }))
-    await user.click(screen.getByRole('button', { name: /白昼.*车站/ }))
+    vi.mocked(getProjectLoreItems).mockResolvedValue([loreCharacter, location])
+    // The parent still holds the catalog from before the material import.
+    render(<NewStorySetupPanel projectId="project-1" tellers={[teller]} planningTemplates={[planningTemplate]} imagePresets={[]} loreItems={[loreCharacter]} conversationConfig={conversationConfigController()} onCancel={vi.fn()} onCreate={onCreate} />)
+    await user.click(screen.getByRole('button', { name: '当前背景' }))
+    await user.click(await screen.findByRole('button', { name: /白昼.*车站/ }))
+    expect(getProjectLoreItems).toHaveBeenCalledWith('project-1')
     expect(screen.getByRole('img', { name: '白昼' })).toBeInTheDocument()
     await user.click(screen.getByRole('switch', { name: '动态背景' }))
     await user.click(screen.getByRole('switch', { name: '角色差分' }))

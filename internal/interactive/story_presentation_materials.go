@@ -23,8 +23,12 @@ func (s *Store) resolveStoryPresentationSettings(input, current *StoryPresentati
 	if selected == nil {
 		return settings, nil
 	}
+	if !selected.Focus.valid() {
+		return nil, ErrDefaultBackground
+	}
 	if current != nil && current.DefaultBackground != nil && selected.ItemID == current.DefaultBackground.ItemID && selected.AssetID == current.DefaultBackground.AssetID {
 		settings.DefaultBackground = NormalizeStoryPresentationSettings(current).DefaultBackground
+		settings.DefaultBackground.Focus = selected.Focus
 		return settings, nil
 	}
 	raw, _ := json.Marshal(map[string]any{"background": selected})
@@ -34,6 +38,7 @@ func (s *Store) resolveStoryPresentationSettings(input, current *StoryPresentati
 		return nil, ErrDefaultBackground
 	}
 	settings.DefaultBackground = stage.Background
+	settings.DefaultBackground.Focus = selected.Focus
 	return settings, nil
 }
 

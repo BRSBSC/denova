@@ -1,6 +1,7 @@
 package character
 
 import (
+	"context"
 	"denova/internal/book/lore"
 	"fmt"
 )
@@ -16,11 +17,7 @@ func (s *Service) ImportTavernCard(filename string, data []byte, opts ...ImportO
 	if err != nil {
 		return ImportResult{}, err
 	}
-	coverPath := ""
-	if card.IsPNG {
-		coverPath = tavernCardCoverPath
-	}
-	ops, importStats := buildTavernCardLoreOperations(card, filename, coverPath, options.UserCharacterName, lore.NewNameAllocator(existingItems))
+	ops, importStats := buildTavernCardLoreOperations(card, filename, options.UserCharacterName, lore.NewNameAllocator(existingItems))
 	importStats.ClassificationMode = lore.NormalizeClassificationMode(options.ClassificationMode)
 	if importStats.ClassificationMode == lore.ClassificationModeSemantic && options.ClassifyLore != nil {
 		if err := applySemanticTavernLoreClassification(ops, &importStats, options.ClassifyLore); err != nil {
@@ -40,7 +37,7 @@ func (s *Service) ImportTavernCard(filename string, data []byte, opts ...ImportO
 		}
 		return ImportResult{}, cause
 	}
-	coverPath, err = s.importTavernCardCover(card, data)
+	coverPath, err := s.importTavernCardCover(card, data)
 	if err != nil {
 		return rollback(err)
 	}
@@ -51,6 +48,18 @@ func (s *Service) ImportTavernCard(filename string, data []byte, opts ...ImportO
 	applyResult, err := loreStore.ApplyOperations(fmt.Sprintf("导入酒馆角色卡「%s」", card.Name), ops)
 	if err != nil {
 		return rollback(err)
+	}
+
+	if card.IsPNG {
+		// The character is the first created item; worldbook and user entries
+		// must not inherit its portrait. Save last so no later write can fail.
+		_, err := loreStore.SaveMaterial(context.Background(), applyResult.Created[0].ID, lore.MaterialFile{
+			Filename: filename, Data: data, Source: lore.AssetSource{Kind: "upload"},
+			Entry: lore.MaterialEntry{Name: card.Name}, Cover: lore.CoverIfMissing,
+		})
+		if err != nil {
+			return rollback(err)
+		}
 	}
 
 	itemIDs := make([]string, 0, len(applyResult.Created))
@@ -84,7 +93,7 @@ func PreviewTavernCard(filename string, data []byte) (Preview, error) {
 	if err != nil {
 		return Preview{}, err
 	}
-	_, stats := buildTavernCardLoreOperations(card, filename, "", "玩家角色", lore.NewNameAllocator(nil))
+	_, stats := buildTavernCardLoreOperations(card, filename, "玩家角色", lore.NewNameAllocator(nil))
 	return Preview{
 		Name:                  card.Name,
 		EntryCount:            characterBookEntryCount(card.CharacterBook),

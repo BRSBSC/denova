@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"runtime"
 	"strings"
@@ -14,7 +13,6 @@ import (
 
 	"denova/internal/buildinfo"
 	"denova/internal/hostruntime"
-	"golang.org/x/net/http/httpproxy"
 )
 
 const (
@@ -76,26 +74,13 @@ func (s *Service) ensureHTTPClient() {
 	if s.httpClient != nil {
 		return
 	}
-	proxy := httpproxy.Config{}
-	for _, entry := range hostruntime.WithSystemProxy(context.Background(), os.Environ()) {
-		key, value, _ := strings.Cut(entry, "=")
-		switch strings.ToUpper(key) {
-		case "HTTP_PROXY":
-			proxy.HTTPProxy = value
-		case "HTTPS_PROXY":
-			proxy.HTTPSProxy = value
-		case "NO_PROXY":
-			proxy.NoProxy = value
-		}
-	}
 	base, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
 		s.httpClient = &http.Client{Timeout: 60 * time.Second}
 		return
 	}
 	transport := base.Clone()
-	proxyURL := proxy.ProxyFunc()
-	transport.Proxy = func(r *http.Request) (*url.URL, error) { return proxyURL(r.URL) }
+	transport.Proxy = hostruntime.NewHTTPProxy()
 
 	s.httpClient = &http.Client{Timeout: 60 * time.Second, Transport: transport}
 }
@@ -177,9 +162,7 @@ func (s *Service) githubLatestReleaseURL() string {
 }
 
 func (s *Service) downloadHTTPClient() *http.Client {
-	if s.httpClient == nil {
-		return &http.Client{}
-	}
+	s.ensureHTTPClient()
 	client := *s.httpClient
 	client.Timeout = 0
 	return &client

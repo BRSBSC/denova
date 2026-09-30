@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { animate, motion, useMotionValue, useReducedMotionConfig } from 'motion/react'
-import { AlignLeft, AlertCircle, ChevronDown, ChevronUp, CircleCheck, Gauge, Globe2, LayoutDashboard, Loader2, Package, PanelRight, Sparkles, Tag } from 'lucide-react'
+import { AlignLeft, AlertCircle, ChevronDown, ChevronUp, CircleCheck, Gauge, Globe2, LayoutDashboard, Loader2, Package, Sparkles, Tag } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { novaEase } from '@/features/motion/motion-tokens'
@@ -47,7 +47,7 @@ interface StoryStateLedgerProps {
   snapshot: Snapshot | null
   displayPreference: StoryStateDisplayPreference
   onDisplayPreferenceChange: (value: StoryStateDisplayPreference) => void
-  onOpenDirectorState?: () => void
+  detailsAction?: ReactNode
 }
 
 interface StateLedgerPresentation {
@@ -66,7 +66,7 @@ interface StateLedgerPresentation {
  * sections with a "show all" affordance; the turn's state delta surfaces once in the
  * summary row plus per-field change chips.
  */
-export function StoryStateLedger({ snapshot, displayPreference, onDisplayPreferenceChange, onOpenDirectorState }: StoryStateLedgerProps) {
+export function StoryStateLedger({ snapshot, displayPreference, onDisplayPreferenceChange, detailsAction }: StoryStateLedgerProps) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
   const { model, actorLedgers, worldLedger, allActors, actorTabs, hasWorldFacts, storyId } = useStoryStateLedgerData(snapshot)
@@ -132,18 +132,7 @@ export function StoryStateLedger({ snapshot, displayPreference, onDisplayPrefere
             onCustomizeLayout={selectedLedger?.groups.length ? () => setLayoutEditorOpen(true) : undefined}
             compact
           />}
-          {onOpenDirectorState ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onOpenDirectorState}
-              aria-label={t('storyStage.state.openDirector')}
-            >
-              <PanelRight data-icon="inline-start" />
-              <span className="story-state-ledger__director-label">{t('storyStage.state.openDirector')}</span>
-            </Button>
-          ) : null}
+          {detailsAction}
           {!isMobile ? <CollapsibleTrigger asChild>
             <Button
               type="button"
@@ -571,7 +560,6 @@ function LedgerSectionBlock({ group, decorated }: { group: LedgerFieldGroup; dec
         <header className="story-state-ledger__section-header">
           <LedgerGroupIcon group={group} />
           <h3 className="story-state-ledger__section-title">{label}</h3>
-          <span className="story-state-ledger__section-count">{group.fields.length}</span>
         </header>
       ) : null}
       <LedgerGroupGrid group={group} />

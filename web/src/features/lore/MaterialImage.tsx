@@ -1,16 +1,19 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ImageOff } from 'lucide-react'
+import { CoverImage, type ImageFocus } from '@/components/cover-image'
 
 /** A failed remote image keeps its material accessible instead of showing a broken icon. */
 export function MaterialImage({
   src,
   alt,
   className,
+  focus,
 }: {
   src: string
   alt: string
   className?: string
+  focus?: ImageFocus
 }) {
   const { t } = useTranslation()
   const [failed, setFailed] = useState(false)
@@ -23,6 +26,8 @@ export function MaterialImage({
       <ImageOff className="size-5" />
       {t('lore.materials.imageFailed')}
     </span>
+  ) : focus ? (
+    <CoverImage src={src} alt={alt} focus={focus} className={className} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
   ) : (
     <img
       src={src}

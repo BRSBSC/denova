@@ -35,7 +35,6 @@ export interface StoryStageProps {
   onRequestLoreInit?: () => void
   onOpenDirectorConfig?: () => void
   onToggleDirectorPanel?: () => void
-  onOpenDirectorState?: () => void
   onRequestCreateBranch?: (source: BranchCreationSource) => void
   onStateDisplayPreferenceChange?: (value: StoryStateDisplayPreference) => void
   onTurnPersisted?: (event: InteractiveTurnPersistedEvent, options?: { replayed: boolean }) => Snapshot | void

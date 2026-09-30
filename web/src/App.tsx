@@ -99,7 +99,6 @@ function App() {
   const [characterCardTargetMode, setCharacterCardTargetMode] = useState<CharacterCardTargetMode>('new_book')
   const [characterCardBookTitle, setCharacterCardBookTitle] = useState('')
   const [characterCardUserName, setCharacterCardUserName] = useState('')
-  const [characterCardReplaceCover, setCharacterCardReplaceCover] = useState(false)
   const [characterCardSemanticClassification, setCharacterCardSemanticClassification] = useState(true)
   const [characterCardPreviewing, setCharacterCardPreviewing] = useState(false)
   const [characterCardImporting, setCharacterCardImporting] = useState(false)
@@ -599,7 +598,6 @@ function App() {
     setCharacterCardPreview(null)
     setCharacterCardTargetMode('new_book')
     setCharacterCardSemanticClassification(true)
-    setCharacterCardReplaceCover(false)
     setCharacterCardBookTitle('')
     setCharacterCardUserName('')
     setCharacterCardPreviewing(false)
@@ -662,7 +660,6 @@ function App() {
         bookTitle: characterCardTargetMode === 'new_book' ? characterCardBookTitle.trim() : undefined,
         userCharacterName: characterCardPreview?.user_placeholder_found ? characterCardUserName.trim() : undefined,
         loreClassification: characterCardSemanticClassification ? 'semantic' : 'heuristic',
-        replaceCover: characterCardReplaceCover,
       })
       toast.success(result.message || t('importCard.importSuccess', { name: result.name }))
       if (characterCardTargetMode === 'new_book') {
@@ -689,7 +686,7 @@ function App() {
     } finally {
       setCharacterCardImporting(false)
     }
-  }, [characterCardBookTitle, characterCardFile, characterCardPreview, characterCardReplaceCover, characterCardSemanticClassification, characterCardTargetMode, characterCardUserName, notifyProjectStructureChange, notifyVersionChange, projectId, refresh, refreshAll, resetCharacterCardImport, setMode, t])
+  }, [characterCardBookTitle, characterCardFile, characterCardPreview, characterCardSemanticClassification, characterCardTargetMode, characterCardUserName, notifyProjectStructureChange, notifyVersionChange, projectId, refresh, refreshAll, resetCharacterCardImport, setMode, t])
 
   const handleActivateTab = useCallback(async (tab: Tab) => {
     const key = tabKey(tab)
@@ -1024,8 +1021,6 @@ function App() {
         bookTitle={characterCardBookTitle}
         userCharacterName={characterCardUserName}
         semanticClassification={characterCardSemanticClassification}
-        replaceCover={characterCardReplaceCover}
-        onReplaceCoverChange={setCharacterCardReplaceCover}
         previewing={characterCardPreviewing}
         importing={characterCardImporting}
         error={characterCardError}

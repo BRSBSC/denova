@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"denova/internal/hostruntime"
 	"denova/internal/portablepath"
 	"denova/internal/revisionfile"
 )
@@ -70,7 +71,9 @@ type Market struct {
 }
 
 func NewMarket(root string) *Market {
-	return &Market{path: filepath.Join(root, "resource-exchange", "cache", "market.json"), client: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = hostruntime.NewHTTPProxy()
+	return &Market{path: filepath.Join(root, "resource-exchange", "cache", "market.json"), client: &http.Client{Transport: transport, Timeout: 20 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) > 3 || req.URL.Scheme != "https" || req.URL.Host != "alfredxw.github.io" {
 			return fmt.Errorf("unexpected catalog redirect")
 		}

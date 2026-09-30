@@ -252,11 +252,11 @@ function FieldChangeChip({ change }: { change: ClassifiedStateChange | null }) {
       </span>
     )
   }
-  return (
+  return change.kind === 'cleared' ? (
     <span className="story-state-ledger__change-chip story-state-ledger__change-chip--neutral">
-      {change.kind === 'cleared' ? t('storyStage.state.change.cleared') : t('storyStage.state.change.updated')}
+      {t('storyStage.state.change.cleared')}
     </span>
-  )
+  ) : null
 }
 
 function formatLedgerNumber(value: number) {

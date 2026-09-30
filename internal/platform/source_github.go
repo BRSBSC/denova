@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"denova/internal/hostruntime"
 )
 
 // GitHubSource describes a public source checkout. Ref tracks upstream; Commit
@@ -34,7 +36,9 @@ var githubCommit = regexp.MustCompile(`^[a-fA-F0-9]{40}$`)
 func newGitHubClient() *http.Client {
 	// Fixed HTTPS origins let source downloads use the host's proxy settings
 	// without exposing a general-purpose URL fetcher through management APIs.
-	return &http.Client{Timeout: 3 * time.Minute, CheckRedirect: func(request *http.Request, via []*http.Request) error {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = hostruntime.NewHTTPProxy()
+	return &http.Client{Transport: transport, Timeout: 3 * time.Minute, CheckRedirect: func(request *http.Request, via []*http.Request) error {
 		if len(via) >= 5 || !githubDownloadURL(request.URL) {
 			return failure("GITHUB_UNAVAILABLE", "GitHub redirected outside the supported download origins")
 		}

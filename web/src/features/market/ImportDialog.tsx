@@ -33,6 +33,7 @@ import { ImportResourcePicker } from './ImportResourcePicker'
 import { useBookCreation } from '@/components/workbench/book-creation'
 import { CompatibilityReport } from '@/components/workbench/CharacterCardImportDialog'
 import { createBook, getBooks, type BookRecord } from '@/lib/api'
+import { notifyLoreUpdated } from '@/features/lore/events'
 import {
   dependencySelection,
   discardPreview,
@@ -97,6 +98,7 @@ export function ImportDialog({
   )
   const [bookDestination, setBookDestination] = useState<'new' | 'existing'>('existing')
   const [bookTitle, setBookTitle] = useState('')
+  const [createdProjectID, setCreatedProjectID] = useState('')
   const [scope, setScope] = useState(initialScope)
   const [books, setBooks] = useState<BookRecord[]>([])
   const [grants, setGrants] = useState<Record<string, string[]>>({})
@@ -110,15 +112,22 @@ export function ImportDialog({
   const candidate = preview?.candidates.find(
     (c) => c.candidate_id === candidateID,
   )
-  const chosen = dependencySelection(candidate?.resources || [], selected)
-  const resources =
-    candidate?.resources.filter((r) => chosen.includes(r.id)) || []
+  const requested = dependencySelection(candidate?.resources || [], selected)
+  const canCreateBook = !installation && candidate?.resources.some(
+    (r) => r.kind === 'lore.collection' && requested.includes(r.id),
+  )
+  const creatingBook = canCreateBook && bookDestination === 'new'
+  // Retain the new-book cover policy when retrying a failed plan for that book.
+  const includeCharacterBookCover = creatingBook || (!!createdProjectID && projectID === createdProjectID)
+  const availableResources = candidate?.resources.filter(
+    (r) => !preview?.character || r.kind !== 'project.cover' || includeCharacterBookCover,
+  ) || []
+  const chosen = requested.filter((id) => availableResources.some((r) => r.id === id))
+  const resources = availableResources.filter((r) => chosen.includes(r.id))
   const needsProject =
     resources.some((r) =>
       ['lore.collection', 'game.openings', 'project.cover'].includes(r.kind),
     ) || (resources.some((r) => r.kind === 'skill') && scope === 'workspace')
-  const canCreateBook = !installation && resources.some((r) => r.kind === 'lore.collection')
-  const creatingBook = canCreateBook && bookDestination === 'new'
   const missingConsent = resources.some((r) =>
     r.extension?.manifest.permissions.required.some(
       (p) => !(grants[r.id] || []).includes(p),
@@ -321,7 +330,7 @@ export function ImportDialog({
                 </SelectContent>
               </Select>
             </Field>}
-            {candidate && <ImportResourcePicker previewID={preview.preview_id} candidate={candidate} selected={selected} onChange={setSelected} />}
+            {candidate && <ImportResourcePicker previewID={preview.preview_id} candidate={{ ...candidate, resources: availableResources }} selected={selected} onChange={setSelected} />}
 
             <div className="space-y-3">
               {resources.filter((resource) => resource.kind === 'skill' || resource.extension).map((resource) => (
@@ -546,6 +555,7 @@ export function ImportDialog({
                     targetProject = created.project_id
                     // Retain the created target even if planning fails, so retry never creates it twice.
                     setProjectID(targetProject)
+                    setCreatedProjectID(targetProject)
                     setBookDestination('existing')
                     setBooks((current) => [...current, {
                       project_id: targetProject, path: created.workspace,
@@ -558,7 +568,7 @@ export function ImportDialog({
                     await exchange<Plan>('/plans', {
                       preview_id: preview.preview_id,
                       candidate_id: candidateID,
-                      resources: selected,
+                      resources: selected.filter((id) => chosen.includes(id)),
                       project_id: targetProject,
                       skill_scope: scope,
                       installation_id: installation?.installation_id,
@@ -573,6 +583,12 @@ export function ImportDialog({
                     `/plans/${plan.plan_id}/apply`,
                     {},
                   )
+                  // New books are opened before import; invalidate their initially empty catalog.
+                  const loreProjects = new Set(installed.bindings
+                    .filter(binding => binding.local.kind === 'lore.collection')
+                    .map(binding => binding.local.project_id || installed.project_id)
+                    .filter((id): id is string => Boolean(id)))
+                  for (const projectId of loreProjects) notifyLoreUpdated({ projectId, source: 'resource-import' })
                   await onInstalled(installed)
                   toast.success(t('market.import.done'))
                   if (preview) {

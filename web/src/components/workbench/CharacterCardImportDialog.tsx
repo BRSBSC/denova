@@ -19,8 +19,6 @@ interface CharacterCardImportDialogProps {
   targetMode: CharacterCardTargetMode
   bookTitle: string
   userCharacterName: string
-  replaceCover: boolean
-  onReplaceCoverChange: (value: boolean) => void
   semanticClassification: boolean
   previewing: boolean
   importing: boolean
@@ -46,8 +44,6 @@ export function CharacterCardImportDialog({
   bookTitle,
   userCharacterName,
   semanticClassification,
-  replaceCover,
-  onReplaceCoverChange,
   previewing,
   importing,
   error,
@@ -114,7 +110,7 @@ export function CharacterCardImportDialog({
                   {preview.opening_truncated_count > 0 && <span>{t('importCard.openingTruncatedCount', { count: preview.opening_truncated_count })}</span>}
                   {preview.removed_runtime_entry_count > 0 && <span>{t('importCard.removedRuntimeCount', { count: preview.removed_runtime_entry_count })}</span>}
                   {preview.sanitized_mixed_entry_count > 0 && <span>{t('importCard.sanitizedMixedCount', { count: preview.sanitized_mixed_entry_count })}</span>}
-                  {preview.will_import_cover && <span>{t('importCard.willImportCover')}</span>}
+                  {preview.will_import_cover && <span>{t(targetMode === 'new_book' ? 'importCard.willImportBookAndLoreCover' : 'importCard.willImportLoreCover')}</span>}
                   {preview.user_placeholder_found && <span>{t('importCard.willImportUser')}</span>}
                   {preview.tags?.map((tag) => (
                     <span key={tag} className="rounded border border-[var(--nova-border)] bg-[var(--nova-surface-2)] px-1.5 text-[var(--nova-text-muted)]">{tag}</span>
@@ -181,7 +177,6 @@ export function CharacterCardImportDialog({
               )
             )}
 
-            {preview?.will_import_cover && targetMode === 'current' && <label className="flex items-center justify-between gap-3"><span>{t('market.import.replaceCover')}</span><Switch checked={replaceCover} onCheckedChange={onReplaceCoverChange} disabled={importing} aria-label={t('market.import.replaceCover')} /></label>}
             {preview?.user_placeholder_found && (
               <div className="space-y-2">
                 <Input

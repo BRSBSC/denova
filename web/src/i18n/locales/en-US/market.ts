@@ -37,8 +37,6 @@ const market = {
   'market.category.plugins': 'Plugins',
   'market.category.games': 'Games',
 
-  'market.import.replaceCover':
-    'Replace the current project cover and keep a backup',
   'market.errors.resourceOwned':
     'This resource belongs to another tracked installation. Manage or detach its source before replacing it.',
   'market.states.upstream_removed': 'Removed upstream · kept locally',

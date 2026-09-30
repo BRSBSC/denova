@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Crosshair } from 'lucide-react'
+import { BackgroundFocusDialog } from './BackgroundFocusDialog'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -9,22 +11,24 @@ import { MaterialImage } from '@/features/lore/MaterialImage'
 import type { PresentationMaterial } from '../../types'
 import { TuningRow } from './StoryTuningControls'
 
-export function StoryBackgroundSelect({ projectId, value, loreItems, disabled, onChange }: {
+export function StoryBackgroundSelect({ projectId, value, disabled, onChange }: {
   projectId?: string
   value?: PresentationMaterial
-  loreItems?: LoreItem[]
   disabled: boolean
   onChange: (value?: PresentationMaterial) => void
 }) {
   const { t } = useTranslation()
+  const title = t('storyStage.presentation.currentBackground')
+  const description = t('storyStage.presentation.currentBackgroundHelp')
   const [open, setOpen] = useState(false)
+  const [focusOpen, setFocusOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [items, setItems] = useState<LoreItem[]>([])
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
   const [reload, setReload] = useState(0)
   useEffect(() => {
-    if (!open || !projectId || loreItems) return
+    if (!open || !projectId) return
     let cancelled = false
     setLoading(true)
     setFailed(false)
@@ -35,9 +39,9 @@ export function StoryBackgroundSelect({ projectId, value, loreItems, disabled, o
       if (!cancelled) setFailed(true)
     }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [open, projectId, loreItems, reload])
+  }, [open, projectId, reload])
 
-  const options = (loreItems ?? items).filter(item => item.enabled).flatMap(item =>
+  const options = items.filter(item => item.enabled).flatMap(item =>
     (item.resolved_materials ?? []).filter(asset => asset.path && asset.mime_type.startsWith('image/')).map(asset => ({
       itemName: item.name,
       material: { item_id: item.id, asset_id: asset.id, path: asset.path!, name: asset.name },
@@ -50,18 +54,20 @@ export function StoryBackgroundSelect({ projectId, value, loreItems, disabled, o
   }
   return (
     <>
-      <TuningRow title={t('storyStage.presentation.defaultBackground')} description={t('storyStage.presentation.defaultBackgroundHelp')}>
-        <Button variant="outline" size="sm" disabled={disabled || !projectId} onClick={() => { setSearch(''); setOpen(true) }} aria-label={t('storyStage.presentation.defaultBackground')} title={value?.name} className="max-w-40 min-w-0">
+      <TuningRow title={title} description={description}>
+        <Button variant="outline" size="sm" disabled={disabled || !projectId} onClick={() => { setSearch(''); setOpen(true) }} aria-label={title} title={value?.name} className="max-w-40 min-w-0">
           <span className="truncate">{value?.name || t('storyStage.presentation.noBackground')}</span>
         </Button>
       </TuningRow>
-      {value && projectId && <div className="px-2.5 pb-2.5">
-        <MaterialImage key={value.path} src={projectFileAssetURL(projectId, value.path)} alt={value.name} className="aspect-[3/1] max-h-36 w-full rounded-md object-cover" />
+      {value && projectId && <div className="relative mx-2.5 mb-2.5">
+        <MaterialImage key={value.path} src={projectFileAssetURL(projectId, value.path)} alt={value.name} focus={value.focus} className="aspect-[3/1] max-h-36 w-full rounded-md object-cover object-center" />
+        <Button type="button" variant="secondary" size="icon-sm" disabled={disabled} className="absolute right-1 bottom-1" title={t('storyStage.presentation.focus')} aria-label={t('storyStage.presentation.focus')} onClick={() => setFocusOpen(true)}><Crosshair /></Button>
       </div>}
+      {focusOpen && value && projectId && <BackgroundFocusDialog key={`${value.item_id}:${value.asset_id}`} src={projectFileAssetURL(projectId, value.path)} focus={value.focus} disabled={disabled} onClose={() => setFocusOpen(false)} onSave={focus => onChange({ ...value, focus })} />}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex max-h-[85dvh] flex-col sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{t('storyStage.presentation.defaultBackground')}</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{t('storyStage.presentation.backgroundPickerHelp')}</DialogDescription>
           </DialogHeader>
           <Input value={search} onChange={event => setSearch(event.target.value)} placeholder={t('storyStage.presentation.searchBackgrounds')} aria-label={t('storyStage.presentation.searchBackgrounds')} />

@@ -1,9 +1,12 @@
 package character
 
 import (
+	"bytes"
 	"denova/internal/book/lore"
 	"encoding/base64"
 	"encoding/binary"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -184,7 +187,7 @@ func TestServiceImportTavernCharacterCardImportsPNGCoverOpeningsAndUserPlacehold
 	if result.UserCharacterName != "韩澈" {
 		t.Fatalf("用户角色名不符合预期: %#v", result)
 	}
-	cover, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(tavernCardCoverPath)))
+	cover, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(result.CoverPath)))
 	if err != nil {
 		t.Fatalf("读取封面失败: %v", err)
 	}
@@ -505,13 +508,75 @@ func hasCompatibilityField(fields []string, want string) bool {
 }
 
 func makeTestPNGTextChunk(keyword, text string) []byte {
-	var data []byte
-	data = append(data, pngSignature...)
+	var encoded bytes.Buffer
+	if err := png.Encode(&encoded, image.NewRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		panic(err)
+	}
+	data := encoded.Bytes()
+	data = data[:len(data)-12]
 	chunkData := append([]byte(keyword), 0)
 	chunkData = append(chunkData, []byte(text)...)
 	data = appendPNGChunk(data, "tEXt", chunkData)
 	data = appendPNGChunk(data, "IEND", nil)
 	return data
+}
+
+func TestImportedCardMaterialsStayIndependentAndRollback(t *testing.T) {
+	workspace := t.TempDir()
+	service := NewService(workspace)
+	store := lore.NewStore(workspace)
+	var paths []string
+	for _, name := range []string{"First", "Second"} {
+		data := makeTestPNGTextChunk("chara", base64.StdEncoding.EncodeToString([]byte(`{"name":"`+name+`","description":"Description","first_mes":"Opening"}`)))
+		result, err := service.ImportTavernCard(name+".png", data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		item, err := store.ReadAny(result.ItemIDs[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if item.Image == nil || item.Materials == nil || len(item.ResolvedMaterials) != 1 || item.Materials.CoverAssetID != item.ResolvedMaterials[0].ID {
+			t.Fatalf("missing material cover: %+v", item)
+		}
+		if strings.Contains(item.Content, "![") {
+			t.Fatalf("portrait leaked into text: %s", item.Content)
+		}
+		path := item.Image.ImagePath
+		if path == tavernCardCoverPath {
+			t.Fatal("lore must not share the mutable book cover")
+		}
+		paths = append(paths, path)
+		saved, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(path)))
+		if err != nil || !bytes.Equal(saved, data) {
+			t.Fatalf("material bytes: %v", err)
+		}
+		bookCover, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(tavernCardCoverPath)))
+		if err != nil || !bytes.Equal(bookCover, data) {
+			t.Fatalf("book cover bytes: %v", err)
+		}
+	}
+	if paths[0] == paths[1] {
+		t.Fatal("imports share the same material file")
+	}
+	first, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(paths[0])))
+	if err != nil || !bytes.Contains(first, []byte(base64.StdEncoding.EncodeToString([]byte(`{"name":"First","description":"Description","first_mes":"Opening"}`)))) {
+		t.Fatalf("first portrait was overwritten: %v", err)
+	}
+	snapshots, err := snapshotCharacterCardImportFiles(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalid := appendPNGChunk(appendPNGChunk(append([]byte{}, pngSignature...), "tEXt", append([]byte("chara\x00"), []byte(base64.StdEncoding.EncodeToString([]byte(`{"name":"Invalid","first_mes":"Changed"}`)))...)), "IEND", nil)
+	if _, err := service.ImportTavernCard("invalid.png", invalid); err == nil {
+		t.Fatal("expected invalid image to fail")
+	}
+	for _, snapshot := range snapshots {
+		data, err := os.ReadFile(snapshot.path)
+		if err != nil || !bytes.Equal(data, snapshot.data) {
+			t.Fatalf("rollback did not restore %s: %v", snapshot.path, err)
+		}
+	}
 }
 
 func appendPNGChunk(dst []byte, chunkType string, chunkData []byte) []byte {

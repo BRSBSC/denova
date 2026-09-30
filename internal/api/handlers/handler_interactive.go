@@ -690,3 +690,17 @@ func (h *Handlers) HandleImagePresetDelete(ctx context.Context, c *app.RequestCo
 	}
 	writeJSON(c, consts.StatusOK, map[string]string{"status": "ok"})
 }
+
+func (h *Handlers) HandleInteractiveTurnBackgroundUpdate(ctx context.Context, c *app.RequestContext) {
+	var body interactive.UpdateTurnBackgroundRequest
+	if err := c.BindJSON(&body); err != nil {
+		writeErrorKey(c, consts.StatusBadRequest, "api.common.invalidRequestWithDetail", "detail", err.Error())
+		return
+	}
+	body.TurnID = c.Param("turn_id")
+	if err := h.app.UpdateInteractiveTurnBackground(c.Param("id"), body); err != nil {
+		writeErrorKey(c, consts.StatusConflict, "api.interactive.backgroundUpdateFailed")
+		return
+	}
+	writeJSON(c, consts.StatusOK, map[string]string{"status": "ok"})
+}

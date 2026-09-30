@@ -2761,7 +2761,7 @@ html[data-nova-motion="off"] .nova-change-review-layer {
   display: none;
 }
 
-.story-state-ledger__director-label {
+.story-state-ledger__details-label {
   display: none;
 }
 
@@ -2827,12 +2827,6 @@ html[data-nova-motion="off"] .nova-change-review-layer {
   color: var(--nova-text);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.story-state-ledger__section-count {
-  flex-shrink: 0;
-  font-size: var(--nova-ui-micro-font-size);
-  color: var(--nova-text-faint);
 }
 
 .story-state-ledger__mode-toggle {
@@ -3009,7 +3003,7 @@ html[data-nova-motion="off"] .nova-change-review-layer {
 }
 
 @container story-state-ledger (min-width: 560px) {
-  .story-state-ledger__director-label {
+  .story-state-ledger__details-label {
     display: inline;
   }
 }

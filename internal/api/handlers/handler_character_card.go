@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -67,8 +66,15 @@ func readCharacterCardUpload(c *app.RequestContext) (string, []byte, bool) {
 	return fileHeader.Filename, data, true
 }
 
+type characterCardImportTarget string
+
+const (
+	characterCardCurrentBook characterCardImportTarget = "current"
+	characterCardNewBook     characterCardImportTarget = "new_book"
+)
+
 type characterCardImportFields struct {
-	replaceCover       bool
+	target             characterCardImportTarget
 	bookTitle          string
 	userCharacterName  string
 	classificationMode string
@@ -80,7 +86,7 @@ func readCharacterCardImportFields(c *app.RequestContext) characterCardImportFie
 		classificationMode = lore.ClassificationModeSemantic
 	}
 	return characterCardImportFields{
-		replaceCover:       string(c.FormValue("replace_cover")) == "true",
+		target:             characterCardCurrentBook,
 		bookTitle:          strings.TrimSpace(string(c.FormValue("book_title"))),
 		userCharacterName:  strings.TrimSpace(string(c.FormValue("user_character_name"))),
 		classificationMode: classificationMode,
@@ -115,7 +121,7 @@ func (h *Handlers) HandleProjectCharacterCardImport(ctx context.Context, c *app.
 		"size", len(data),
 		"classification_mode", fields.classificationMode,
 	)
-	result, err := h.installCharacterResources(ctx, filename, data, scope.ProjectID, scope.ContentRoot, fields)
+	result, err := h.installCharacterResources(ctx, filename, data, scope.ProjectID, fields)
 	result.ProjectID = scope.ProjectID
 	result.Workspace = scope.ContentRoot
 	h.writeCharacterCardImportResult(ctx, c, filename, result, err)
@@ -159,6 +165,7 @@ func (h *Handlers) writeCharacterCardImportResult(ctx context.Context, c *app.Re
 }
 
 func (h *Handlers) importCharacterCardToNewBook(ctx context.Context, filename string, data []byte, fields characterCardImportFields) (character.ImportResult, error) {
+	fields.target = characterCardNewBook
 	preview, err := character.PreviewTavernCard(filename, data)
 	if err != nil {
 		return character.ImportResult{}, err
@@ -194,7 +201,7 @@ func (h *Handlers) importCharacterCardToNewBook(ctx context.Context, filename st
 			)
 		}
 	}
-	result, err := h.installCharacterResources(ctx, filename, data, created.ProjectID, created.Workspace, fields)
+	result, err := h.installCharacterResources(ctx, filename, data, created.ProjectID, fields)
 	if err != nil {
 		cleanup()
 		return failedResult, err
@@ -207,7 +214,7 @@ func (h *Handlers) importCharacterCardToNewBook(ctx context.Context, filename st
 
 // The character-specific picker preserves conversion options, but all writes
 // and source records go through the same resource transaction as market imports.
-func (h *Handlers) installCharacterResources(ctx context.Context, filename string, data []byte, projectID, workspace string, fields characterCardImportFields) (character.ImportResult, error) {
+func (h *Handlers) installCharacterResources(ctx context.Context, filename string, data []byte, projectID string, fields characterCardImportFields) (character.ImportResult, error) {
 	exchange := h.app.ResourceExchange()
 	preview, err := exchange.PreviewCharacter(ctx, resourceexchange.Source{Kind: "file", Filename: filename}, data, h.characterCardImportOptions(ctx, projectID, fields))
 	if err != nil {
@@ -217,19 +224,13 @@ func (h *Handlers) installCharacterResources(ctx context.Context, filename strin
 	candidate := preview.Candidates[0]
 	selected := make([]string, 0, len(candidate.Resources))
 	for _, resource := range candidate.Resources {
-		if resource.Kind == "project.cover" && !fields.replaceCover {
-			_, err := os.Stat(filepath.Join(workspace, filepath.FromSlash(preview.Character.CoverPath)))
-			if err == nil {
-				preview.Character.CoverPath = ""
-				continue
-			}
-			if !os.IsNotExist(err) {
-				return character.ImportResult{}, err
-			}
+		if resource.Kind == "project.cover" && fields.target != characterCardNewBook {
+			preview.Character.CoverPath = ""
+			continue
 		}
 		selected = append(selected, resource.ID)
 	}
-	plan, err := exchange.Plan(ctx, resourceexchange.PlanRequest{PreviewID: preview.ID, CandidateID: candidate.ID, ProjectID: projectID, Resources: selected, ReplaceModified: fields.replaceCover})
+	plan, err := exchange.Plan(ctx, resourceexchange.PlanRequest{PreviewID: preview.ID, CandidateID: candidate.ID, ProjectID: projectID, Resources: selected})
 	if err != nil {
 		return character.ImportResult{}, err
 	}

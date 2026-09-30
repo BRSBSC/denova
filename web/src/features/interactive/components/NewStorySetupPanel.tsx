@@ -200,7 +200,6 @@ export function NewStorySetupPanel({
             <ConversationConfigError controller={conversationConfig} agentKey="interactive_story" />
             <StoryProtagonistSelector projectId={projectId} value={protagonist} loreItems={loreItems} onChange={changeProtagonist} onRequestLoreInit={onRequestLoreInit} />
             <StoryOpeningSelector value={opening} presets={bookOpeningPresets} onChange={setOpening} />
-            <StoryPresentationControls projectId={projectId} value={presentationSettings} loreItems={loreItems} disabled={creating} onChange={setPresentationSettings} />
 
             <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="overflow-hidden rounded-xl border border-border bg-card">
               <CollapsibleTrigger asChild>
@@ -214,27 +213,30 @@ export function NewStorySetupPanel({
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent className="border-t border-border bg-muted/20 p-3 sm:p-4">
-                <Field className="mb-3 rounded-lg border border-border bg-background p-3 sm:max-w-xl">
-                  <FieldLabel htmlFor="story-setup-planning-template">{t('storyPicker.gamePlanning')}</FieldLabel>
-                  <Select value={planningTemplateId} onValueChange={setPlanningTemplateId}>
-                    <SelectTrigger id="story-setup-planning-template" className="w-full bg-background">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent position="popper">
-                      <SelectGroup>
-                        {planningTemplates.map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {gamePlanningTemplateName(item, t)}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <FieldDescription className="text-xs">
-                    {t('storyPicker.setup.planningTemplateHint', { template: planningTemplateName })}
-                  </FieldDescription>
-                </Field>
                 <StorySetupAdvanced
+                  planningControl={
+                    <Field className="rounded-lg border border-border bg-background p-3">
+                      <FieldLabel htmlFor="story-setup-planning-template">{t('storyPicker.gamePlanning')}</FieldLabel>
+                      <Select value={planningTemplateId} onValueChange={setPlanningTemplateId}>
+                        <SelectTrigger id="story-setup-planning-template" className="w-full bg-background">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent position="popper">
+                          <SelectGroup>
+                            {planningTemplates.map((item) => (
+                              <SelectItem key={item.id} value={item.id}>
+                                {gamePlanningTemplateName(item, t)}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FieldDescription className="text-xs">
+                        {t('storyPicker.setup.planningTemplateHint', { template: planningTemplateName })}
+                      </FieldDescription>
+                    </Field>
+                  }
+                  presentationControl={<StoryPresentationControls projectId={projectId} value={presentationSettings} disabled={creating} onChange={setPresentationSettings} />}
                   projectId={projectId}
                   newStory={!story}
                   tellers={tellers}

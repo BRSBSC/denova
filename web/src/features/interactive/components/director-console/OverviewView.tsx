@@ -6,7 +6,7 @@ import type { BranchPlan, Snapshot } from '../../types'
 import { ChangesSummary } from '../story-state/ChangesSummary'
 import { buildStoryStateModel, type ActorStateEntry } from '../story-state/model'
 import { BranchPlanSummary } from './BranchPlanView'
-import { StateDetailsDialog } from './StateDetailsDialog'
+import { StateDetailsDialog } from '../story-state/StateDetailsDialog'
 
 interface OverviewViewProps {
   snapshot: Snapshot | null

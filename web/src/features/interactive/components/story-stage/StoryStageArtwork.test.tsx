@@ -59,7 +59,7 @@ describe('StoryStageArtwork', () => {
     expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'night')
   })
 
-  it('shows the default before the first turn and keeps it when dynamics are disabled', async () => {
+  it('shows the opening before the first turn and retains the current scene when Agent control is disabled', async () => {
     const props = { projectId: 'project', latest: true, textHidden: false, scrimOpacity: 0.75 }
     const settings = { background: true, characters: true, default_background: material('station', 'opening') }
     const { container, rerender } = render(<StoryStageArtwork {...props} settings={settings} />)
@@ -69,16 +69,14 @@ describe('StoryStageArtwork', () => {
     await loadAll()
     expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'night')
     rerender(<StoryStageArtwork {...props} turn={turn('one', null, 'night')} settings={{ ...settings, background: false, characters: false }} />)
-    expect(container.querySelectorAll('img')).toHaveLength(0)
-    await loadAll()
-    expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'opening')
+    expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'night')
     expect(container.querySelector('[data-stage-layer="character"]')).toBeNull()
     const cleared = { ...turn('two', 'one', 'night'), turn_result: { state_updates: [], choices: [], presentation: {} } }
     rerender(<StoryStageArtwork {...props} turn={cleared} settings={settings} />)
     expect(container.querySelectorAll('img')).toHaveLength(0)
     rerender(<StoryStageArtwork {...props} turn={cleared} settings={{ ...settings, background: false }} />)
     await loadAll()
-    expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'opening')
+    expect(container.querySelector('[data-stage-layer="background"]')).toBeNull()
   })
 
   it('retains each previous slot during loading or failure and switches successful siblings', async () => {
@@ -96,7 +94,8 @@ describe('StoryStageArtwork', () => {
     rerender(<StoryStageArtwork {...props} turn={turn('two', 'plan-event-after-one', 'night')} previousTurnId="one" textHidden />)
     expect(container.querySelector('[data-testid="story-stage-scrim"]')).toHaveStyle({ opacity: '0' })
     rerender(<StoryStageArtwork {...props} turn={turn('two', 'plan-event-after-one', 'night')} previousTurnId="one" settings={{ background: false, characters: false }} />)
-    expect(container.querySelectorAll('img')).toHaveLength(0)
+    expect(container.querySelector('[data-stage-layer="background"]')).toHaveAttribute('alt', 'day')
+    expect(container.querySelector('[data-stage-layer="character"]')).toBeNull()
   })
 
   it('clears fallback on history, regeneration, branch and project changes, ignoring late loads', async () => {

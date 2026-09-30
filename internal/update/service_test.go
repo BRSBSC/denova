@@ -14,11 +14,47 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"denova/internal/hostruntime"
 )
+
+func TestUpdateCheckAndDownloadUseConfiguredProxy(t *testing.T) {
+	var connects atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect {
+			t.Errorf("unexpected proxy method: %s", r.Method)
+		}
+		connects.Add(1)
+		http.Error(w, "fixture proxy unavailable", http.StatusBadGateway)
+	}))
+	t.Cleanup(proxy.Close)
+	for _, key := range []string{"HTTPS_PROXY", "https_proxy"} {
+		t.Setenv(key, proxy.URL)
+	}
+	for _, key := range []string{"NO_PROXY", "no_proxy"} {
+		t.Setenv(key, "")
+	}
+	service := NewService()
+	// Download can be entered without a preceding release check.
+	client := service.downloadHTTPClient()
+	client.Timeout = time.Second
+	t.Cleanup(client.CloseIdleConnections)
+	response, err := client.Get("https://archive.invalid/update.zip")
+	if response != nil {
+		response.Body.Close()
+	}
+	if err == nil || connects.Load() != 1 {
+		t.Fatalf("update download bypassed the proxy: connects=%d error=%v", connects.Load(), err)
+	}
+	service.httpClient.Timeout = time.Second
+	_, err = service.Check(context.Background())
+	if err == nil || connects.Load() != 2 {
+		t.Fatalf("update check bypassed the proxy: connects=%d error=%v", connects.Load(), err)
+	}
+}
 
 func TestSelectAssetForPlatform(t *testing.T) {
 	assets := []githubAsset{

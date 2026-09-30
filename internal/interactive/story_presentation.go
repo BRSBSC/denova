@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 )
 
 // StoryPresentationSettings is story-owned. Background enables dynamic selection;
-// disabling it displays DefaultBackground. Characters controls selection and visibility.
+// DefaultBackground seeds the opening only. Characters controls selection and visibility.
 // Neither switch erases a committed turn's presentation.
 type StoryPresentationSettings struct {
 	Background        bool                  `json:"background"`
@@ -21,7 +22,7 @@ func NormalizeStoryPresentationSettings(settings *StoryPresentationSettings) *St
 	}
 	copy := *settings
 	if settings.DefaultBackground != nil {
-		background := *settings.DefaultBackground
+		background := settings.DefaultBackground.clone()
 		copy.DefaultBackground = &background
 	}
 	return &copy
@@ -34,6 +35,26 @@ type PresentationMaterial struct {
 	AssetID string `json:"asset_id"`
 	Path    string `json:"path"`
 	Name    string `json:"name"`
+	// Focus is a user-selected point in the original image, normalized to [0,1].
+	// Omission means center. It is pinned with the presentation, never model-authored.
+	Focus *ImageFocus `json:"focus,omitempty"`
+}
+
+type ImageFocus struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+func (m PresentationMaterial) clone() PresentationMaterial {
+	if m.Focus != nil {
+		focus := *m.Focus
+		m.Focus = &focus
+	}
+	return m
+}
+
+func (f *ImageFocus) valid() bool {
+	return f == nil || (!math.IsNaN(f.X) && !math.IsNaN(f.Y) && f.X >= 0 && f.X <= 1 && f.Y >= 0 && f.Y <= 1)
 }
 
 // TurnPresentation is a full snapshot, committed atomically with the turn.
@@ -48,10 +69,13 @@ func (p *TurnPresentation) Clone() *TurnPresentation {
 	}
 	copy := *p
 	if p.Background != nil {
-		background := *p.Background
+		background := p.Background.clone()
 		copy.Background = &background
 	}
 	copy.Characters = append([]PresentationMaterial(nil), p.Characters...)
+	for i := range copy.Characters {
+		copy.Characters[i] = copy.Characters[i].clone()
+	}
 	return &copy
 }
 
@@ -145,6 +169,9 @@ func ApplyPresentationPatch(base *TurnPresentation, raw json.RawMessage, setting
 			return
 		}
 		if background {
+			if previous := result.Background; previous != nil && previous.ItemID == material.ItemID && previous.AssetID == material.AssetID && previous.Path == material.Path {
+				material.Focus = previous.Focus
+			}
 			result.Background = &material
 		} else if position >= 0 {
 			result.Characters[position] = material

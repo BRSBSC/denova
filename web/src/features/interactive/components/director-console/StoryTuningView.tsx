@@ -25,6 +25,8 @@ import type {
   StoryCheckSettings,
   StoryDirectorModuleRefs,
   StorySummary,
+  TurnEvent,
+  PresentationMaterial,
   Teller,
 } from '../../types'
 import { StateDisplayPreferenceMenu } from '../story-state/StateDisplayPreferenceMenu'
@@ -37,6 +39,9 @@ type ModuleIDKey = 'narrative_style_id' | 'rule_system_id' | 'actor_state_id' | 
 type ModuleDisabledKey = 'narrative_style_disabled' | 'rule_system_disabled' | 'actor_state_disabled' | 'image_preset_disabled'
 
 export interface StoryTuningViewProps {
+  currentTurn?: TurnEvent
+  onBackgroundChange?: (turnId: string, background?: PresentationMaterial) => Promise<void>
+  backgroundDisabled?: boolean
   projectId?: string
   story?: StorySummary
   planningTemplates: GamePlanningTemplate[]
@@ -59,6 +64,9 @@ const DEFAULT_MODULE_REFS: StoryDirectorModuleRefs = {
 
 export function StoryTuningView({
   projectId,
+  currentTurn,
+  onBackgroundChange,
+  backgroundDisabled,
   story,
   planningTemplates,
   tellers,
@@ -351,7 +359,7 @@ export function StoryTuningView({
           </>}
         </ControlSection>
 
-        <StoryPresentationControls key="presentation" projectId={projectId} value={story?.presentation_settings} disabled={disabled} onChange={presentation_settings => { void save('presentation_settings', { presentation_settings }) }} />
+        <StoryPresentationControls currentTurn={currentTurn} onBackgroundChange={onBackgroundChange} backgroundDisabled={backgroundDisabled} key="presentation" projectId={projectId} value={story?.presentation_settings} disabled={disabled} onChange={presentation_settings => { void save('presentation_settings', { presentation_settings }) }} />
 
         <StorySpeechControls key="speech" story={story} disabled={disabled} onChange={speech_settings => { void save('speech_settings', { speech_settings }) }} />
 

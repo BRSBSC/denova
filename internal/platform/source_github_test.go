@@ -8,14 +8,43 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"denova/internal/project"
 )
+
+func TestGitHubSourceUsesConfiguredProxy(t *testing.T) {
+	var connects atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect || r.Host != "api.github.com:443" {
+			t.Errorf("unexpected proxy request: %s %s", r.Method, r.Host)
+		}
+		connects.Add(1)
+		http.Error(w, "fixture proxy unavailable", http.StatusBadGateway)
+	}))
+	t.Cleanup(proxy.Close)
+	for _, key := range []string{"HTTPS_PROXY", "https_proxy"} {
+		t.Setenv(key, proxy.URL)
+	}
+	for _, key := range []string{"NO_PROXY", "no_proxy"} {
+		t.Setenv(key, "")
+	}
+	client := newGitHubClient()
+	client.Timeout = time.Second
+	t.Cleanup(client.CloseIdleConnections)
+	manager := &Manager{githubHTTP: client}
+	_, err := manager.githubGet(context.Background(), "https://api.github.com/repos/owner/repo", "application/vnd.github+json", 1024)
+	if err == nil || connects.Load() != 1 {
+		t.Fatalf("GitHub source bypassed the proxy: connects=%d error=%v", connects.Load(), err)
+	}
+}
 
 type githubTestTransport func(*http.Request) (*http.Response, error)
 

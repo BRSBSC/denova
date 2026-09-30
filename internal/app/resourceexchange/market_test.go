@@ -6,10 +6,38 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
+
+func TestMarketUsesConfiguredProxy(t *testing.T) {
+	var connects atomic.Int32
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodConnect || r.Host != "alfredxw.github.io:443" {
+			t.Errorf("unexpected proxy request: %s %s", r.Method, r.Host)
+		}
+		connects.Add(1)
+		http.Error(w, "fixture proxy unavailable", http.StatusBadGateway)
+	}))
+	t.Cleanup(proxy.Close)
+	for _, key := range []string{"HTTPS_PROXY", "https_proxy"} {
+		t.Setenv(key, proxy.URL)
+	}
+	for _, key := range []string{"NO_PROXY", "no_proxy"} {
+		t.Setenv(key, "")
+	}
+	market := NewMarket(t.TempDir())
+	market.client.Timeout = time.Second
+	t.Cleanup(market.client.CloseIdleConnections)
+	_, err := market.Catalog(context.Background(), true)
+	if err == nil || connects.Load() != 1 {
+		t.Fatalf("market bypassed the proxy: connects=%d error=%v", connects.Load(), err)
+	}
+}
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 

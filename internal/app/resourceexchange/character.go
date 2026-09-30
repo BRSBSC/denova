@@ -36,10 +36,30 @@ func (s *Service) PreviewCharacter(ctx context.Context, source Source, data []by
 	manifest := Manifest{Format: "denova.resource-pack", SchemaVersion: 1, Package: PackageInfo{ID: "character-card", Name: result.Name}}
 	files := map[string][]byte{}
 	collection := portableCollection[json.RawMessage]{Version: 1, Items: []json.RawMessage{}}
+	loreAssets := []string{}
 	for _, item := range items {
 		raw, err := portableJSON("lore.entry", item)
 		if err != nil {
 			return Preview{}, err
+		}
+		if item.Image != nil {
+			var body map[string]json.RawMessage
+			if err := json.Unmarshal(raw, &body); err != nil {
+				return Preview{}, err
+			}
+			delete(body, "image")
+			body["materials"], err = json.Marshal(portableMaterials{
+				Entries:   []portableMaterial{{AssetPath: "cover.png", OriginalName: source.Filename, Name: item.Name}},
+				CoverPath: "cover.png",
+			})
+			if err != nil {
+				return Preview{}, err
+			}
+			raw, err = json.Marshal(body)
+			if err != nil {
+				return Preview{}, err
+			}
+			loreAssets = append(loreAssets, "cover.png")
 		}
 		collection.Items = append(collection.Items, raw)
 	}
@@ -48,7 +68,7 @@ func (s *Service) PreviewCharacter(ctx context.Context, source Source, data []by
 		if err != nil {
 			return Preview{}, err
 		}
-		manifest.Resources = append(manifest.Resources, Resource{ID: "lore", Kind: "lore.collection", Path: "lore.json"})
+		manifest.Resources = append(manifest.Resources, Resource{ID: "lore", Kind: "lore.collection", Path: "lore.json", Assets: loreAssets})
 	}
 	if result.OpeningPresetCount > 0 {
 		raw, err := os.ReadFile(filepath.Join(dir, "setting", "interactive-openings.json"))

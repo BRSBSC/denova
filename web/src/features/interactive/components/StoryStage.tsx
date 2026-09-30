@@ -1,5 +1,5 @@
 import { visibleStoryPresentation } from '../presentation'
-import { Eye, EyeOff, Square } from 'lucide-react'
+import { Eye, EyeOff, Maximize2, Square } from 'lucide-react'
 import { StoryStageArtwork } from './story-stage/StoryStageArtwork'
 import { useGameStories } from '@/features/platform/game-story-context'
 import { GameStorySetup } from '@/features/platform/GameStorySetup'
@@ -35,6 +35,7 @@ import { NewStorySetupPanel } from './NewStorySetupPanel'
 import { TurnNavigator } from './TurnNavigator'
 import { DEFAULT_STORY_STATE_DISPLAY, type StoryStateDisplayPreference } from './story-state/display-preference'
 import { StoryStateLedger } from './story-state/StoryStateLedger'
+import { StateDetailsDialog } from './story-state/StateDetailsDialog'
 import { buildStoryStateModel } from './story-state/model'
 import { useStagePreferences } from './story-stage/use-stage-preferences'
 import { parseInlineStyleScenes, storyStageSnapshotKey } from './story-stage/utils'
@@ -53,7 +54,7 @@ import { useIsMobile } from '@/hooks/useIsMobile'
 const DEFAULT_READING_FONT_SIZE = 18
 const EMPTY_STAGE_RUN = emptyStoryStageRun()
 
-export function StoryStage({ active = true, projectId, workspace, styleSceneSuggestions = [], stories = [], story, tellers = [], planningTemplates = [], imagePresets = [], recentNarrativeStyleID = DEFAULT_NARRATIVE_STYLE_ID, narrativeStyleLoading = false, storyId, branchId, snapshot, snapshotLoading = false, loreItems = [], bookOpeningPresets = [], directorPanelVisible = true, stateDisplayPreference = DEFAULT_STORY_STATE_DISPLAY, onStorySelect = noop, onStoryCreate = noop, onStorySetupUpdate = noop, onNarrativeStyleChange, onStoryDelete = noop, onStoryRename, onRequestLoreInit, onOpenDirectorConfig, onToggleDirectorPanel, onOpenDirectorState, onRequestCreateBranch, onStateDisplayPreferenceChange = noopStateDisplayPreferenceChange, onTurnPersisted = noopTurnPersisted, onDone }: StoryStageProps) {
+export function StoryStage({ active = true, projectId, workspace, styleSceneSuggestions = [], stories = [], story, tellers = [], planningTemplates = [], imagePresets = [], recentNarrativeStyleID = DEFAULT_NARRATIVE_STYLE_ID, narrativeStyleLoading = false, storyId, branchId, snapshot, snapshotLoading = false, loreItems = [], bookOpeningPresets = [], directorPanelVisible = true, stateDisplayPreference = DEFAULT_STORY_STATE_DISPLAY, onStorySelect = noop, onStoryCreate = noop, onStorySetupUpdate = noop, onNarrativeStyleChange, onStoryDelete = noop, onStoryRename, onRequestLoreInit, onOpenDirectorConfig, onToggleDirectorPanel, onRequestCreateBranch, onStateDisplayPreferenceChange = noopStateDisplayPreferenceChange, onTurnPersisted = noopTurnPersisted, onDone }: StoryStageProps) {
   const { t } = useTranslation()
   const gameStories = useGameStories()
   const [localCreating, setLocalCreating] = useState(false)
@@ -725,7 +726,14 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
                     snapshot={snapshot}
                     displayPreference={stateDisplayPreference}
                     onDisplayPreferenceChange={onStateDisplayPreferenceChange}
-                    onOpenDirectorState={onOpenDirectorState}
+                    detailsAction={
+                      <StateDetailsDialog snapshot={snapshot} trigger={
+                        <Button type="button" variant="ghost" size="sm" aria-label={t('storyStage.state.viewAll')}>
+                          <Maximize2 data-icon="inline-start" />
+                          <span className="story-state-ledger__details-label">{t('storyStage.state.viewAll')}</span>
+                        </Button>
+                      } />
+                    }
                   />
                 ) : undefined}
                 afterContentKey={snapshot?.current_turn?.id || ''}

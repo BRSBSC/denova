@@ -5,7 +5,8 @@ import { motion } from 'motion/react'
 import { toast } from '@/lib/toast'
 import { useShallow } from 'zustand/react/shallow'
 import { readOptionalProjectFile, type LoreItem } from '@/lib/api'
-import { createInteractiveBranch, createInteractiveStory, deleteInteractiveBranch, deleteInteractiveStory, getGamePlanningTemplates, getInteractiveBranches, getInteractiveSnapshot, getInteractiveStories, getInteractiveTellers, selectInteractiveStory, switchInteractiveBranch, updateInteractiveBranchPlan, updateInteractiveStory } from '../api'
+import { createInteractiveBranch, createInteractiveStory, deleteInteractiveBranch, deleteInteractiveStory, getGamePlanningTemplates, getInteractiveBranches, getInteractiveSnapshot, getInteractiveStories, getInteractiveTellers, selectInteractiveStory, switchInteractiveBranch, updateInteractiveBranchPlan, updateInteractiveTurnBackground, updateInteractiveStory } from '../api'
+import type { PresentationMaterial } from '../types'
 import { branchPlanSnapshotAfterUpdate } from '../branch-plan-snapshot'
 import { useInteractiveStore } from '../stores/interactive-store'
 import { BranchTimeline } from './BranchTimeline'
@@ -354,6 +355,15 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
     }
   }
 
+  const handleBackgroundChange = async (turnId: string, background?: PresentationMaterial) => {
+    if (!currentStoryId || !currentBranchId) throw new Error(t('storyStage.presentation.backgroundUpdateFailed'))
+    await updateInteractiveTurnBackground(currentStoryId, turnId, { branch_id: currentBranchId, background: background ?? null })
+    const current = useInteractiveStore.getState()
+    // A completed save must not replace the snapshot of a newly selected story.
+    if (current.currentStoryId !== currentStoryId || current.currentBranchId !== currentBranchId) return
+    await reloadSnapshot(currentBranchId, currentStoryId, { silent: true })
+  }
+
   const handleBranchPlanUpdate = useCallback(async (markdown: string, baseRevision: string) => {
     const storyId = currentStoryId || useInteractiveStore.getState().currentStoryId
     const branchId = currentBranchId || useInteractiveStore.getState().currentBranchId
@@ -391,14 +401,6 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
     setStoryStateDisplayPreference(value)
     writeStoryStateDisplayPreference(value)
   }, [])
-
-  const openDirectorState = useCallback(() => {
-    if (isMobile) {
-      setMobileSnapshotOpen(true)
-      return
-    }
-    if (!rightPanelVisible) onToggleRightPanel?.()
-  }, [isMobile, onToggleRightPanel, rightPanelVisible])
 
   const openBranchTimeline = useCallback(() => {
     setMobileSnapshotOpen(false)
@@ -496,7 +498,6 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
         setMobileSnapshotOpen(false)
       }}
       onToggleDirectorPanel={isMobile ? () => setMobileSnapshotOpen((open) => !open) : onToggleRightPanel}
-      onOpenDirectorState={openDirectorState}
       onRequestCreateBranch={setBranchCreationSource}
       onStateDisplayPreferenceChange={handleStoryStateDisplayPreferenceChange}
       onTurnPersisted={handleTurnPersisted}
@@ -536,6 +537,7 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
                       branches={branches}
                       snapshot={displaySnapshot}
                       branchPlanEditingDisabled={branchPlanEditingDisabled}
+                      onBackgroundChange={handleBackgroundChange}
                       onBranchPlanUpdate={handleBranchPlanUpdate}
                       stateDisplayPreference={storyStateDisplayPreference}
                       onStateDisplayPreferenceChange={handleStoryStateDisplayPreferenceChange}

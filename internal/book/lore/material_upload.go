@@ -33,6 +33,8 @@ type MaterialFile struct {
 	Source         AssetSource
 	Entry          MaterialEntry
 	ReplaceAssetID string
+	// Cover controls whether this image fills an empty cover on attachment.
+	Cover CoverPolicy
 }
 
 func (s *Store) UploadMaterial(ctx context.Context, id, filename string, data []byte) (Item, error) {
@@ -42,6 +44,9 @@ func (s *Store) UploadMaterial(ctx context.Context, id, filename string, data []
 // SaveMaterial owns only the newly allocated directory until the atomic
 // collection commit succeeds. The original filename is display metadata only.
 func (s *Store) SaveMaterial(ctx context.Context, id string, file MaterialFile) (Item, error) {
+	if file.Cover != CoverPreserve && file.Cover != CoverIfMissing {
+		return Item{}, errors.New("unknown lore cover policy")
+	}
 	data := file.Data
 	if len(data) > MaxMaterialUploadBytes {
 		return Item{}, ErrMaterialTooLarge
@@ -49,6 +54,9 @@ func (s *Store) SaveMaterial(ctx context.Context, id string, file MaterialFile) 
 	mime, ext, err := MaterialFormat(data)
 	if err != nil {
 		return Item{}, err
+	}
+	if file.Cover == CoverIfMissing && !strings.HasPrefix(mime, "image/") {
+		return Item{}, errors.New("cover material must be an image")
 	}
 	if _, err := s.ReadAny(id); err != nil {
 		return Item{}, err
@@ -96,7 +104,7 @@ func (s *Store) SaveMaterial(ctx context.Context, id string, file MaterialFile) 
 	if err := ctx.Err(); err != nil {
 		return Item{}, err
 	}
-	item, err := s.attachAsset(id, a, file.Entry, materialAttachment{replaceID: file.ReplaceAssetID})
+	item, err := s.attachAsset(id, a, file.Entry, materialAttachment{replaceID: file.ReplaceAssetID, cover: file.Cover})
 	if err != nil {
 		return Item{}, err
 	}

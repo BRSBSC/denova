@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CoverImage } from '@/components/cover-image'
 import { projectFileAssetURL } from '@/lib/api-client/project-files'
 import { visibleStoryPresentation } from '../../presentation'
 import type { PresentationMaterial, StoryPresentationSettings, TurnEvent } from '../../types'
@@ -25,9 +26,9 @@ export function StoryStageArtwork({ projectId, turn, previousTurnId, latest, set
     setContinuity({ scene, turnId: turn?.id, latest, epoch: continuity.epoch + (continues ? 0 : 1) })
   }
   const { background, characters = [] } = visibleStoryPresentation(turn?.turn_result?.presentation, settings)
-  // Preference changes must not retain a different image if the default fails
-  // to load. Only turn-to-turn replacement shares the live background slot.
-  const backgroundSlot = settings?.background !== false && turn?.turn_result?.presentation ? 'turn' : `default:${background?.path}`
+  // Initial background changes must not retain a different image if loading
+  // fails. Committed scenes share the live background slot across turns.
+  const backgroundSlot = turn?.turn_result?.presentation ? 'turn' : `default:${background?.path}`
   if (!background && !characters.length) return null
 
   return (
@@ -47,7 +48,7 @@ export function StoryStageArtwork({ projectId, turn, previousTurnId, latest, set
 
 function StageImage({ projectId, material, layer, fallbackKey }: { projectId: string; material: PresentationMaterial; layer: 'background' | 'character'; fallbackKey: string }) {
   const src = projectFileAssetURL(projectId, material.path)
-  const [imageState, setImageState] = useState<{ fallbackKey: string; loaded?: { src: string; name: string } }>({ fallbackKey })
+  const [imageState, setImageState] = useState<{ fallbackKey: string; loaded?: { src: string; name: string; focus?: PresentationMaterial['focus'] } }>({ fallbackKey })
   if (imageState.fallbackKey !== fallbackKey) {
     // Reset stale fallbacks without remounting the same asset during history scrolling.
     setImageState({ fallbackKey, loaded: imageState.loaded?.src === src ? imageState.loaded : undefined })
@@ -59,14 +60,18 @@ function StageImage({ projectId, material, layer, fallbackKey }: { projectId: st
     image.onload = () => {
       // decode avoids replacing the previous image before the browser can paint.
       const ready = typeof image.decode === 'function' ? image.decode() : Promise.resolve()
-      void ready.then(() => { if (!cancelled) setImageState(current => ({ ...current, loaded: { src, name: material.name } })) }).catch(() => {
+      void ready.then(() => { if (!cancelled) setImageState(current => ({ ...current, loaded: { src, name: material.name, focus: material.focus } })) }).catch(() => {
         if (!cancelled) console.warn('[story-presentation] image decoding failed', { path: material.path })
       })
     }
     image.onerror = () => console.warn('[story-presentation] image loading failed', { path: material.path })
     image.src = src
     return () => { cancelled = true; image.onload = null; image.onerror = null }
-  }, [src, material.name, material.path])
+  }, [src, material.name, material.path, material.focus])
 
-  return loaded ? <img data-stage-layer={layer} src={loaded.src} alt={loaded.name} draggable={false} className={`absolute inset-0 h-full w-full ${layer === 'background' ? 'object-cover' : 'object-contain object-bottom'} animate-in fade-in duration-200 motion-reduce:animate-none`} /> : null
+  if (!loaded) return null
+  const className = 'absolute inset-0 h-full w-full animate-in fade-in duration-200 motion-reduce:animate-none'
+  return layer === 'background'
+    ? <CoverImage data-stage-layer={layer} src={loaded.src} alt={loaded.name} focus={loaded.src === src ? material.focus : loaded.focus} draggable={false} className={className} />
+    : <img data-stage-layer={layer} src={loaded.src} alt={loaded.name} draggable={false} className={`${className} object-contain object-bottom`} />
 }

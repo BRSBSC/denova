@@ -1,8 +1,14 @@
 package resourceexchange
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
+	"hash/crc32"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"slices"
@@ -87,7 +93,21 @@ func TestCharacterCardUsesFrozenPortableResources(t *testing.T) {
 	ctx := context.Background()
 	s := testService(t)
 	raw := []byte(`{"spec":"chara_card_v2","data":{"name":"Explorer","description":"A careful explorer.","first_mes":"You arrive.","alternate_greetings":["Welcome back."],"character_book":{"entries":[{"keys":["Harbor"],"comment":"Harbor","content":"A quiet harbor.","enabled":true}]}}}`)
-	preview, err := s.Preview(ctx, Source{Kind: "file", Filename: "explorer.json"}, raw)
+	var picture bytes.Buffer
+	if err := png.Encode(&picture, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	data := picture.Bytes()
+	chunk := append([]byte("tEXtchara\x00"), []byte(base64.StdEncoding.EncodeToString(raw))...)
+	var length [4]byte
+	binary.BigEndian.PutUint32(length[:], uint32(len(chunk)-4))
+	card := append([]byte{}, data[:len(data)-12]...)
+	card = append(card, length[:]...)
+	card = append(card, chunk...)
+	binary.BigEndian.PutUint32(length[:], crc32.ChecksumIEEE(chunk))
+	card = append(card, length[:]...)
+	card = append(card, data[len(data)-12:]...)
+	preview, err := s.Preview(ctx, Source{Kind: "file", Filename: "explorer.png"}, card)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,6 +137,29 @@ func TestCharacterCardUsesFrozenPortableResources(t *testing.T) {
 	items, err := lore.NewStore(workspace).ListAll()
 	if err != nil || len(items) != preview.Character.ItemCount {
 		t.Fatalf("converted lore: %+v %v", items, err)
+	}
+
+	for _, item := range items {
+		if item.Name != "Explorer" {
+			if len(item.ResolvedMaterials) != 0 {
+				t.Fatalf("unrelated lore received portrait: %+v", item)
+			}
+			continue
+		}
+		if item.Image == nil || len(item.ResolvedMaterials) != 1 || item.Materials.CoverAssetID != item.ResolvedMaterials[0].ID {
+			t.Fatalf("lost imported portrait: %+v", item)
+		}
+		if strings.Contains(item.Content, "![") {
+			t.Fatal("image still embedded in content")
+		}
+		saved, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(item.Image.ImagePath)))
+		if err != nil || !bytes.Equal(saved, card) {
+			t.Fatalf("portrait bytes: %v", err)
+		}
+	}
+	bookCover, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(coverPath)))
+	if err != nil || !bytes.Equal(bookCover, card) {
+		t.Fatalf("book cover missing: %v", err)
 	}
 	openingBytes, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(openingPath)))
 	if err != nil {

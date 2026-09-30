@@ -32,6 +32,9 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Fixed / 修复
 
+- 修复远程 ZIP 与 Skill 下载绕过代理的问题，资源下载统一遵循环境变量和系统代理设置。
+- Fix remote ZIP and Skill downloads bypassing proxies; resource downloads consistently use environment and system proxy settings.
+
 - 外部运行时逐条保存控制回执，避免长会话在追加指令、暂停和结束任务时反复保存全部历史回执；升级时备份并转换已有记录，保留未完成任务和命令重试结果。
 - External runtimes persist control receipts incrementally instead of rewriting all historical receipts when accepting guidance, pausing, or finishing tasks. Existing records are backed up and converted while preserving unfinished tasks and command retry results.
 

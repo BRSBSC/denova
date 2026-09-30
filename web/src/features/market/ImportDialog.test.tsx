@@ -3,10 +3,12 @@ import { act, fireEvent, render as renderComponent, screen, waitFor } from '@tes
 import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { createBook } from '@/lib/api'
+import { notifyLoreUpdated } from '@/features/lore/events'
 import { BookCreationProvider } from '@/components/workbench/book-creation'
 import { ImportDialog } from './ImportDialog'
 import { discardPreview, previewSource, exchange, type Preview } from './api'
 vi.mock('@/lib/api', () => ({ getBooks: vi.fn().mockResolvedValue([]), createBook: vi.fn() }))
+vi.mock('@/features/lore/events', () => ({ notifyLoreUpdated: vi.fn() }))
 vi.mock('./api', async (original) => ({ ...await original<typeof import('./api')>(), exchange: vi.fn(), previewSource: vi.fn(), discardPreview: vi.fn() }))
 const beforeCreate = vi.fn<() => Promise<boolean>>()
 const onCreated = vi.fn<(workspace: string) => Promise<void>>()
@@ -28,6 +30,7 @@ beforeEach(() => {
   vi.mocked(previewSource).mockReset()
   vi.mocked(discardPreview).mockReset()
   vi.mocked(createBook).mockReset()
+  vi.mocked(notifyLoreUpdated).mockReset()
   beforeCreate.mockReset().mockResolvedValue(true)
   onCreated.mockReset().mockResolvedValue(undefined)
 })
@@ -96,6 +99,33 @@ it('creates a book for lore and reuses it when planning fails', async () => {
   await screen.findByText('确认安装计划')
   expect(createBook).toHaveBeenCalledTimes(1)
   expect(onCreated).toHaveBeenCalledTimes(1)
+})
+
+it('refreshes the opened book catalog only after its import succeeds', async () => {
+  const user = userEvent.setup()
+  vi.mocked(createBook).mockResolvedValue({ project_id: 'new-project', workspace: '/books/new', book_meta: { title: 'New world' } } as Awaited<ReturnType<typeof createBook>>)
+  const installed = { project_id: 'new-project', bindings: [
+    { local: { kind: 'lore.collection', project_id: 'new-project' } },
+    { local: { kind: 'lore.collection', project_id: 'new-project' } },
+  ] }
+  vi.mocked(exchange)
+    .mockResolvedValueOnce({ plan_id: 'plan', items: [], installation: { package: { name: 'Story package' } } })
+    .mockRejectedValueOnce(new Error('Import failed'))
+    .mockResolvedValueOnce(installed)
+  const onInstalled = vi.fn()
+  render(<ImportDialog preview={{ ...preview, candidates: [{ ...preview.candidates[1], resources: [preview.candidates[1].resources[0]] }] }} onClose={vi.fn()} onInstalled={onInstalled} />)
+  await user.click(screen.getByRole('radio', { name: '导入成新书籍' }))
+  await user.type(screen.getByRole('textbox', { name: '新书名称' }), 'New world')
+  await user.click(screen.getByRole('button', { name: '创建书籍并生成计划' }))
+  await screen.findByText('确认安装计划')
+  expect(onCreated).toHaveBeenCalledExactlyOnceWith('/books/new')
+  expect(notifyLoreUpdated).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: '确认安装' }))
+  await screen.findByText('Import failed')
+  expect(notifyLoreUpdated).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: '确认安装' }))
+  await waitFor(() => expect(onInstalled).toHaveBeenCalledWith(installed))
+  expect(notifyLoreUpdated).toHaveBeenCalledExactlyOnceWith({ projectId: 'new-project', source: 'resource-import' })
 })
 
 it('does not create or plan a book when workspace drafts cannot be saved', async () => {
@@ -176,4 +206,34 @@ it('allows cancelling a download and releases its late result', async () => {
   view.unmount()
   await act(async () => resolve(downloaded))
   expect(discardPreview).toHaveBeenCalledExactlyOnceWith(downloaded)
+})
+
+const cardPreview: Preview = {
+ ...preview,
+ character: { name: 'Explorer', target_path: '', entry_count: 0, item_count: 1, item_ids: [], opening_preset_count: 0, user_placeholder_found: false, compatibility: { capabilities: [], sanitized_runtime: [], discarded_extensions: [], warnings: [], ignored_loading_rules: false }, message: '', resident_lore_bytes: 0, classification_mode: 'heuristic', classification_counts: {}, uncertain_type_count: 0 },
+ candidates: [{ candidate_id: 'card', package: { id: 'card', name: 'Explorer' }, format: 'denova.resource-pack', resources: [
+  { id: 'lore', kind: 'lore.collection', name: 'Explorer lore', path: 'lore.json', digest: '1' },
+  { id: 'cover', kind: 'project.cover', name: 'Book portrait', path: 'cover.json', digest: '2' },
+ ] }],
+}
+it('excludes the character book cover when importing into an existing book', async () => {
+ vi.mocked(exchange).mockResolvedValue({ plan_id: 'plan', items: [], installation: { package: { name: 'Explorer' } } })
+ render(<ImportDialog preview={cardPreview} projectID="existing" onClose={vi.fn()} onInstalled={vi.fn()} />)
+ expect(screen.queryByText('Book portrait')).not.toBeInTheDocument()
+ fireEvent.click(screen.getByRole('button', { name: '生成安装计划' }))
+ await waitFor(() => expect(exchange).toHaveBeenCalledWith('/plans', expect.objectContaining({ project_id: 'existing', resources: ['lore'] })))
+})
+it('keeps the character book cover for a new book including a plan retry', async () => {
+ const user = userEvent.setup()
+ vi.mocked(createBook).mockResolvedValue({ project_id: 'new-card', workspace: '/books/card', book_meta: { title: 'Explorer' } } as Awaited<ReturnType<typeof createBook>>)
+ vi.mocked(exchange).mockRejectedValueOnce(new Error('Retry card plan')).mockResolvedValueOnce({ plan_id: 'plan', items: [], installation: { package: { name: 'Explorer' } } })
+ render(<ImportDialog preview={cardPreview} onClose={vi.fn()} onInstalled={vi.fn()} />)
+ await user.click(screen.getByRole('radio', { name: '导入成新书籍' }))
+ await user.type(screen.getByRole('textbox', { name: '新书名称' }), 'Explorer')
+ await user.click(screen.getByRole('button', { name: '创建书籍并生成计划' }))
+ await screen.findByText('Retry card plan')
+ await user.click(screen.getByRole('button', { name: '生成安装计划' }))
+ await screen.findByText('确认安装计划')
+ expect(createBook).toHaveBeenCalledOnce()
+ for (const [, request] of vi.mocked(exchange).mock.calls) expect(request).toEqual(expect.objectContaining({ project_id: 'new-card', resources: ['lore', 'cover'] }))
 })

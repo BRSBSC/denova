@@ -44,10 +44,10 @@ func buildPresentationContext(workspace string, settings *interactive.StoryPrese
 	settingsJSON, _ := json.Marshal(settings)
 	stageJSON, _ := json.Marshal(stage)
 	var content strings.Builder
-	fmt.Fprintf(&content, "Stage settings (background enables dynamic selection; characters enables sprites): %s\nCurrent parent turn stage: %s\n", settingsJSON, stageJSON)
+	fmt.Fprintf(&content, "Stage settings (background permits Agent background changes; default_background seeds only the opening; characters enables sprites): %s\nCurrent parent turn stage: %s\n", settingsJSON, stageJSON)
 	source := interactiveContextSource{Source: "LoreMaterials", Title: "Turn Presentation Materials", Purpose: "select optional background and character images for the completed turn", Limit: presentationContextMaxBytes}
 	if !settings.Background && !settings.Characters {
-		content.WriteString("Both layers are disabled for selection. Omit presentation; the default background remains visible.\n")
+		content.WriteString("Both layers are disabled for Agent selection. Omit presentation; preserve the current background.\n")
 		source.Content = content.String()
 		return source
 	}

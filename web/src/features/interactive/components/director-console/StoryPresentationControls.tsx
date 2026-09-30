@@ -6,13 +6,23 @@ import { Slider } from '@/components/ui/slider'
 import { Field, FieldDescription, FieldTitle } from '@/components/ui/field'
 import { patchProjectSettings, patchSettings } from '@/features/settings/api'
 import { toast } from '@/lib/toast'
-import type { LoreItem } from '@/lib/api'
+import { visibleStoryPresentation } from '../../presentation'
 import { StoryBackgroundSelect } from './StoryBackgroundSelect'
-import type { StoryPresentationSettings } from '../../types'
+import type { PresentationMaterial, TurnEvent, StoryPresentationSettings } from '../../types'
 import { useStagePreferences } from '../story-stage/use-stage-preferences'
 import { ControlSection, NumberSettingInput, TuningRow } from './StoryTuningControls'
 
-export function StoryPresentationControls({ projectId, value, loreItems, disabled, onChange }: { projectId?: string; value?: StoryPresentationSettings; loreItems?: LoreItem[]; disabled: boolean; onChange: (settings: StoryPresentationSettings) => void }) {
+interface StoryPresentationControlsProps {
+  projectId?: string
+  value?: StoryPresentationSettings
+  disabled: boolean
+  onChange: (settings: StoryPresentationSettings) => void
+  currentTurn?: TurnEvent
+  onBackgroundChange?: (turnId: string, background?: PresentationMaterial) => Promise<void>
+  backgroundDisabled?: boolean
+}
+
+export function StoryPresentationControls({ projectId, value, disabled, onChange, currentTurn, onBackgroundChange, backgroundDisabled = false }: StoryPresentationControlsProps) {
   const { t } = useTranslation()
   const { scrimOpacity, textMaxWidth } = useStagePreferences(projectId || '')
   const [widthDraft, setWidthDraft] = useState<number>()
@@ -22,6 +32,19 @@ export function StoryPresentationControls({ projectId, value, loreItems, disable
   const saveQueue = useRef(Promise.resolve())
   const labelId = useId()
   const descriptionId = useId()
+  const [savingBackground, setSavingBackground] = useState(false)
+  const changeCurrentBackground = async (background?: PresentationMaterial) => {
+    if (!currentTurn || !onBackgroundChange) return
+    setSavingBackground(true)
+    try {
+      await onBackgroundChange(currentTurn.id, background)
+    } catch (error) {
+      console.warn('[story-presentation] failed to change current background', error)
+      toast.error(t('storyStage.presentation.backgroundUpdateFailed'))
+    } finally {
+      setSavingBackground(false)
+    }
+  }
   const settings = { background: true, characters: true, ...value }
   const opacity = draft ?? scrimOpacity
   const saveTextMaxWidth = async (value: number) => {
@@ -71,7 +94,15 @@ export function StoryPresentationControls({ projectId, value, loreItems, disable
   }
   return (
     <ControlSection icon={<Images className="size-4" />} title={t('storyStage.presentation.title')}>
-      <StoryBackgroundSelect projectId={projectId} value={settings.default_background} loreItems={loreItems} disabled={disabled} onChange={default_background => onChange({ ...settings, default_background })} />
+      <StoryBackgroundSelect
+        projectId={projectId}
+        value={visibleStoryPresentation(currentTurn?.turn_result?.presentation, settings).background}
+        disabled={disabled || savingBackground || (!!currentTurn && (backgroundDisabled || !onBackgroundChange))}
+        onChange={background => {
+          if (currentTurn) void changeCurrentBackground(background)
+          else onChange({ ...settings, default_background: background })
+        }}
+      />
       <TuningRow title={t('storyStage.presentation.background')} description={t('storyStage.presentation.backgroundHelp')}>
         <Switch aria-label={t('storyStage.presentation.background')} checked={settings.background} disabled={disabled} onCheckedChange={background => onChange({ ...settings, background })} />
       </TuningRow>

@@ -3,7 +3,7 @@ import type { AgentCommandReceipt, AgentRuntimeActiveOutput, AgentRuntimeOpenToo
 import { isKnownAgentCommandOutcome } from '@/lib/agent-command'
 import type { ChatAttachmentDescriptor, ChatAttachmentUpload } from '@/lib/chat-attachments'
 import type { ThinkingLevel } from '@/features/settings/thinking-levels'
-import type { ActorStateModule, ActorTraitRollRequest, ActorTraitRollResult, BranchSummary, EventPackageModule, GamePlanningTemplate, ImagePreset, InitialActorTraitRoll, InteractiveSnapshotResponse, InteractiveSSEEvent, InteractiveStoryUpdateInput, RuleResolution, RuleResolutionRerollInput, RuleSystemModule, StoryPresentationSettings, StoryCheckSettings, StoryDirectorModuleRefs, StoryHistoryPage, StoryPlanningMode, StoryProtagonist, StoryStateSchemaPolicy, StyleReference, StyleReferenceFileDocument, StoryImageSettings, StoryIndex, StoryOpeningConfig, StorySummary, Teller, UpdateBranchPlanResult, UpdateTurnNarrativeResult } from './types'
+import type { ActorStateModule, ActorTraitRollRequest, ActorTraitRollResult, BranchSummary, EventPackageModule, GamePlanningTemplate, ImagePreset, InitialActorTraitRoll, InteractiveSnapshotResponse, InteractiveSSEEvent, InteractiveStoryUpdateInput, RuleResolution, RuleResolutionRerollInput, RuleSystemModule, PresentationMaterial, StoryPresentationSettings, StoryCheckSettings, StoryDirectorModuleRefs, StoryHistoryPage, StoryPlanningMode, StoryProtagonist, StoryStateSchemaPolicy, StyleReference, StyleReferenceFileDocument, StoryImageSettings, StoryIndex, StoryOpeningConfig, StorySummary, Teller, UpdateBranchPlanResult, UpdateTurnNarrativeResult } from './types'
 
 function presetMutationBody<T extends object>(input: T, baseRevision?: string) {
   return {
@@ -515,4 +515,10 @@ export async function removeInteractiveContextCompaction(storyId: string, branch
     if (isKnownAgentCommandOutcome(error)) interactiveStructuralCommandIDs.delete(key)
     throw error
   }
+}
+
+export function updateInteractiveTurnBackground(storyId: string, turnId: string, input: { branch_id: string; background: PresentationMaterial | null }): Promise<void> {
+  return requestJSON(`/api/interactive/stories/${encodeURIComponent(storyId)}/turns/${encodeURIComponent(turnId)}/background`, {
+    method: 'PATCH', headers: jsonHeaders, body: JSON.stringify(input),
+  })
 }

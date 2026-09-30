@@ -36,7 +36,6 @@ const market = {
   'market.category.plugins': '插件',
   'market.category.games': '游戏',
 
-  'market.import.replaceCover': '备份后替换当前作品的封面',
   'market.errors.resourceOwned':
     '此资源属于另一个正在跟踪的安装，请先管理或停止该来源跟踪，再替换内容。',
   'market.states.upstream_removed': '上游已移除 · 本地保留',

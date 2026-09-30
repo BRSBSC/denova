@@ -78,7 +78,8 @@ func stringify(v any) string {
 
 var catalogZH = map[string]string{
 	"interactive.contextTooLarge":              "游戏上下文超过完整载入上限（{{bytes}} / {{limit}} 字节），已在生成正文前停止。请检查状态或分支计划中是否有冗长、重复内容；状态手册不会被截断。",
-	"api.interactive.invalidDefaultBackground": "默认背景不可用，请重新选择资料库中已启用并保存到本地的图片素材。",
+	"api.interactive.backgroundUpdateFailed":   "无法切换当前背景，请刷新后重试，并选择资料库中已启用的本地图片。",
+	"api.interactive.invalidDefaultBackground": "背景不可用，请重新选择资料库中已启用并保存到本地的图片素材。",
 
 	"market.errors.resourceOwned":       "此资源属于另一个正在跟踪的安装，请先管理或停止该来源跟踪，再替换内容。",
 	"market.errors.localModified":       "本地内容已修改。可以保留本地内容，或明确选择备份后替换。",
@@ -301,7 +302,8 @@ var catalogZH = map[string]string{
 
 var catalogEN = map[string]string{
 	"interactive.contextTooLarge":              "Game context exceeds the complete-input limit ({{bytes}} / {{limit}} bytes). Generation stopped before prose. Check state or the branch plan for lengthy, redundant content; the state handbook will not be truncated.",
-	"api.interactive.invalidDefaultBackground": "Default background unavailable. Select an enabled Lore image saved locally.",
+	"api.interactive.backgroundUpdateFailed":   "Could not change the current background. Reload and select an enabled local Lore image.",
+	"api.interactive.invalidDefaultBackground": "Background unavailable. Select an enabled Lore image saved locally.",
 
 	"market.errors.resourceOwned":       "This resource belongs to another tracked installation. Manage or detach its source before replacing it.",
 	"market.errors.localModified":       "Local content has changed. Keep it, or explicitly choose to replace it with a backup.",

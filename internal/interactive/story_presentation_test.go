@@ -8,7 +8,7 @@ import (
 )
 
 func TestPresentationPatchPreservesInvalidAndOmittedSlots(t *testing.T) {
-	bg := PresentationMaterial{ItemID: "station", AssetID: "day", Path: "assets/day.png", Name: "Day"}
+	bg := PresentationMaterial{ItemID: "station", AssetID: "day", Path: "assets/day.png", Name: "Day", Focus: &ImageFocus{X: 0.2, Y: 0.8}}
 	hero := PresentationMaterial{ItemID: "hero", AssetID: "calm", Path: "assets/calm.png", Name: "Calm"}
 	base := &TurnPresentation{Background: &bg, Characters: []PresentationMaterial{hero}}
 	resolve := func(item, asset string) (PresentationMaterial, error) {
@@ -16,6 +16,14 @@ func TestPresentationPatchPreservesInvalidAndOmittedSlots(t *testing.T) {
 			return PresentationMaterial{}, errors.New("image unavailable")
 		}
 		return PresentationMaterial{ItemID: item, AssetID: asset, Path: "assets/" + asset + ".png", Name: asset}, nil
+	}
+	retained, _ := ApplyPresentationPatch(base, json.RawMessage(`{"background":{"item_id":"station","asset_id":"day","focus":{"x":1,"y":1}}}`), nil, resolve)
+	if !reflect.DeepEqual(retained.Background.Focus, bg.Focus) {
+		t.Fatal("model selection changed the user focus for the same image")
+	}
+	retained.Background.Focus.X = 1
+	if bg.Focus.X != 0.2 {
+		t.Fatal("snapshot focus was not cloned")
 	}
 	for _, raw := range []string{"", `null`, `"wrong"`, `{}`, `{"characters":[]}`, `{"characters":null}`, `{"background":{"item_id":"station","asset_id":"missing"},"characters":[{"item_id":"hero"}]}`} {
 		t.Run(raw, func(t *testing.T) {

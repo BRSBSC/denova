@@ -95,6 +95,55 @@ func presentationLoreFixture(t *testing.T, workspace string, id string) lore.Mat
 	return item.ResolvedMaterials[0]
 }
 
+func TestManualBackgroundSeedsNextTurnAndAllowsDynamicReplacement(t *testing.T) {
+	workspace := t.TempDir()
+	material := presentationLoreFixture(t, workspace, "station")
+	store := interactive.NewStore(workspace)
+	defer store.Close()
+	story, err := store.CreateStory(interactive.CreateStoryRequest{Title: "Manual background", PlanningMode: interactive.StoryPlanningModeDisabled, PresentationSettings: &interactive.StoryPresentationSettings{Background: false, Characters: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	turn, err := store.AppendTurn(story.ID, interactive.AppendTurnRequest{BranchID: "main", Narrative: "Opening"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateTurnBackground(story.ID, interactive.UpdateTurnBackgroundRequest{
+		BranchID: "main", TurnID: turn.ID, Background: &interactive.PresentationMaterial{ItemID: "station", AssetID: material.ID, Path: "/untrusted/path"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := &interactive.PresentationMaterial{ItemID: "station", AssetID: material.ID, Path: material.Path, Name: material.Name}
+	for _, step := range []struct{ dynamic, clear bool }{{false, true}, {true, false}, {true, true}} {
+		if _, err := store.UpdateStory(story.ID, interactive.UpdateStoryRequest{PresentationSettings: &interactive.StoryPresentationSettings{Background: step.dynamic, Characters: true}}); err != nil {
+			t.Fatal(err)
+		}
+		c := NewConversation(store, t.TempDir(), workspace, story.ID, "main", "Continue", 800, nil)
+		bindInteractiveCycleForTest(t, c)
+		args := strings.TrimSuffix(gameStateArgs, "}") + `,"choices":["Enter","Observe","Listen","Inspect","Wait"]`
+		if step.clear {
+			args += `,"presentation":{"background":null}`
+		}
+		receipt, err := c.SubmitTurnResult(t.Context(), interactive.DecodeInteractiveTurnSubmissionInput(args+"}"))
+		if err != nil || !receipt.Ready {
+			t.Fatalf("submission failed: %+v %v", receipt, err)
+		}
+		if err := commitInteractiveAssistantForTest(t, c, "The scene continues.", ""); err != nil {
+			t.Fatal(err)
+		}
+		snapshot, err := store.Snapshot(story.ID, "main")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if step.clear && step.dynamic {
+			want = nil
+		}
+		if !reflect.DeepEqual(snapshot.CurrentTurn.TurnResult.Presentation.Background, want) {
+			t.Fatal("manual background inheritance or dynamic replacement failed")
+		}
+	}
+}
+
 func TestPresentationCatalogAndResolverUseEnabledAssociatedImages(t *testing.T) {
 	workspace := t.TempDir()
 	material := presentationLoreFixture(t, workspace, "hero")

@@ -403,8 +403,9 @@ export interface UpdateBranchPlanResult {
 }
 
 export interface StoryPresentationSettings {
-  /** Allow turn-driven background changes; otherwise show the default image. */
+  /** Allow Agent background changes; manual choices and the current image remain available. */
   background: boolean
+  /** Initial background before the first committed stage; never overrides a saved turn. */
   default_background?: PresentationMaterial
   characters: boolean
 }
@@ -414,6 +415,8 @@ export interface PresentationMaterial {
   asset_id: string
   path: string
   name: string
+  /** Original-image focal point; absent means center. Saved with this scene. */
+  focus?: { x: number; y: number }
 }
 
 export interface TurnPresentation {
