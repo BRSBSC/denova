@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"image"
 	"image/color"
@@ -13,6 +14,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -59,6 +61,23 @@ func TestMaterialImageUploadsPreserveFormatBytesAndCover(t *testing.T) {
 			material := item.ResolvedMaterials[0]
 			if material.MIMEType != "image/"+format || filepath.Ext(material.Path) != "."+format || material.SizeBytes != len(data) {
 				t.Fatalf("incorrect stored image format: %+v", material)
+			}
+			if filepath.Dir(material.Path) != "assets/lore" || material.Source.MetaPath != "" {
+				t.Fatalf("upload location or authority changed: %+v", material)
+			}
+			if _, err := os.Stat(filepath.Join(s.workspace, "assets/lore/meta.json")); !os.IsNotExist(err) {
+				t.Fatalf("upload created a second attribute store: %v", err)
+			}
+			raw, err := os.ReadFile(s.itemsPath())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var collection Collection
+			if err := json.Unmarshal(raw, &collection); err != nil {
+				t.Fatal(err)
+			}
+			if collection.Version != 2 || len(collection.Assets) != 1 || !reflect.DeepEqual(collection.Assets[0], material.Asset) {
+				t.Fatalf("items.json lost canonical attributes: %+v", collection)
 			}
 			stored, err := os.ReadFile(filepath.Join(s.workspace, filepath.FromSlash(material.Path)))
 			if err != nil || !bytes.Equal(data, stored) {
@@ -147,7 +166,7 @@ func TestMaterialUploadsPreserveTextRejectInvalidAndRecoverCanceled(t *testing.T
 	if !bytes.Equal(before, after) {
 		t.Fatal("failed upload modified metadata")
 	}
-	dirs, _ := os.ReadDir(filepath.Join(s.workspace, "assets/lore/media"))
+	dirs, _ := os.ReadDir(filepath.Join(s.workspace, "assets/lore"))
 	if len(dirs) != 2 {
 		t.Fatalf("uncommitted upload leaked: %v", dirs)
 	}

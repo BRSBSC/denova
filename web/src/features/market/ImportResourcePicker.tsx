@@ -164,6 +164,7 @@ export function ImportResourcePicker({
                         <FieldTitle className="max-w-full [overflow-wrap:anywhere]">
                           {resource.name || resource.id}
                         </FieldTitle>
+                        {resource.kind === 'project.creator' && <FieldDescription>{t('market.import.creatorHelp')}</FieldDescription>}
                         {resource.item_count !== undefined && <FieldDescription>{t('market.contents.collectionCount', { count: resource.item_count })}</FieldDescription>}
                         {resource.description && (
                           <FieldDescription className="line-clamp-2 [overflow-wrap:anywhere]">

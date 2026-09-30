@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { createServer } from 'node:http'
 import { expect, test } from '../support/fixtures'
 import { createAndOpenBook } from '../support/api'
@@ -25,6 +27,16 @@ test('generates the first image directly from the empty material state', async (
   expect(item.content).toBe('保留正文')
   expect(item.image).toBeUndefined()
   expect(item.resolved_materials?.[0].source.kind).toBe('generated')
+  const material = item.resolved_materials![0]
+  expect(path.posix.dirname(material.path)).toBe('assets/lore')
+  expect(material.source.meta_path).toBe('assets/lore/meta.json')
+  const collection = JSON.parse(await readFile(path.join(book.workspace, 'setting/lore/items.json'), 'utf8'))
+  expect(collection.assets[0]).toMatchObject({ id: material.id, path: material.path, mime_type: material.mime_type, size_bytes: material.size_bytes })
+  const metadata = JSON.parse(await readFile(path.join(book.workspace, 'assets/lore/meta.json'), 'utf8'))
+  expect(metadata.files[path.posix.basename(material.path)]).toMatchObject({ prompt: 'Draw a character portrait.' })
+  expect(metadata.files[path.posix.basename(material.path)]).not.toHaveProperty('mime_type')
+  expect(metadata.files[path.posix.basename(material.path)]).not.toHaveProperty('item_id')
+
 })
 
 for (const theme of ['dark', 'light']) {

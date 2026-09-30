@@ -34,6 +34,9 @@ import { useBookCreation } from '@/components/workbench/book-creation'
 import { CompatibilityReport } from '@/components/workbench/CharacterCardImportDialog'
 import { createBook, getBooks, type BookRecord } from '@/lib/api'
 import { notifyLoreUpdated } from '@/features/lore/events'
+import { invalidateSettingsCache } from '@/features/settings/api'
+import type { GameDefaultField } from '@/features/interactive/game-creation-defaults'
+import { ImportGameDefaults, packageDefaultOptions } from './ImportGameDefaults'
 import {
   dependencySelection,
   discardPreview,
@@ -80,10 +83,10 @@ export function ImportDialog({
       )
       ?.resources.filter(
         (resource) =>
-          !installation ||
-          installation.bindings.some(
+          resource.kind !== 'project.creator' &&
+          (!installation || installation.bindings.some(
             (binding) => binding.resource_id === resource.id,
-          ),
+          )),
       )
       .map((r) => r.id) || [],
   )
@@ -104,6 +107,7 @@ export function ImportDialog({
   const [grants, setGrants] = useState<Record<string, string[]>>({})
   const [names, setNames] = useState<Record<string, string>>({})
   const [replace, setReplace] = useState(false)
+  const [defaultsSelection, setDefaultsSelection] = useState<GameDefaultField[] | null>(null)
   const [busy, setBusy] = useState(!!source && !initialPreview)
   const alive = useRef(false)
   const pending = useRef<Promise<void> | undefined>(undefined)
@@ -114,7 +118,7 @@ export function ImportDialog({
   )
   const requested = dependencySelection(candidate?.resources || [], selected)
   const canCreateBook = !installation && candidate?.resources.some(
-    (r) => r.kind === 'lore.collection' && requested.includes(r.id),
+    (r) => ['lore.collection', 'project.creator'].includes(r.kind) && requested.includes(r.id),
   )
   const creatingBook = canCreateBook && bookDestination === 'new'
   // Retain the new-book cover policy when retrying a failed plan for that book.
@@ -124,10 +128,13 @@ export function ImportDialog({
   ) || []
   const chosen = requested.filter((id) => availableResources.some((r) => r.id === id))
   const resources = availableResources.filter((r) => chosen.includes(r.id))
+  const defaultOptions = candidate ? packageDefaultOptions(candidate, chosen) : []
+  const defaultFields = (defaultsSelection ?? (creatingBook ? defaultOptions.filter(option => option.available).map(option => option.field) : []))
+    .filter(field => defaultOptions.some(option => option.field === field && option.available))
   const needsProject =
     resources.some((r) =>
-      ['lore.collection', 'game.openings', 'project.cover'].includes(r.kind),
-    ) || (resources.some((r) => r.kind === 'skill') && scope === 'workspace')
+      ['lore.collection', 'game.openings', 'project.cover', 'project.creator'].includes(r.kind),
+    ) || (resources.some((r) => r.kind === 'skill') && scope === 'workspace') || defaultFields.length > 0
   const missingConsent = resources.some((r) =>
     r.extension?.manifest.permissions.required.some(
       (p) => !(grants[r.id] || []).includes(p),
@@ -173,7 +180,7 @@ export function ImportDialog({
       downloadedPreview.current = result
       setPreview(result)
       setCandidateID(result.candidates[0].candidate_id)
-      setSelected(result.candidates[0].resources.map((r) => r.id))
+      setSelected(result.candidates[0].resources.filter((r) => r.kind !== 'project.creator').map((r) => r.id))
     })().finally(() => { pending.current = undefined })
     return pending.current
   }
@@ -309,10 +316,12 @@ export function ImportDialog({
                 value={candidateID}
                 onValueChange={(id) => {
                   setCandidateID(id)
+                  setReplace(false)
+                  setDefaultsSelection(null)
                   setSelected(
                     preview.candidates
                       .find((c) => c.candidate_id === id)
-                      ?.resources.map((r) => r.id) || [],
+                      ?.resources.filter((r) => r.kind !== 'project.creator').map((r) => r.id) || [],
                   )
                   setGrants({})
                   setNames({})
@@ -330,7 +339,7 @@ export function ImportDialog({
                 </SelectContent>
               </Select>
             </Field>}
-            {candidate && <ImportResourcePicker previewID={preview.preview_id} candidate={{ ...candidate, resources: availableResources }} selected={selected} onChange={setSelected} />}
+            {candidate && <ImportResourcePicker previewID={preview.preview_id} candidate={{ ...candidate, resources: availableResources }} selected={selected} onChange={(ids) => { setSelected(ids); setReplace(false) }} />}
 
             <div className="space-y-3">
               {resources.filter((resource) => resource.kind === 'skill' || resource.extension).map((resource) => (
@@ -426,7 +435,7 @@ export function ImportDialog({
                   aria-labelledby="market-import-mode"
                   value={bookDestination}
                   onValueChange={(value) => {
-                    if (value === 'new' || value === 'existing') setBookDestination(value)
+                    if (value === 'new' || value === 'existing') { setBookDestination(value); setDefaultsSelection(null); setReplace(false) }
                   }}
                   disabled={busy}
                 >
@@ -441,12 +450,12 @@ export function ImportDialog({
                 </RadioGroup>
               </FieldSet>
             )}
-            {needsProject && !creatingBook && (
+            {(needsProject || defaultOptions.length > 0) && !creatingBook && (
               <Field data-disabled={busy || !!installation}>
                 <FieldLabel htmlFor="market-target-book">{t('market.import.project')}</FieldLabel>
                 <Select
                   value={projectID}
-                  onValueChange={setProjectID}
+                  onValueChange={id => { setProjectID(id); setDefaultsSelection(null); setReplace(false) }}
                   disabled={busy || !!installation}
                 >
                   <SelectTrigger id="market-target-book" className="w-full min-w-0">
@@ -478,9 +487,10 @@ export function ImportDialog({
                 <FieldDescription>{t('market.import.newBookHelp')}</FieldDescription>
               </Field>
             )}
+            {candidate && defaultOptions.length > 0 && <ImportGameDefaults candidate={candidate} resources={chosen} projectID={projectID} newBook={!!creatingBook} selected={defaultFields} onChange={setDefaultsSelection} />}
             {(installation ||
               resources.some(
-                (resource) => resource.kind === 'project.cover',
+                (resource) => resource.kind === 'project.cover' || resource.kind === 'project.creator',
               )) && (
               <Field orientation="horizontal">
                 <Checkbox
@@ -489,7 +499,7 @@ export function ImportDialog({
                   onCheckedChange={(checked) => setReplace(checked === true)}
                 />
                 <FieldLabel htmlFor="replace-modified">
-                  {t('market.import.replaceModified')}
+                  {t(resources.some(r => r.kind === 'project.creator') ? 'market.import.replaceCreator' : 'market.import.replaceModified')}
                 </FieldLabel>
               </Field>
             )}
@@ -526,6 +536,14 @@ export function ImportDialog({
             {error}
           </p>
         )}
+        {plan?.game_defaults_applied && <section className="space-y-2 rounded-lg border p-3">
+          <p className="text-sm font-medium">{t('gameDefaults.adopt')}</p>
+          <p className="text-xs text-muted-foreground">{t('gameDefaults.help')}</p>
+          {defaultOptions.filter(option => plan.game_defaults_applied?.[option.field] !== undefined).map(option => <p key={option.field} className="text-sm break-words">
+            {t(`gameDefaults.fields.${option.field}`)} · {option.name}
+            {plan.game_defaults_before?.[option.field] !== undefined && <span className="ml-2 text-xs text-muted-foreground">{t('gameDefaults.replaceExisting')}</span>}
+          </p>)}
+        </section>}
         <DialogFooter>
           <Button
             variant="outline"
@@ -553,6 +571,7 @@ export function ImportDialog({
                     if (!(await bookCreation.beforeCreate())) return
                     const created = await createBook(bookTitle.trim())
                     targetProject = created.project_id
+                    setDefaultsSelection(defaultFields)
                     // Retain the created target even if planning fails, so retry never creates it twice.
                     setProjectID(targetProject)
                     setCreatedProjectID(targetProject)
@@ -576,6 +595,7 @@ export function ImportDialog({
                       names,
                       replace_modified: replace,
                       update_mode: installation?.update_mode || 'manual',
+                      ...(defaultFields.length ? { game_defaults_fields: defaultFields } : {}),
                     }),
                   )
                 } else {
@@ -583,6 +603,7 @@ export function ImportDialog({
                     `/plans/${plan.plan_id}/apply`,
                     {},
                   )
+                  if (plan.game_defaults_applied && installed.project_id) invalidateSettingsCache(installed.project_id)
                   // New books are opened before import; invalidate their initially empty catalog.
                   const loreProjects = new Set(installed.bindings
                     .filter(binding => binding.local.kind === 'lore.collection')

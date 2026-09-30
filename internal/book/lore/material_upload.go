@@ -10,12 +10,11 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"log/slog"
-	"os"
 	"path"
 	"strings"
 	"time"
 
-	"denova/internal/portablepath"
+	"denova/internal/assetstore"
 	"github.com/google/uuid"
 	_ "golang.org/x/image/webp"
 )
@@ -41,8 +40,8 @@ func (s *Store) UploadMaterial(ctx context.Context, id, filename string, data []
 	return s.SaveMaterial(ctx, id, MaterialFile{Filename: filename, Data: data, Source: AssetSource{Kind: "upload"}})
 }
 
-// SaveMaterial owns only the newly allocated directory until the atomic
-// collection commit succeeds. The original filename is display metadata only.
+// SaveMaterial publishes an immutable file before committing its attributes
+// and association together in items.json.
 func (s *Store) SaveMaterial(ctx context.Context, id string, file MaterialFile) (Item, error) {
 	if file.Cover != CoverPreserve && file.Cover != CoverIfMissing {
 		return Item{}, errors.New("unknown lore cover policy")
@@ -61,46 +60,19 @@ func (s *Store) SaveMaterial(ctx context.Context, id string, file MaterialFile) 
 	if _, err := s.ReadAny(id); err != nil {
 		return Item{}, err
 	}
-	assetID := "asset_" + uuid.NewString()
-	dir := "assets/lore/media/" + assetID
-	relative := dir + "/file." + ext
-	if err := portablepath.CheckNoCollision(s.workspace, relative); err != nil {
-		return Item{}, err
-	}
-	root, err := os.OpenRoot(s.workspace)
-	if err != nil {
-		return Item{}, err
-	}
-	defer root.Close()
-	if err := root.MkdirAll(dir, 0755); err != nil {
+	a := Asset{ID: "asset_" + uuid.NewString(), Path: assetstore.NewPath(assetstore.Lore, ext), OriginalName: path.Base(strings.ReplaceAll(file.Filename, `\`, "/")),
+		MIMEType: mime, SizeBytes: len(data), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Source: file.Source}
+	if err := assetstore.Save(ctx, s.workspace, assetstore.File{Path: a.Path, Data: data}); err != nil {
 		return Item{}, err
 	}
 	committed := false
 	defer func() {
 		if !committed {
-			// A failed atomic replace may have reached disk before a sync error.
-			assets, readErr := s.Assets()
-			if readErr != nil {
-				slog.WarnContext(ctx, "[lore-material] retain file after uncertain commit", "path", relative, "error", readErr)
-				return
-			}
-			for _, a := range assets {
-				if a.Path == relative {
-					return
-				}
-			}
-			if err := root.RemoveAll(dir); err != nil {
-				slog.ErrorContext(ctx, "[lore-material] remove uncommitted file failed", "path", dir, "error", err)
+			if err := s.DiscardUnlinkedMaterial(context.Background(), a.Path); err != nil {
+				slog.WarnContext(ctx, "[lore-material] retain file after uncertain association", "path", a.Path, "error", err)
 			}
 		}
 	}()
-	if err := ctx.Err(); err != nil {
-		return Item{}, err
-	}
-	if err := root.WriteFile(relative, data, 0644); err != nil {
-		return Item{}, err
-	}
-	a := Asset{ID: assetID, Path: relative, OriginalName: path.Base(strings.ReplaceAll(file.Filename, `\`, "/")), MIMEType: mime, SizeBytes: len(data), CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Source: file.Source}
 	if err := ctx.Err(); err != nil {
 		return Item{}, err
 	}
@@ -109,8 +81,23 @@ func (s *Store) SaveMaterial(ctx context.Context, id string, file MaterialFile) 
 		return Item{}, err
 	}
 	committed = true
-	slog.InfoContext(ctx, "[lore-material] saved", "item_id", id, "asset_id", assetID, "path", relative, "source", file.Source.Kind)
+	slog.InfoContext(ctx, "[lore-material] saved", "item_id", id, "asset_id", a.ID, "path", a.Path, "source", file.Source.Kind)
 	return item, nil
+}
+
+// DiscardUnlinkedMaterial is only for a fresh file owned by the failed caller.
+// A successful association read is required before removing its metadata/bytes.
+func (s *Store) DiscardUnlinkedMaterial(ctx context.Context, name string) error {
+	assets, err := s.Assets()
+	if err != nil {
+		return err
+	}
+	for _, asset := range assets {
+		if asset.Path == name {
+			return nil
+		}
+	}
+	return assetstore.Discard(ctx, s.workspace, name)
 }
 
 // MaterialFormat validates supported upload containers and returns their canonical MIME and extension.

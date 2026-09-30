@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext } from '../support/fixtures'
 import { createAndOpenBook } from '../support/api'
 import type { LoreItem } from '../../src/lib/api'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 
@@ -141,6 +141,13 @@ for (const [theme, format] of [['dark', 'png'], ['light', 'jpeg'], ['dark', 'web
     const savedImage = persisted.resolved_materials!.find((material) => material.mime_type === `image/${format}`)!
     expect(savedImage.path).toMatch(new RegExp(`\\.${format}$`))
     expect(await readFile(path.join(book.workspace, savedImage.path))).toEqual(image)
+    expect(path.posix.dirname(savedImage.path)).toBe('assets/lore')
+    expect(savedImage.source.meta_path).toBeUndefined()
+    const collection = JSON.parse(await readFile(path.join(book.workspace, 'setting/lore/items.json'), 'utf8'))
+    expect(collection.version).toBe(2)
+    expect(collection.assets.find((asset: { id: string }) => asset.id === savedImage.id)).toMatchObject({ path: savedImage.path, mime_type: savedImage.mime_type, size_bytes: image.length, original_name: filename })
+    expect((await readdir(path.join(book.workspace, 'assets/lore'))).every(name => name !== 'meta.json')).toBe(true)
+
     // The actual asset boundary serves audio and byte ranges, not only an URL.
     const sound = persisted.resolved_materials!.find(
       (material) => material.mime_type === 'audio/wav',
@@ -283,7 +290,7 @@ test('retries only failed uploads without changing the current selection', async
   }
 })
 
-test('reads released single-image data without rewriting and appends generated images', async ({
+test('migrates released single-image paths and appends generated images without moving attributes', async ({
   page,
   request,
 }) => {
@@ -308,12 +315,18 @@ test('reads released single-image data without rewriting and appends generated i
     ],
   })
   await writeFile(collectionPath, legacy)
+  await createAndOpenBook(request, 'Asset migration switch')
+  const switched = await request.post('/api/workspace/switch', { data: { path: book.workspace } })
+  expect(switched.ok(), await switched.text()).toBe(true)
   await page.goto('/')
   await page.getByLabel('工作台侧边栏').getByRole('button', { name: '资料库', exact: true }).click()
   await page.getByTestId('lore-card-hero').getByRole('button', { name: '旧版角色', exact: true }).click()
   await page.getByRole('tab', { name: '素材 (1)', exact: true }).click()
   await expect(page.getByText('旧图说明', { exact: true })).toBeVisible()
-  expect(await readFile(collectionPath, 'utf8')).toBe(legacy)
+  const migrated = JSON.parse(await readFile(collectionPath, 'utf8'))
+  const migratedPath = migrated.items[0].image.image_path as string
+  expect(path.posix.dirname(migratedPath)).toBe('assets/lore')
+  expect(migrated.items[0]).toEqual({ ...JSON.parse(legacy).items[0], image: { ...JSON.parse(legacy).items[0].image, image_path: migratedPath } })
   for (const count of [2, 3]) {
     await page.getByRole('button', { name: '添加素材', exact: true }).click()
     await page.getByRole('menuitem', { name: '生成图片', exact: true }).click()
@@ -325,11 +338,11 @@ test('reads released single-image data without rewriting and appends generated i
     await expect(page.getByRole('tab', { name: `素材 (${count})`, exact: true })).toBeVisible()
   }
   const item = (await readItems(request, book.projectId))[0]
-  expect(item.image?.image_path).toBe(imagePath)
+  expect(item.image?.image_path).toBe(migratedPath)
   expect(item.content).toBe('保留正文')
   expect(new Set(item.resolved_materials!.map((material) => material.path)).size).toBe(3)
   expect(
     item.resolved_materials!.slice(1).every((material) => material.source.kind === 'generated'),
   ).toBe(true)
-  expect(await readFile(path.join(book.workspace, imagePath))).toEqual(portrait)
+  expect(await readFile(path.join(book.workspace, migratedPath))).toEqual(portrait)
 })

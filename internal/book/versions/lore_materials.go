@@ -1,6 +1,7 @@
 package versions
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -8,7 +9,9 @@ import (
 	"path/filepath"
 	"slices"
 
+	"denova/internal/assetstore"
 	"denova/internal/book/lore"
+	"denova/internal/revisionfile"
 )
 
 // A lore-only restore must also restore the files its target collection uses.
@@ -62,10 +65,10 @@ func (s *Service) preservingNewerLoreMedia(id string, restore func() error) (res
 	}
 	names := []string{}
 	for _, file := range files {
-		if !lore.IsManagedMaterialPath(file.Path) {
+		if !assetstore.IsRetained(file.Path) {
 			continue
 		}
-		if _, ok := target[file.Path]; ok {
+		if _, ok := target[file.Path]; ok && !assetstore.IsMetadata(file.Path) {
 			continue
 		}
 		if err := copyRestoreMedia(file.Abs, filepath.Join(saved, filepath.FromSlash(file.Path))); err != nil {
@@ -77,7 +80,18 @@ func (s *Service) preservingNewerLoreMedia(id string, restore func() error) (res
 	defer func() {
 		var restoreErr error
 		for _, name := range names {
-			restoreErr = errors.Join(restoreErr, copyRestoreMedia(filepath.Join(saved, filepath.FromSlash(name)), filepath.Join(s.workspace, filepath.FromSlash(name))))
+			if assetstore.IsMetadata(name) {
+				previous, readErr := os.ReadFile(filepath.Join(saved, filepath.FromSlash(name)))
+				restoreErr = errors.Join(restoreErr, readErr)
+				if readErr == nil {
+					_, mergeErr := revisionfile.Mutate(context.Background(), filepath.Join(s.workspace, filepath.FromSlash(name)), revisionfile.Options{}, func(snapshot revisionfile.Snapshot) ([]byte, error) {
+						return assetstore.MergeMetadata(snapshot.Content, previous)
+					})
+					restoreErr = errors.Join(restoreErr, mergeErr)
+				}
+			} else {
+				restoreErr = errors.Join(restoreErr, copyRestoreMedia(filepath.Join(saved, filepath.FromSlash(name)), filepath.Join(s.workspace, filepath.FromSlash(name))))
+			}
 		}
 		if restoreErr != nil {
 			result = errors.Join(result, fmt.Errorf("restore retained media from %s: %w", saved, restoreErr))

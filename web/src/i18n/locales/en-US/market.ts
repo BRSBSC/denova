@@ -209,6 +209,10 @@ const market = {
   'market.kinds.project.cover': 'Project cover',
   'market.kinds.extension.plugin': 'Plugin',
   'market.kinds.extension.game': 'Game extension',
+  'market.kinds.project.creator': 'Creative instructions (CREATOR.md)',
+  'market.import.creatorHelp': 'Optional project rules for writing and games. Preview the full text before adopting. Existing rules are kept unless you explicitly allow replacement.',
+  'market.import.replaceCreator': 'Back up and replace existing resources, including CREATOR.md',
+  'market.errors.creatorInvalid': 'Creative instructions must be non-empty UTF-8 text within the target Project’s Agent context fragment limits.',
 } as const
 
 export default market

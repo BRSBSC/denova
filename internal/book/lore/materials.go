@@ -429,9 +429,3 @@ func MaterialFilePaths(data []byte) ([]string, error) {
 	}
 	return paths, nil
 }
-
-// IsManagedMaterialPath identifies immutable media owned by the lore library,
-// including the released single-image directory. Restores retain newer files.
-func IsManagedMaterialPath(name string) bool {
-	return strings.HasPrefix(name, "assets/lore/media/") || strings.HasPrefix(name, "assets/lore/images/")
-}

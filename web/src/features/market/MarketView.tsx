@@ -157,7 +157,7 @@ export function MarketView({
           : kinds.includes('skill')
             ? 'skills'
             : kinds.some(
-                  (kind) => kind === 'lore.collection' || kind === 'game.openings',
+                  (kind) => kind === 'lore.collection' || kind === 'game.openings' || kind === 'project.creator',
                 )
               ? 'lore'
               : kinds.includes('project.cover')

@@ -540,9 +540,6 @@ export function ModeRouter(props: ModeRouterProps) {
   const openAgentChangeReview = useCallback((reviewThreadID: string, groupID: string) => {
     void openChangeReview(reviewThreadID, groupID)
   }, [openChangeReview])
-  const persistNarrativeStyle = useCallback((id: string) => (
-    composerSettings.persist('interactive_story_teller_id', id)
-  ), [composerSettings.persist])
   const readingTypography = useMemo(() => ({
     fontFamily: readingFontFamily,
     fontSize: readingFontSize,
@@ -748,7 +745,6 @@ export function ModeRouter(props: ModeRouterProps) {
             active={presentedMainRoute === 'interactive'}
             recentNarrativeStyleID={composerSettings.values.interactive_story_teller_id}
             narrativeStyleLoading={composerSettings.loading}
-            onNarrativeStyleChange={persistNarrativeStyle}
             imagePresets={imagePresets}
             loreEmpty={loreEmpty}
             loreItems={loreItems}

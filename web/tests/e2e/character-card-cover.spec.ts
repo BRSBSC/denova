@@ -17,7 +17,7 @@ test('character PNG sets lore covers while only new books receive a book cover',
   const existing = await createAndOpenBook(request, 'Existing card book')
   const existingURL = `/api/projects/${existing.projectId}/book/import-character-card`
   for (const hasCover of [false, true]) {
-    if (hasCover) await createProjectFile(request, existing.projectId, 'assets/image/cover.png', 'Original book cover')
+    if (hasCover) await createProjectFile(request, existing.projectId, 'assets/covers/cover.png', 'Original book cover')
     const response = await request.post(existingURL, { multipart: {
       file: { name: 'portrait.png', mimeType: 'image/png', buffer: characterPNG(`Existing ${hasCover}`) },
       lore_classification: 'heuristic', replace_cover: 'true',
@@ -28,7 +28,7 @@ test('character PNG sets lore covers while only new books receive a book cover',
     const lore = await (await request.get(`/api/projects/${existing.projectId}/book/lore/items`)).json()
     const character = lore.items.find((item: { name: string }) => item.name === `Existing ${hasCover}`)
     expect(character.materials.cover_asset_id).toBe(character.resolved_materials[0].id)
-    expect(character.image.image_path).not.toBe('assets/image/cover.png')
+    expect(character.image.image_path).not.toBe('assets/covers/cover.png')
     const cover = await request.get(`/api/books/cover?path=${encodeURIComponent(existing.workspace)}`)
     if (hasCover) expect(await cover.text()).toBe('Original book cover')
     else expect(cover.status()).toBe(404)
@@ -40,7 +40,7 @@ test('character PNG sets lore covers while only new books receive a book cover',
   } })
   expect(response.ok(), await response.text()).toBe(true)
   const book = await response.json()
-  expect(book.cover_path).toBe('assets/image/cover.png')
+  expect(book.cover_path).toBe('assets/covers/cover.png')
   const cover = await request.get(`/api/books/cover?path=${encodeURIComponent(book.workspace)}`)
   expect(await cover.body()).toEqual(png)
   const items = await (await request.get(`/api/projects/${book.project_id}/book/lore/items`)).json()

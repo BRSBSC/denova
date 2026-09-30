@@ -34,7 +34,6 @@ interface InteractiveLayoutProps {
   active?: boolean
   recentNarrativeStyleID?: string
   narrativeStyleLoading?: boolean
-  onNarrativeStyleChange?: (id: string) => void | Promise<unknown>
   imagePresets?: ImagePreset[]
   loreEmpty?: boolean
   loreItems?: LoreItem[]
@@ -46,7 +45,7 @@ interface InteractiveLayoutProps {
 
 const SNAPSHOT_POLL_INTERVAL_MS = 1000
 
-export function InteractiveLayout({ projectId = '', workspace, active = true, recentNarrativeStyleID = DEFAULT_NARRATIVE_STYLE_ID, narrativeStyleLoading = false, onNarrativeStyleChange, imagePresets = [], loreEmpty = false, loreItems = [], onRequestLoreInit, onOpenPresets, rightPanelVisible = true, onToggleRightPanel }: InteractiveLayoutProps) {
+export function InteractiveLayout({ projectId = '', workspace, active = true, recentNarrativeStyleID = DEFAULT_NARRATIVE_STYLE_ID, narrativeStyleLoading = false, imagePresets = [], loreEmpty = false, loreItems = [], onRequestLoreInit, onOpenPresets, rightPanelVisible = true, onToggleRightPanel }: InteractiveLayoutProps) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
   const {
@@ -489,7 +488,6 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
       onStorySelect={handleStorySelect}
       onStoryCreate={handleCreateStory}
       onStorySetupUpdate={handleStorySetupUpdate}
-      onNarrativeStyleChange={onNarrativeStyleChange}
       onStoryDelete={handleDeleteStories}
       onStoryRename={handleRenameStory}
       onRequestLoreInit={onRequestLoreInit}

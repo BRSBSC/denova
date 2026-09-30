@@ -11,6 +11,7 @@ export interface SpeechSettings {
 }
 
 export interface Settings {
+  game_creation_defaults?: import('@/features/interactive/game-creation-defaults').GameCreationDefaults
   speech?: SpeechSettings
   agent_runtimes?: Partial<Record<'ide' | 'general' | 'interactive_story', import('@/features/agent-runtime/types').RuntimePreferences>>
   openai_api_key?: string

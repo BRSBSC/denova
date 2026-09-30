@@ -174,7 +174,7 @@ func validateSource(source Source) error {
 
 func validKind(kind string) bool {
 	switch kind {
-	case "preset.narrative", "preset.image", "preset.game_planning", "preset.events", "preset.rules", "preset.actor_state", "style.reference", "skill", "lore.collection", "game.openings", "project.cover", "extension.plugin", "extension.game":
+	case "preset.narrative", "preset.image", "preset.game_planning", "preset.events", "preset.rules", "preset.actor_state", "style.reference", "skill", "lore.collection", "game.openings", "project.cover", "project.creator", "extension.plugin", "extension.game":
 		return true
 	}
 	return false

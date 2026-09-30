@@ -4,11 +4,14 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { createBook } from '@/lib/api'
 import { notifyLoreUpdated } from '@/features/lore/events'
+import { fetchProjectSettings } from '@/features/settings/api'
+import type { LayeredSettings } from '@/features/settings/types'
 import { BookCreationProvider } from '@/components/workbench/book-creation'
 import { ImportDialog } from './ImportDialog'
 import { discardPreview, previewSource, exchange, type Preview } from './api'
 vi.mock('@/lib/api', () => ({ getBooks: vi.fn().mockResolvedValue([]), createBook: vi.fn() }))
 vi.mock('@/features/lore/events', () => ({ notifyLoreUpdated: vi.fn() }))
+vi.mock('@/features/settings/api', () => ({ fetchProjectSettings: vi.fn(), invalidateSettingsCache: vi.fn() }))
 vi.mock('./api', async (original) => ({ ...await original<typeof import('./api')>(), exchange: vi.fn(), previewSource: vi.fn(), discardPreview: vi.fn() }))
 const beforeCreate = vi.fn<() => Promise<boolean>>()
 const onCreated = vi.fn<(workspace: string) => Promise<void>>()
@@ -26,6 +29,7 @@ const preview: Preview = {
   }],
 }
 beforeEach(() => {
+  vi.mocked(fetchProjectSettings).mockResolvedValue({ workspace: {}, effective: {}, user: {} } as LayeredSettings)
   vi.mocked(exchange).mockReset()
   vi.mocked(previewSource).mockReset()
   vi.mocked(discardPreview).mockReset()
@@ -33,6 +37,33 @@ beforeEach(() => {
   vi.mocked(notifyLoreUpdated).mockReset()
   beforeCreate.mockReset().mockResolvedValue(true)
   onCreated.mockReset().mockResolvedValue(undefined)
+})
+
+it('only adopts reviewed fields and protects existing book defaults', async () => {
+  const user = userEvent.setup()
+  vi.mocked(fetchProjectSettings).mockResolvedValue({ workspace: { game_creation_defaults: { image_preset_id: 'mine' } }, effective: {}, user: {} } as LayeredSettings)
+  vi.mocked(exchange).mockResolvedValue({ plan_id: 'plan', items: [], installation: { package: { name: 'Chosen package' } } })
+  const candidate = { ...preview.candidates[1], game_defaults: { image_preset_id: 'image', default_background: { resource_id: 'lore', item_id: 'world', asset_path: 'background.png' } } }
+  render(<ImportDialog preview={{ ...preview, candidates: [candidate] }} projectID="target" onClose={vi.fn()} onInstalled={vi.fn()} />)
+  const adopt = await screen.findByRole('checkbox', { name: '用作本书的新故事默认配置' })
+  await waitFor(() => expect(adopt).toBeEnabled())
+  expect(adopt).not.toBeChecked()
+  await user.click(adopt)
+  expect(screen.getByRole('checkbox', { name: '插图方案 · Selected image' })).not.toBeChecked()
+  expect(screen.getByRole('checkbox', { name: '默认背景 · Not selected' })).toBeChecked()
+  await user.click(screen.getByRole('button', { name: '生成安装计划' }))
+  await waitFor(() => expect(exchange).toHaveBeenCalledWith('/plans', expect.objectContaining({ project_id: 'target', game_defaults_fields: ['default_background'] })))
+})
+
+it('preselects available recommendations only when creating a new book', async () => {
+  const user = userEvent.setup()
+  const candidate = { ...preview.candidates[1], game_defaults: { image_preset_id: 'image', default_background: { resource_id: 'lore', item_id: 'world', asset_path: 'background.png' } } }
+  render(<ImportDialog preview={{ ...preview, candidates: [candidate] }} onClose={vi.fn()} onInstalled={vi.fn()} />)
+  await user.click(screen.getByRole('radio', { name: '导入成新书籍' }))
+  expect(screen.getByRole('checkbox', { name: '默认背景 · Not selected' })).toBeChecked()
+  expect(screen.getByRole('checkbox', { name: '插图方案 · Selected image' })).toBeChecked()
+  await user.click(screen.getByRole('button', { name: '清空选择' }))
+  expect(screen.getByRole('checkbox', { name: '插图方案 · Selected image' })).toBeDisabled()
 })
 it('plans exactly the selected candidate and resources, while displaying its dependency', async () => {
   vi.mocked(exchange).mockResolvedValue({ plan_id: 'plan', items: [], installation: { package: { name: 'Chosen package' } } })

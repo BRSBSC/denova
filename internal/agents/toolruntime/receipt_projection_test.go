@@ -16,8 +16,8 @@ import (
 
 func TestGeneratedImageToolResultTracksMutationTarget(t *testing.T) {
 	payload := imageasset.IllustrationResult{
-		Schema:   imageasset.IllustrationResultSchema,
-		MetaPath: "assets/illustrations/ch01/run/meta.json",
+		Schema:    imageasset.IllustrationResultSchema,
+		ImagePath: "assets/writing/ch01--asset_illustration.png",
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -29,7 +29,7 @@ func TestGeneratedImageToolResultTracksMutationTarget(t *testing.T) {
 	}
 	applyToolMutationReceiptToExecutionRecord(&record, agent.TextToolResult(string(raw)))
 	mutation, ok := agenttool.MutationFromExecutionRecord(record)
-	if !ok || mutation.Source != agenttool.ToolSourceImage || mutation.Target != payload.MetaPath || mutation.PostCheck != agenttool.ToolPostCheckWorkspaceChange {
+	if !ok || mutation.Source != agenttool.ToolSourceImage || mutation.Target != payload.ImagePath || mutation.PostCheck != agenttool.ToolPostCheckWorkspaceChange {
 		t.Fatalf("unexpected mutation: %#v, committed=%t record=%#v", mutation, ok, record)
 	}
 }

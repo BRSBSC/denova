@@ -20,6 +20,7 @@ import (
 // Settings 是用户设置的持久化模型。工作区文件只会从中取出 Agent 定制字段。
 // 指针类型用于区分 "未设置"（继承上层）与 "显式置零"。
 type Settings struct {
+	GameCreationDefaults *GameCreationDefaults `toml:"game_creation_defaults,omitempty" json:"game_creation_defaults,omitempty"`
 
 	// 模型
 	OpenAIAPIKey              string                  `toml:"openai_api_key,omitempty" json:"openai_api_key,omitempty"`
@@ -783,6 +784,9 @@ func LoadLayeredWithGlobalAt(novaDir, workspace, projectConfigPath string, globa
 		global.NovaDir = globalDir
 	}
 	eff := Merge(Merge(Merge(def, global), user), ws)
+	// Creation defaults are Project-owned, never inherited from another book
+	// or the user's last-used global resource selection.
+	eff.GameCreationDefaults = ws.GameCreationDefaults
 	inherited := SettingsInheritance{
 		User:      withResolvedLabs(Merge(Merge(def, global), ws)),
 		Workspace: withResolvedLabs(Merge(Merge(def, global), user)),
@@ -863,6 +867,7 @@ func withResolvedLabs(settings Settings) Settings {
 // the transition is reversible, but LoadLayered no longer applies them.
 func PrepareWorkspaceAgentSettingsForWrite(existing, incoming Settings) Settings {
 	scoped := workspaceAgentSettings(incoming)
+	existing.GameCreationDefaults = scoped.GameCreationDefaults
 	existing.AgentRuntimes = scoped.AgentRuntimes
 	existing.AgentTools = scoped.AgentTools
 	existing.AgentPrompts = scoped.AgentPrompts
@@ -881,6 +886,7 @@ func PrepareWorkspaceAgentSettingsForWrite(existing, incoming Settings) Settings
 // runtime preferences are Agent configuration and may have workspace overrides.
 func workspaceAgentSettings(settings Settings) Settings {
 	return Settings{
+		GameCreationDefaults:     settings.GameCreationDefaults,
 		AgentRuntimes:            settings.AgentRuntimes,
 		AgentTools:               settings.AgentTools,
 		AgentPrompts:             settings.AgentPrompts,

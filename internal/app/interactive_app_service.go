@@ -97,6 +97,10 @@ func (s *InteractiveAppService) CreateInteractiveStoryContext(ctx context.Contex
 		return interactive.StorySummary{}, ErrNoWorkspace
 	}
 	var err error
+	req, err = s.withBookGameDefaults(req)
+	if err != nil {
+		return interactive.StorySummary{}, err
+	}
 	req.Protagonist, err = s.resolveStoryProtagonist(ctx, req.Protagonist)
 	if err != nil {
 		return interactive.StorySummary{}, err

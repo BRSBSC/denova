@@ -75,7 +75,23 @@ func inferReferences(dir string, candidate *PackagePreview) error {
 
 func validateResourcePaths(resources []Resource) error {
 	paths := map[string]string{}
+	creatorID := ""
 	for _, resource := range resources {
+		if resource.Kind == "project.creator" {
+			if creatorID != "" {
+				return fmt.Errorf("a package can contain only one creator resource")
+			}
+			creatorID = resource.ID
+			if len(resource.Assets) > 0 {
+				return fmt.Errorf("creator instructions cannot carry assets")
+			}
+		}
+	}
+	// Creative rules must remain independently optional, never an implicit dependency.
+	for _, resource := range resources {
+		if creatorID != "" && slices.Contains(resource.Requires, creatorID) {
+			return fmt.Errorf("creator instructions cannot be a required dependency")
+		}
 		name := strings.ToLower(resource.Path)
 		if previous, ok := paths[name]; ok {
 			return fmt.Errorf("resources %s and %s share a path", previous, resource.ID)
@@ -121,7 +137,10 @@ func validateLocalRef(ref LocalRef) error {
 		if ref.Scope != "workspace" && ref.ProjectID != "" {
 			return fmt.Errorf("global Skill cannot have Project identity")
 		}
-	case "lore.collection", "game.openings", "project.cover":
+	case "lore.collection", "game.openings", "project.cover", "project.creator":
+		if ref.Kind == "project.creator" && ref.ID != "creator" {
+			return fmt.Errorf("invalid creator resource identity")
+		}
 		if ref.Scope != "project" || ref.ProjectID == "" {
 			return fmt.Errorf("resource requires Project scope")
 		}
@@ -136,6 +155,9 @@ func validateLocalRef(ref LocalRef) error {
 // Native resource payloads expose portable fields only. Runtime paths, source
 // receipts and model/provider configuration cannot ride along with definitions.
 func validatePayload(kind string, raw []byte) error {
+	if kind == "project.creator" {
+		return validateCreator(raw)
+	}
 	if kind == "lore.collection" {
 		_, _, err := readLoreCollection(raw)
 		return err

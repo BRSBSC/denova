@@ -2,8 +2,6 @@ package tools
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -14,6 +12,7 @@ import (
 	agent "github.com/alfredxw/denova/agent"
 
 	"denova/config"
+	"denova/internal/assetstore"
 	"denova/internal/book"
 	booklore "denova/internal/book/lore"
 	imageasset "denova/internal/image/asset"
@@ -129,7 +128,7 @@ func newIllustrationTools(cfg *config.Config) ([]agent.ToolDefinition, error) {
 	}
 	workspace := strings.TrimSpace(cfg.Workspace)
 	description := imageprompting.Append(
-		"Generate images with the selected image-provider profile and save them to the workspace. Ordinary images go to assets/image/generated/. With purpose=chapter_illustration, generate one spoiler-free illustration from the chapter at target_path and save it under assets/illustrations/. With purpose=interactive_image, story_id, branch_id, and turn_id are required. With purpose=book_cover, replace the canonical book cover. With purpose=lore_item, lore_item_id is required and the generated asset is attached to that exact item. Provider-specific options are validated by the configured adapter. The `prompt` argument must be the complete final prompt for the image model. Denova forwards it unchanged and does not add a negative prompt. Generate each requested lore item with a separate tool call so failures remain independent.",
+		"Generate images with the selected image-provider profile and save them to the workspace. Ordinary images go to assets/writing/. With purpose=chapter_illustration, generate one spoiler-free illustration from the chapter at target_path and save it under assets/writing/. With purpose=interactive_image, story_id, branch_id, and turn_id are required. With purpose=book_cover, replace the canonical book cover. With purpose=lore_item, lore_item_id is required and the generated asset is attached to that exact item. Provider-specific options are validated by the configured adapter. The `prompt` argument must be the complete final prompt for the image model. Denova forwards it unchanged and does not add a negative prompt. Generate each requested lore item with a separate tool call so failures remain independent.",
 		imageprompting.ToolPromptContext(cfg),
 		imageprompting.SelectedGuide(cfg),
 	)
@@ -213,7 +212,7 @@ func generatedImageReceipt(value any) (generatedImageReceiptDetails, string, err
 			Path: result.ImagePath, MetaPath: result.MetaPath, Markdown: result.Markdown,
 			AltText: result.AltText, MIMEType: result.MIMEType, SizeBytes: result.SizeBytes,
 		}}
-		return receipt, result.MetaPath, nil
+		return receipt, result.ImagePath, nil
 	case imageasset.InteractiveResult:
 		receipt.ResultSchema = result.Schema
 		receipt.Purpose = generateImagePurposeInteractiveImage
@@ -231,7 +230,7 @@ func generatedImageReceipt(value any) (generatedImageReceiptDetails, string, err
 			Path: result.ImagePath, MetaPath: result.MetaPath, AltText: result.AltText,
 			MIMEType: result.MIMEType, SizeBytes: result.SizeBytes,
 		}}
-		return receipt, result.MetaPath, nil
+		return receipt, result.ImagePath, nil
 	case imageasset.CoverResult:
 		receipt.ResultSchema = result.Schema
 		receipt.Purpose = generateImagePurposeBookCover
@@ -248,7 +247,7 @@ func generatedImageReceipt(value any) (generatedImageReceiptDetails, string, err
 		receipt.Images = []generatedImageReceiptFile{{
 			Path: result.CoverPath, MetaPath: result.MetaPath, MIMEType: result.MIMEType, SizeBytes: result.SizeBytes,
 		}}
-		return receipt, result.MetaPath, nil
+		return receipt, result.SourcePath, nil
 	default:
 		return generatedImageReceiptDetails{}, "", fmt.Errorf("unsupported generated image result %T", value)
 	}
@@ -317,7 +316,7 @@ func generateLoreImageForTool(ctx context.Context, cfg *config.Config, bookServi
 		return generatedImageToolResult{}, err
 	}
 	if _, err := store.AppendImageWithCover(item.ID, &generated, input.LoreCover); err != nil {
-		imageasset.DiscardUnlinkedLore(ctx, store, bookService, generated)
+		imageasset.DiscardUnlinkedLore(ctx, store, generated)
 		return generatedImageToolResult{}, err
 	}
 	return generatedImageToolResult{
@@ -398,8 +397,8 @@ func persistGeneratedImages(bookService *book.Service, input generateImageInput,
 		if result.OutputFormat == "" {
 			result.OutputFormat = ext
 		}
-		imagePath := generatedToolImagePath(createdAt, index, ext)
-		if err := bookService.WriteBinaryFile(imagePath, image.Data); err != nil {
+		imagePath := assetstore.NewPath(assetstore.Writing, ext)
+		if err := assetstore.Save(context.Background(), bookService.Workspace(), assetstore.File{Path: imagePath, Data: image.Data}); err != nil {
 			message := fmt.Sprintf("Failed to save generated image: %v", err)
 			result.Failures = append(result.Failures, generatedImageToolFailure{
 				Index: index, Path: imagePath, Code: "save_failed", Message: message,
@@ -498,6 +497,9 @@ func parseGeneratedImageToolTarget(toolName, content string) string {
 	}
 	var receipt generatedImageReceiptDetails
 	if err := json.Unmarshal([]byte(body), &receipt); err == nil && receipt.Schema == generatedImageReceiptSchema {
+		if receipt.ResultSchema == imageasset.CoverResultSchema {
+			return strings.TrimSpace(receipt.SourcePath)
+		}
 		if len(receipt.Images) == 0 {
 			return ""
 		}
@@ -647,23 +649,6 @@ func normalizeGeneratedImageExtension(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func generatedToolImagePath(createdAt time.Time, index int, extension string) string {
-	return filepath.ToSlash(filepath.Join(
-		"assets",
-		"image",
-		"generated",
-		fmt.Sprintf("%s-%s-%02d.%s", createdAt.Format("20060102-150405"), imageToolRandomSuffix(), index+1, extension),
-	))
-}
-
-func imageToolRandomSuffix() string {
-	var buf [4]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		return fmt.Sprintf("%d", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(buf[:])
 }
 
 func escapeGeneratedImageAlt(text string) string {

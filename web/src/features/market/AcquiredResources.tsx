@@ -24,6 +24,7 @@ import { useWorkspaceStore } from '@/stores/workspace-store'
 import { exchange, type Installation, type Preview } from './api'
 import { BackupDialog } from './BackupDialog'
 import type { ImportDialogProps } from './ImportDialog'
+import { GameDefaultsDialog } from '@/features/interactive/components/GameDefaultsDialog'
 
 export function AcquiredResources({
   installations,
@@ -44,6 +45,7 @@ export function AcquiredResources({
   const requested = useWorkspaceStore((state) => state.marketInstallationID)
   const [expanded, setExpanded] = useState<string>()
   const [backup, setBackup] = useState<Installation>()
+  const [defaults, setDefaults] = useState<Installation>()
   const [pending, setPending] = useState('')
   useEffect(() => {
     if (requested) setExpanded(requested)
@@ -175,6 +177,7 @@ export function AcquiredResources({
                       </Select>
                     )}
                   <div className="flex flex-wrap gap-2">
+                    {item.game_defaults && Object.keys(item.game_defaults).length > 0 && <Button variant="outline" onClick={() => setDefaults(item)}>{t('gameDefaults.adopt')}</Button>}
                     <Button
                       variant="outline"
                       onClick={() =>
@@ -257,6 +260,7 @@ export function AcquiredResources({
           onChanged={onChanged}
         />
       )}
+      {defaults?.game_defaults && <GameDefaultsDialog defaults={defaults.game_defaults} projectID={defaults.project_id} onClose={() => setDefaults(undefined)} />}
     </>
   )
 }

@@ -84,6 +84,7 @@ func (service *Service) GenerateItemImage(ctx context.Context, projectID, id str
 		}
 	}
 	generated, err := imageasset.NewService().GenerateLore(runtime.Context(), &cfg, runtime.BookService, imageasset.LoreGenerateRequest{
+		Provenance:        imageasset.ProvenanceDirectory,
 		Item:              item,
 		Prompt:            request.Prompt,
 		Instruction:       request.Instruction,
@@ -95,12 +96,12 @@ func (service *Service) GenerateItemImage(ctx context.Context, projectID, id str
 		return booklore.Item{}, err
 	}
 	if err := runtime.Context().Err(); err != nil {
-		imageasset.DiscardUnlinkedLore(ctx, store, runtime.BookService, generated)
+		imageasset.DiscardUnlinkedLore(ctx, store, generated)
 		return booklore.Item{}, err
 	}
 	updated, err := store.AppendImage(item.ID, &generated)
 	if err != nil {
-		imageasset.DiscardUnlinkedLore(ctx, store, runtime.BookService, generated)
+		imageasset.DiscardUnlinkedLore(ctx, store, generated)
 		return booklore.Item{}, err
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("[lore-image] generated item_id=%s path=%s", updated.ID, generated.ImagePath))

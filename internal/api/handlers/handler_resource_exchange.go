@@ -20,6 +20,8 @@ func exchangeError(ctx context.Context, c *app.RequestContext, err error) {
 	switch {
 	case errors.As(err, &conflict):
 		key, status = "api.resource.revisionConflict", 409
+	case errors.Is(err, resourceexchange.ErrCreatorInvalid):
+		key = "market.errors.creatorInvalid"
 	case errors.Is(err, resourceexchange.ErrLocalModified):
 		key, status = "market.errors.localModified", 409
 	case errors.Is(err, resourceexchange.ErrResourceOwned):

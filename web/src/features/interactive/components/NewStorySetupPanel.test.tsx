@@ -93,6 +93,7 @@ function conversationConfigController(): ConversationConfigController {
 
 describe('NewStorySetupPanel', () => {
   beforeEach(() => {
+    settingsMocks.fetchProjectSettings.mockResolvedValue({ workspace: {}, effective: {} })
     settingsMocks.fetchSettings.mockResolvedValue({
       effective: {
         openai_model: 'test-model',
@@ -199,7 +200,7 @@ describe('NewStorySetupPanel', () => {
     expect(screen.getByRole('radio', { name: '从资料库选择' })).toBeChecked()
     expect(screen.getByText(/Game Agent.*自动识别/)).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '自定义' })).toHaveAttribute('aria-selected', 'true')
-    await user.click(screen.getByRole('button', { name: '开始故事' }))
+    await user.click(await screen.findByRole('button', { name: '开始故事' }))
 
     await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1))
     expect(onCreate.mock.calls[0]?.[0]).toMatchObject({
@@ -316,6 +317,27 @@ describe('NewStorySetupPanel', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '开始故事' })).toBeEnabled())
     expect(screen.getByRole('combobox', { name: '模型配置' })).toHaveTextContent('默认模型')
     expect(screen.getByRole('combobox', { name: '思考强度' })).toHaveTextContent('中')
+  })
+
+  it('seeds book resources once and keeps explicit background clearing local', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    settingsMocks.fetchProjectSettings.mockResolvedValue({ workspace: { game_creation_defaults: {
+      narrative_style_id: teller.id, event_package_ids: [], default_background: { mode: 'image', item_id: 'hero', asset_id: 'background' },
+    } }, effective: {} })
+    vi.mocked(getProjectLoreItems).mockResolvedValue([loreCharacter])
+    const props = { projectId: 'project-1', tellers: [teller], planningTemplates: [planningTemplate], imagePresets: [], loreItems: [loreCharacter], conversationConfig: conversationConfigController(), onCancel: vi.fn(), onCreate }
+    const { rerender } = render(<NewStorySetupPanel {...props} />)
+    await screen.findByText('已预填本书默认资源；这里的调整只影响当前故事。')
+    await user.click(screen.getByRole('button', { name: '当前背景' }))
+    await user.click(screen.getByRole('button', { name: '无背景' }))
+    // Late resource/settings refreshes must not replace edits in this open form.
+    settingsMocks.fetchProjectSettings.mockResolvedValue({ workspace: { game_creation_defaults: { narrative_style_id: 'different' } }, effective: {} })
+    rerender(<NewStorySetupPanel {...props} loreItems={[...props.loreItems]} />)
+    await user.click(screen.getByRole('button', { name: '开始故事' }))
+    await waitFor(() => expect(onCreate).toHaveBeenCalledOnce())
+    expect(onCreate.mock.calls[0][0]).toMatchObject({ story_teller_id: teller.id, module_refs: { narrative_style_id: teller.id, event_packages_disabled: true }, presentation_settings: { background: true, characters: true } })
+    expect(onCreate.mock.calls[0][0].presentation_settings.default_background).toBeUndefined()
   })
 
   it('preserves released story metadata when resuming setup without exposing the old fields', async () => {

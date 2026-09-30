@@ -1,0 +1,28 @@
+const gameDefaults = {
+  'gameDefaults.title': '本书的新故事默认配置',
+  'gameDefaults.packageTitle': '资源包推荐搭配',
+  'gameDefaults.adopt': '用作本书的新故事默认配置',
+  'gameDefaults.help': '仅预填以后创建的故事。已有故事和全局偏好保持不变，资源包更新不会重新应用这些选择。',
+  'gameDefaults.prefilled': '已预填本书默认资源；这里的调整只影响当前故事。',
+  'gameDefaults.newStoryHelp': '可以将当前资源搭配保存为本书以后创建故事的默认值。',
+  'gameDefaults.saveSelection': '保存资源搭配为本书默认',
+  'gameDefaults.clear': '清除本书默认配置',
+  'gameDefaults.configured': '本书已有配置',
+  'gameDefaults.replacing': '将替换：{{name}}',
+  'gameDefaults.keeping': '保留：{{name}}；勾选后才会替换',
+  'gameDefaults.replaceExisting': '将替换本书已有的这一项默认配置',
+  'gameDefaults.none': '不使用',
+  'gameDefaults.unavailable': '资源不可用或未选择导入，请补选资源或取消这一项。',
+  'gameDefaults.loadFailed': '无法读取本书默认配置或资源，请重试。',
+  'gameDefaults.saveFailed': '默认配置保存失败，请重试。',
+  'gameDefaults.saved': '已更新本书的新故事默认配置',
+  'gameDefaults.fields.default_background': '默认背景',
+  'gameDefaults.fields.narrative_style_id': '叙事风格',
+  'gameDefaults.fields.actor_state_id': '状态模板',
+  'gameDefaults.fields.rule_system_id': '规则方案',
+  'gameDefaults.fields.event_package_ids': '事件包',
+  'gameDefaults.fields.image_preset_id': '插图方案',
+  'gameDefaults.fields.planning_template_id': '规划方案',
+} as const
+
+export default gameDefaults

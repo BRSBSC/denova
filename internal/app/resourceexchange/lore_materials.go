@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	"denova/internal/book/lore"
-	"github.com/google/uuid"
 )
 
 // Resource packages keep association text and file references; runtime provider
@@ -46,7 +45,7 @@ func (s *Service) exportLoreMaterials(ctx context.Context, ref LocalRef, item lo
 		if !snapshot.Exists {
 			return nil, fmt.Errorf("lore material missing: %s", material.Path)
 		}
-		name := "assets/" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(ref.ProjectID+":"+material.Path)).String() + path.Ext(material.Path)
+		name := exportedMaterialPath(ref.ProjectID, material.Path)
 		files[name] = snapshot.Content
 		payload.Entries = append(payload.Entries, portableMaterial{AssetPath: name, SourceURL: material.Source.URL, OriginalName: material.OriginalName, Name: material.Name, Description: material.Description})
 		if item.Image != nil && item.Image.ImagePath == material.Path {

@@ -89,7 +89,7 @@ func TestRemoteMaterialsPreserveSharingCoverAndLocalCopy(t *testing.T) {
 		t.Fatal("stale replacement accepted")
 	}
 	after, _ := os.ReadFile(s.itemsPath())
-	dirs, _ := os.ReadDir(filepath.Join(s.workspace, "assets/lore/media"))
+	dirs, _ := os.ReadDir(filepath.Join(s.workspace, "assets/lore"))
 	if !bytes.Equal(before, after) || len(dirs) != 1 {
 		t.Fatal("failed replacement changed data or leaked files")
 	}

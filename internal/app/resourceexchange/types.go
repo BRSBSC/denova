@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"denova/config"
 	"denova/internal/app/resourcecatalog"
 	"denova/internal/book/character"
 	"denova/internal/platform"
@@ -57,10 +58,11 @@ type Resource struct {
 }
 
 type Manifest struct {
-	Format        string      `json:"format"`
-	SchemaVersion int         `json:"schema_version"`
-	Package       PackageInfo `json:"package"`
-	Resources     []Resource  `json:"resources"`
+	Format        string               `json:"format"`
+	SchemaVersion int                  `json:"schema_version"`
+	Package       PackageInfo          `json:"package"`
+	Resources     []Resource           `json:"resources"`
+	GameDefaults  *PackageGameDefaults `json:"game_defaults,omitempty"`
 }
 
 type PreviewResource struct {
@@ -74,10 +76,11 @@ type PreviewResource struct {
 }
 
 type PackagePreview struct {
-	ID        string            `json:"candidate_id"`
-	Package   PackageInfo       `json:"package"`
-	Format    string            `json:"format"`
-	Resources []PreviewResource `json:"resources"`
+	ID           string               `json:"candidate_id"`
+	Package      PackageInfo          `json:"package"`
+	Format       string               `json:"format"`
+	Resources    []PreviewResource    `json:"resources"`
+	GameDefaults *PackageGameDefaults `json:"game_defaults,omitempty"`
 }
 
 type Preview struct {
@@ -113,33 +116,35 @@ type Binding struct {
 }
 
 type Installation struct {
-	PendingPreviewID string      `json:"pending_preview_id,omitempty"`
-	ID               string      `json:"installation_id"`
-	Package          PackageInfo `json:"package"`
-	Source           Source      `json:"source"`
-	ProjectID        string      `json:"project_id,omitempty"`
-	Tracking         string      `json:"tracking"`
-	UpdateMode       string      `json:"update_mode"`
-	Bindings         []Binding   `json:"bindings"`
-	CreatedAt        time.Time   `json:"created_at"`
-	UpdatedAt        time.Time   `json:"updated_at"`
-	CheckedAt        time.Time   `json:"checked_at,omitempty"`
-	RemoteState      string      `json:"remote_state,omitempty"`
-	LocalState       string      `json:"local_state,omitempty"`
+	GameDefaults     *config.GameCreationDefaults `json:"game_defaults,omitempty"`
+	PendingPreviewID string                       `json:"pending_preview_id,omitempty"`
+	ID               string                       `json:"installation_id"`
+	Package          PackageInfo                  `json:"package"`
+	Source           Source                       `json:"source"`
+	ProjectID        string                       `json:"project_id,omitempty"`
+	Tracking         string                       `json:"tracking"`
+	UpdateMode       string                       `json:"update_mode"`
+	Bindings         []Binding                    `json:"bindings"`
+	CreatedAt        time.Time                    `json:"created_at"`
+	UpdatedAt        time.Time                    `json:"updated_at"`
+	CheckedAt        time.Time                    `json:"checked_at,omitempty"`
+	RemoteState      string                       `json:"remote_state,omitempty"`
+	LocalState       string                       `json:"local_state,omitempty"`
 }
 
 type PlanRequest struct {
-	automatic       bool
-	PreviewID       string              `json:"preview_id"`
-	CandidateID     string              `json:"candidate_id"`
-	Resources       []string            `json:"resources"`
-	ProjectID       string              `json:"project_id,omitempty"`
-	SkillScope      string              `json:"skill_scope,omitempty"`
-	UpdateMode      string              `json:"update_mode,omitempty"`
-	InstallationID  string              `json:"installation_id,omitempty"`
-	Grants          map[string][]string `json:"grants,omitempty"`
-	Names           map[string]string   `json:"names,omitempty"`
-	ReplaceModified bool                `json:"replace_modified,omitempty"`
+	GameDefaultsFields []string `json:"game_defaults_fields,omitempty"`
+	automatic          bool
+	PreviewID          string              `json:"preview_id"`
+	CandidateID        string              `json:"candidate_id"`
+	Resources          []string            `json:"resources"`
+	ProjectID          string              `json:"project_id,omitempty"`
+	SkillScope         string              `json:"skill_scope,omitempty"`
+	UpdateMode         string              `json:"update_mode,omitempty"`
+	InstallationID     string              `json:"installation_id,omitempty"`
+	Grants             map[string][]string `json:"grants,omitempty"`
+	Names              map[string]string   `json:"names,omitempty"`
+	ReplaceModified    bool                `json:"replace_modified,omitempty"`
 }
 
 type PlanItem struct {
@@ -152,15 +157,17 @@ type PlanItem struct {
 }
 
 type Plan struct {
-	BackupID      string       `json:"backup_id,omitempty"`
-	ID            string       `json:"plan_id"`
-	PreviewID     string       `json:"preview_id"`
-	CandidateID   string       `json:"candidate_id"`
-	ExpiresAt     time.Time    `json:"expires_at"`
-	Installation  Installation `json:"installation"`
-	Items         []PlanItem   `json:"items"`
-	PlatformState string       `json:"platform_state,omitempty"`
-	Changes       []fileChange `json:"changes,omitempty"`
+	GameDefaultsBefore  *config.GameCreationDefaults `json:"game_defaults_before,omitempty"`
+	GameDefaultsApplied *config.GameCreationDefaults `json:"game_defaults_applied,omitempty"`
+	BackupID            string                       `json:"backup_id,omitempty"`
+	ID                  string                       `json:"plan_id"`
+	PreviewID           string                       `json:"preview_id"`
+	CandidateID         string                       `json:"candidate_id"`
+	ExpiresAt           time.Time                    `json:"expires_at"`
+	Installation        Installation                 `json:"installation"`
+	Items               []PlanItem                   `json:"items"`
+	PlatformState       string                       `json:"platform_state,omitempty"`
+	Changes             []fileChange                 `json:"changes,omitempty"`
 }
 
 // PublicPlan excludes staged bytes and filesystem locations from API responses.

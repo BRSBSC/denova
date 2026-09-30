@@ -199,6 +199,10 @@ const market = {
   'market.kinds.project.cover': '作品封面',
   'market.kinds.extension.plugin': '插件',
   'market.kinds.extension.game': '游戏扩展',
+  'market.kinds.project.creator': '创作规则（CREATOR.md）',
+  'market.import.creatorHelp': '可选的项目创作规则，影响写作与游戏。采用前可预览全文；除非明确允许替换，否则保留现有规则。',
+  'market.import.replaceCreator': '备份后替换已有资源，包括 CREATOR.md',
+  'market.errors.creatorInvalid': '创作规则必须是非空 UTF-8 文本，且不能超过目标项目的 Agent 上下文片段容量上限。',
 } as const
 
 export default market

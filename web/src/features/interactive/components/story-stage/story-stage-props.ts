@@ -29,7 +29,6 @@ export interface StoryStageProps {
   onStorySelect?: (storyId: string) => void
   onStoryCreate?: (input: StoryCreateInput) => StorySummary | void | Promise<StorySummary | void>
   onStorySetupUpdate?: (input: StoryCreateInput) => void | Promise<void>
-  onNarrativeStyleChange?: (id: string) => void | Promise<unknown>
   onStoryDelete?: (storyIds: string[]) => void | Promise<void>
   onStoryRename?: (storyId: string, title: string) => void | Promise<void>
   onRequestLoreInit?: () => void

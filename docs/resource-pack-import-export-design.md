@@ -50,6 +50,7 @@
 | `lore.collection` | 指定 Book Project 的资料集合 |
 | `game.openings` | 指定 Book Project 的开场集合 |
 | `project.cover` | 指定 Book Project 的封面 |
+| `project.creator` | 指定 Project 的创作规则 `CREATOR.md` |
 | `extension.plugin`、`extension.game` | 平台管理的全局不可变发行 |
 
 每次安装最多涉及一个 Project 和若干全局资源。作品名、DataRoot 及宿主绝对路径不参与持久化身份。持久化目标由稳定 `ProjectID` 加规范相对路径组成，运行时经 Registry 解析。
@@ -88,6 +89,44 @@
 `package` 可包含简介、作者和最低 Denova 版本。市场登记时还需提供 `locale`：`name`、`description`、`usage`、`compatibility` 用默认语言撰写，`translations` 仅提供其他语言的同名文本，避免重复默认语言。`tags` 与 HTTPS `cover` 可选；GitHub 更新时间从仓库推导，ZIP 则使用 `updated_at`。预览、安装记录与再次导出保留这份完整信息。只导入、不上架的资源包可省略市场展示字段。
 
 单独的 Skill 或扩展上架时也由 `denova-pack.json` 列出该资源；原生 `SKILL.md`、插件或游戏清单仍负责自己的运行时定义，直接导入方式保持不变。`requires` 只引用当前包内资源；不下载跨包依赖，不从提示词推测依赖。
+
+### 可选创作规则
+
+资源包可以声明一个 `project.creator` 资源，`path` 指向非空 UTF-8 Markdown 文件。每包最多一份，不携带附件，也不能成为其他资源的必选依赖。分发时应在 `package.min_denova_version` 声明首次支持该类型的正式版本。
+
+导出选择器展示当前项目的 `CREATOR.md`；导入默认不勾选，允许预览全文。用户选择目标项目（或新建作品）后，固定写入该项目根目录的 `CREATOR.md`，不叠加提示词、不自动合并。若文件已存在，包括新书初始化模板，必须明确勾选备份后替换。每次更新也需重新确认，未选择或上游移除的规则继续保留；停止来源追踪不删除内容。另一个资源包不能接管仍受追踪的规则，需先停止原包追踪。
+
+采用既有 ProjectID、相对路径、导入计划、并发校验、事务备份和恢复流程；上下文沿用原文件注入来源。计划阶段按目标项目现有 Agent 上下文片段限制（含指令封装）校验，超限报错，不截断。含该资源的安装不支持自动应用更新。不新增用户配置或规则存储，无需迁移 v0.5.1 用户数据。
+
+### 新故事推荐默认项
+
+清单可用顶层 `game_defaults` 推荐背景和创作方案，所有资源 ID 均引用本清单的 `resources`：
+
+```json
+{
+  "game_defaults": {
+    "narrative_style_id": "narrative",
+    "image_preset_id": "illustration",
+    "planning_template_id": "planning",
+    "actor_state_id": "actor-state",
+    "rule_system_id": "rules",
+    "event_package_ids": ["events"],
+    "default_background": {
+      "resource_id": "lore",
+      "item_id": "world",
+      "asset_path": "assets/background.png"
+    }
+  }
+}
+```
+
+各项均可省略。背景必须是已启用 Lore 条目关联的本地图片，文件同时列入该集合的 `assets`。导入时映射为真实本地资源、条目和素材 ID；未选择导入的资源不可采纳，事件包按完整列表替换，不与已有列表拼接。
+
+普通导入默认不采纳；从资源包创建新书时预选可用项，用户可逐项取消。已有书籍的默认项保持原样，只有显式勾选才替换。确认计划显示采纳项及覆盖提示，配置修改复用导入事务、并发校验与备份，不纳入包拥有的文件基线。已获取页可再次采纳，新故事表单也可将当前资源选择保存为本书默认项或清除默认项。
+
+采纳结果保存在 `stores/<store_dir>/config.toml` 的 `game_creation_defaults` 中，仅属于该 Project，不进入用户全局配置。字段缺省沿用原创建行为；空资源 ID（规划模板除外）、空事件列表和背景 `mode: "none"` 表示明确不使用。此处只保存资源选择，不保存模型、权限、自动生图等运行偏好。
+
+新故事创建前读取一次，显式输入优先，然后将选择写入既有 Story journal。已开始故事、扩展预览和更新资源包不重新继承书籍默认项；引用的资源内容仍遵循原有资源更新规则。缺失资源需用户修正或清空，不静默换成其他方案。导出已获取包时保留仍包含在导出选择中的推荐项。此功能为可选新增配置，无需迁移 v0.5.1 用户数据。
 
 载荷规则：
 

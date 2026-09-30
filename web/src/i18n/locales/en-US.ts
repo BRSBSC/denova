@@ -1,4 +1,5 @@
 import market from './en-US/market'
+import gameDefaults from './en-US/gameDefaults'
 import speech from './en-US/speech'
 import common from './en-US/common'
 import platform from './en-US/platform'
@@ -50,6 +51,7 @@ import trajectory from './en-US/trajectory'
 const enUS = {
   ...common,
   ...market,
+  ...gameDefaults,
   ...platform,
   ...speech,
   ...agentRuntime,

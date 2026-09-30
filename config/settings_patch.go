@@ -62,6 +62,12 @@ func ApplySettingsMergePatch(existing Settings, changes json.RawMessage) (Settin
 	if err := ensureSettingsJSONEOF(decoder); err != nil {
 		return Settings{}, fmt.Errorf("%w: %v", ErrInvalidSettingsPatch, err)
 	}
+	// A background is one association. Switching to "none" must also discard
+	// the previous item/image IDs rather than retaining them through object merge.
+	if patch.GameCreationDefaults != nil && patch.GameCreationDefaults.DefaultBackground != nil {
+		background := *patch.GameCreationDefaults.DefaultBackground
+		next.GameCreationDefaults.DefaultBackground = &background
+	}
 	for _, role := range []struct {
 		changed *RuntimePreferences
 		next    *RuntimePreferences
@@ -85,6 +91,9 @@ func ApplySettingsMergePatch(existing Settings, changes json.RawMessage) (Settin
 	if err := validateSettingsCheckpointGuidance(next); err != nil {
 		return Settings{}, fmt.Errorf("%w: %v", ErrInvalidSettingsPatch, err)
 	}
+	if err := next.GameCreationDefaults.Validate(); err != nil {
+		return Settings{}, fmt.Errorf("%w: %v", ErrInvalidSettingsPatch, err)
+	}
 	return next, nil
 }
 
@@ -99,7 +108,7 @@ func ValidateWorkspaceSettingsPatch(changes json.RawMessage) error {
 		switch field {
 		case "agent_runtimes", "agent_tools", "agent_prompts", "agent_skills", "agent_context",
 			"general_sub_agents", "sub_agents", "default_image_agent_id",
-			"agent_tool_parallelism", "agent_subagent_parallelism":
+			"agent_tool_parallelism", "agent_subagent_parallelism", "game_creation_defaults":
 		default:
 			return fmt.Errorf("%w: field %q is not workspace-scoped", ErrInvalidSettingsPatch, field)
 		}

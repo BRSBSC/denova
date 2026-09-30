@@ -12,7 +12,7 @@ import (
 	"strings"
 	"syscall"
 
-	"denova/internal/book/lore"
+	"denova/internal/assetstore"
 	"denova/internal/localfs"
 )
 
@@ -76,7 +76,7 @@ func (p restorePlanner) PlanLocked(id string, paths []string, settings VersionAu
 	retainedMedia := []string{}
 	filtered := changes[:0]
 	for _, change := range changes {
-		if change.MissingInVersion && lore.IsManagedMaterialPath(change.Path) {
+		if change.MissingInVersion && assetstore.IsRetained(change.Path) {
 			retainedMedia = append(retainedMedia, change.Path)
 		} else {
 			filtered = append(filtered, change)
@@ -133,6 +133,9 @@ func (p restorePlanner) ApplyLocked(id string, paths []string, settings VersionA
 		return VersionRestoreResult{}, err
 	}
 
+	if err := assetstore.MigrateRestored(s.workspace, s.repository); err != nil {
+		return VersionRestoreResult{}, fmt.Errorf("migrate restored creative assets: %w", err)
+	}
 	nextStatus, statusErr := s.statusLocked(context.Background(), settings)
 	target := plan.Target
 	restoredPaths := make([]string, 0, len(plan.Changes))
@@ -272,7 +275,7 @@ func (s *Service) restorePathsFromCommit(id string, paths []string) error {
 			return fmt.Errorf("恢复路径 %s 的父目录无效: %w", rel, err)
 		}
 		entry := selectiveRestoreEntry{path: rel}
-		if _, ok := target[rel]; !ok && lore.IsManagedMaterialPath(rel) {
+		if _, ok := target[rel]; !ok && assetstore.IsRetained(rel) {
 			continue
 		}
 		if _, ok := target[rel]; ok {
@@ -297,6 +300,12 @@ func (s *Service) restorePathsFromCommit(id string, paths []string) error {
 		case errors.Is(statErr, os.ErrNotExist):
 		default:
 			return statErr
+		}
+		if assetstore.IsMetadata(rel) && entry.targetExists && entry.beforeExists {
+			entry.targetData, err = assetstore.MergeMetadata(entry.targetData, entry.beforeData)
+			if err != nil {
+				return err
+			}
 		}
 		plan = append(plan, entry)
 	}
@@ -433,7 +442,7 @@ func (s *Service) removeVisibleFilesAbsentFromCommit(id string) error {
 		return err
 	}
 	for _, file := range files {
-		if lore.IsManagedMaterialPath(file.Path) {
+		if assetstore.IsRetained(file.Path) {
 			continue
 		}
 		if _, ok := target[file.Path]; ok {

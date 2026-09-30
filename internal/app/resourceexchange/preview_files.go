@@ -110,7 +110,8 @@ func (s *Service) PreviewFiles(ctx context.Context, previewID, candidateID, reso
 		result.Path = selected
 		result.Binary = !utf8.Valid(raw) || strings.ContainsRune(string(raw), '\x00')
 		if !result.Binary {
-			if len(raw) > 64*1024 {
+			// Creator files are bounded at admission; adoption requires a complete preview.
+			if len(raw) > 64*1024 && resource.Kind != "project.creator" {
 				result.Truncated = true
 				raw = raw[:64*1024]
 				for !utf8.Valid(raw) {

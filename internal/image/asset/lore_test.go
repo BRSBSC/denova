@@ -2,6 +2,7 @@ package asset
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"denova/config"
+	"denova/internal/assetstore"
 	"denova/internal/book"
 	"denova/internal/book/lore"
 	imagegen "denova/internal/image/generation"
@@ -27,9 +29,9 @@ func TestGenerateSavesLoreImageAndMetadata(t *testing.T) {
 	}}
 	service := NewServiceWithGenerator(generator)
 	service.now = func() time.Time { return time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC) }
-	service.suffix = func() string { return "abcd1234" }
 
 	result, err := service.GenerateLore(context.Background(), &config.Config{}, book.NewService(workspace), LoreGenerateRequest{
+		Provenance: ProvenanceDirectory,
 		Item: lore.Item{
 			ID:               "hero",
 			Type:             "character",
@@ -45,10 +47,10 @@ func TestGenerateSavesLoreImageAndMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Schema != LoreResultSchema || !strings.HasPrefix(result.ImagePath, "assets/lore/media/asset_") || !strings.HasSuffix(result.ImagePath, "/file.png") {
+	if result.Schema != LoreResultSchema || filepath.Dir(result.ImagePath) != "assets/lore" {
 		t.Fatalf("unexpected result: %#v", result)
 	}
-	if result.MetaPath != strings.TrimSuffix(result.ImagePath, "file.png")+"meta.json" || result.ImagePresetID != "game-cg" {
+	if result.MetaPath != "assets/lore/meta.json" || result.ImagePresetID != "game-cg" {
 		t.Fatalf("unexpected metadata paths: %#v", result)
 	}
 	assertFile(t, workspace, result.ImagePath, "image")
@@ -56,12 +58,35 @@ func TestGenerateSavesLoreImageAndMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"schema": "lore_item_image.v1"`, `"item_id": "hero"`, `"image_preset_id": "game-cg"`, `"prompt":`} {
-		if !strings.Contains(string(meta), want) {
-			t.Fatalf("metadata missing %q:\n%s", want, string(meta))
+	metadata, err := assetstore.DecodeMetadata(meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var detail generationMeta
+	if err := json.Unmarshal(metadata.Files[filepath.Base(result.ImagePath)], &detail); err != nil {
+		t.Fatal(err)
+	}
+	if detail.ImagePresetID != "game-cg" || detail.Prompt != generator.request.Prompt || detail.RevisedPrompt != "revised" {
+		t.Fatalf("missing generation details: %+v", detail)
+	}
+	for _, forbidden := range []string{`"mime_type"`, `"size_bytes"`, `"item_id"`, `"image_path"`} {
+		if strings.Contains(string(meta), forbidden) {
+			t.Fatalf("directory metadata duplicates product attributes: %s", meta)
 		}
 	}
-	if !strings.Contains(generator.request.Prompt, "电影感光影") || !strings.Contains(generator.request.Prompt, "夜色氛围") || !strings.Contains(generator.request.Prompt, "林川") {
+	second, err := service.GenerateLore(context.Background(), &config.Config{}, book.NewService(workspace), LoreGenerateRequest{Provenance: ProvenanceDirectory, Item: lore.Item{ID: "other", Name: "Other"}, Prompt: "second prompt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	meta, err = os.ReadFile(filepath.Join(workspace, filepath.FromSlash(second.MetaPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata, err = assetstore.DecodeMetadata(meta)
+	if err != nil || len(metadata.Files) != 2 || len(metadata.Files[filepath.Base(result.ImagePath)]) == 0 {
+		t.Fatalf("generation overwrote another file's provenance: %+v %v", metadata, err)
+	}
+	if !strings.Contains(detail.Prompt, "电影感光影") || !strings.Contains(detail.Prompt, "夜色氛围") || !strings.Contains(detail.Prompt, "林川") {
 		t.Fatalf("prompt missing expected context:\n%s", generator.request.Prompt)
 	}
 }

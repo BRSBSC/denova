@@ -149,9 +149,11 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 			}
 		case "style.reference":
 			local.ID += ".md"
-		case "lore.collection", "game.openings", "project.cover":
+		case "lore.collection", "game.openings", "project.cover", "project.creator":
 			if resource.Kind == "project.cover" {
 				local.ID = "cover"
+			} else if resource.Kind == "project.creator" {
+				local.ID = "creator"
 			}
 			local.Scope = "project"
 			local.ProjectID = installation.ProjectID
@@ -216,7 +218,7 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 		}
 		refs[resource.Kind+":"+resource.ID] = local.ID
 		refs[resource.Kind+":"+resource.Path] = local.ID
-		if !strings.HasPrefix(resource.Kind, "extension.") && resource.Kind != "skill" && resource.Kind != "project.cover" && resource.Kind != "style.reference" {
+		if !strings.HasPrefix(resource.Kind, "extension.") && resource.Kind != "skill" && resource.Kind != "project.cover" && resource.Kind != "project.creator" && resource.Kind != "style.reference" {
 			raw, err := os.ReadFile(filepath.Join(dir, "files", filepath.FromSlash(resource.Path)))
 			if err != nil {
 				return Plan{}, err
@@ -314,6 +316,12 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 			if _, ok := expected[target]; !ok {
 				expected[target] = snapshot.Revision
 			}
+			if binding.Local.Kind == "project.creator" && snapshot.Exists {
+				if !request.ReplaceModified {
+					return Plan{}, ErrLocalModified
+				}
+				plan.Items[i].Action = "update"
+			}
 			if oldBinding, ok := oldBindings[resource.ID]; ok {
 				if baseline, tracked := oldBinding.Baseline[target.Path]; (tracked && snapshot.Revision != baseline || !tracked && snapshot.Exists && binding.Local.Kind == "skill") && !request.ReplaceModified {
 					return Plan{}, ErrLocalModified
@@ -331,6 +339,16 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 			}
 		}
 	}
+	// Only resources selected in this plan can be adopted during import.
+	if len(request.GameDefaultsFields) > 0 {
+		available, err := resolvePackageGameDefaults(candidate, plan.Installation.Bindings, importedAssets)
+		if err != nil {
+			return Plan{}, err
+		}
+		if _, err := available.Select(request.GameDefaultsFields); err != nil {
+			return Plan{}, err
+		}
+	}
 	// Omitted and upstream-removed members stay local and retain their baselines.
 	// A package update never doubles as resource deletion or source reassignment.
 	for _, binding := range old.Bindings {
@@ -343,6 +361,23 @@ func (s *Service) Plan(ctx context.Context, request PlanRequest) (Plan, error) {
 	}
 	if !slices.ContainsFunc(plan.Installation.Bindings, func(binding Binding) bool { return binding.Local.ProjectID != "" }) {
 		plan.Installation.ProjectID = ""
+	}
+	plan.Installation.GameDefaults, err = resolvePackageGameDefaults(candidate, plan.Installation.Bindings, importedAssets)
+	if err != nil {
+		return Plan{}, err
+	}
+	// Retaining an installed Lore collection also retains its available background
+	// recommendation. A partial update has no new asset mapping for that collection.
+	if candidate.GameDefaults != nil && candidate.GameDefaults.DefaultBackground != nil && old.GameDefaults != nil && old.GameDefaults.DefaultBackground != nil && plan.Installation.GameDefaults.DefaultBackground == nil {
+		bg := candidate.GameDefaults.DefaultBackground
+		for _, binding := range old.Bindings {
+			if binding.ResourceID == bg.ResourceID && binding.Members[bg.ItemID].ID == old.GameDefaults.DefaultBackground.ItemID && !slices.ContainsFunc(selected, func(resource PreviewResource) bool { return resource.ID == bg.ResourceID }) {
+				plan.Installation.GameDefaults.DefaultBackground = old.GameDefaults.DefaultBackground
+			}
+		}
+	}
+	if err := s.stageGameDefaults(ctx, request, &plan, staged, expected); err != nil {
+		return Plan{}, err
 	}
 	// Shared collection baselines describe the final collection, after all members.
 	for i := range plan.Installation.Bindings {

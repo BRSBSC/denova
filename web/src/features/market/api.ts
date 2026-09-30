@@ -1,6 +1,11 @@
 import { fetchAPI, jsonHeaders, requestJSON } from '@/lib/api-client/client'
 import type { CharacterCardImportResult } from '@/lib/api'
 import type { Candidate } from '@/features/platform/api'
+import type { GameCreationDefaults, GameDefaultField } from '@/features/interactive/game-creation-defaults'
+
+export interface PackageGameDefaults extends Omit<GameCreationDefaults, 'default_background'> {
+  default_background?: { resource_id: string; item_id: string; asset_path: string }
+}
 
 export const submissionURL =
   'https://github.com/alfredxw/denova-index/issues/new?template=package.yml'
@@ -16,6 +21,7 @@ export const resourceKinds = [
   'lore.collection',
   'game.openings',
   'project.cover',
+  'project.creator',
   'extension.plugin',
   'extension.game',
 ] as const
@@ -83,6 +89,7 @@ export interface PreviewResource {
   digest: string
 }
 export interface PackagePreview {
+  game_defaults?: PackageGameDefaults
   candidate_id: string
   package: PackageInfo
   format: string
@@ -115,6 +122,7 @@ export interface Binding {
   source_digest: string
 }
 export interface Installation {
+  game_defaults?: GameCreationDefaults
   installation_id: string
   package: PackageInfo
   source: Source
@@ -135,12 +143,15 @@ export interface PlanItem {
   grants?: string[]
 }
 export interface Plan {
+  game_defaults_before?: GameCreationDefaults
+  game_defaults_applied?: GameCreationDefaults
   plan_id: string
   items: PlanItem[]
   installation: Installation
   expires_at: string
 }
 export interface PlanRequest {
+  game_defaults_fields?: GameDefaultField[]
   preview_id: string
   candidate_id: string
   resources: string[]

@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	"denova/internal/app/resourcecatalog"
+	"denova/internal/assetstore"
+	"denova/internal/book"
 	"denova/internal/book/lore"
 	imagepreset "denova/internal/image/preset"
 	"denova/internal/interactive"
@@ -22,7 +24,7 @@ import (
 )
 
 const openingPath = "setting/interactive-openings.json"
-const coverPath = "assets/image/cover.png"
+const coverPath = assetstore.CoverPath
 
 type opening struct {
 	ID      string `json:"id"`
@@ -166,6 +168,8 @@ func (s *Service) stageProject(ctx context.Context, previewDir string, extra *[]
 		target.Path = lore.ItemsRelativePath
 	case "game.openings":
 		target.Path = openingPath
+	case "project.creator":
+		target.Path = book.CreatorFileName
 	case "project.cover":
 		target.Path = coverPath
 	default:
@@ -179,6 +183,11 @@ func (s *Service) stageProject(ctx context.Context, previewDir string, extra *[]
 		staged[target], expected[target] = snapshot.Content, snapshot.Revision
 	}
 	switch resource.Kind {
+	case "project.creator":
+		if err := s.validateCreatorForProject(local.ProjectID, raw); err != nil {
+			return target, err
+		}
+		staged[target] = raw
 	case "project.cover":
 		var payload portableImage
 		if err := decode(raw, &payload); err != nil {

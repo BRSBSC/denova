@@ -10,8 +10,10 @@ import (
 	"slices"
 	"strings"
 
+	"denova/config"
 	"denova/internal/agents/skills"
 	"denova/internal/app/resourcecatalog"
+	"denova/internal/book"
 	"denova/internal/book/lore"
 	"denova/internal/platform"
 	"denova/internal/style"
@@ -193,6 +195,13 @@ func (s *Service) ExportResources(ctx context.Context, projectID string) ([]Expo
 				result = append(result, ExportResource{Local: LocalRef{Kind: "game.openings", Scope: "project", ProjectID: projectID, ID: "all"}, Name: "Openings", ItemCount: len(collection.Presets)})
 			}
 		}
+		snapshot, err = s.snapshot(ctx, FileTarget{ProjectID: projectID, Path: book.CreatorFileName})
+		if err != nil {
+			return nil, err
+		}
+		if snapshot.Exists && len(bytes.TrimSpace(snapshot.Content)) > 0 {
+			result = append(result, ExportResource{Local: LocalRef{Kind: "project.creator", Scope: "project", ProjectID: projectID, ID: "creator"}, Name: book.CreatorFileName})
+		}
 		snapshot, err = s.snapshot(ctx, FileTarget{ProjectID: projectID, Path: coverPath})
 		if err != nil {
 			return nil, err
@@ -294,6 +303,15 @@ func (s *Service) exportResource(ctx context.Context, ref LocalRef) (map[string]
 
 	case "game.openings":
 		return s.exportOpeningCollection(ctx, ref)
+	case "project.creator":
+		snapshot, err := s.snapshot(ctx, FileTarget{ProjectID: ref.ProjectID, Path: book.CreatorFileName})
+		if err != nil {
+			return nil, err
+		}
+		if err := validateCreator(snapshot.Content); err != nil {
+			return nil, err
+		}
+		return map[string][]byte{book.CreatorFileName: snapshot.Content}, nil
 	case "project.cover":
 		snapshot, err := s.snapshot(ctx, FileTarget{ProjectID: ref.ProjectID, Path: coverPath})
 		if err != nil {
@@ -345,12 +363,14 @@ func (s *Service) Export(ctx context.Context, request ExportRequest) ([]byte, er
 		return nil, fmt.Errorf("package name and portable ID required")
 	}
 	resourceIDs := map[LocalRef]string{}
+	var gameDefaults *config.GameCreationDefaults
 	dependencies := map[LocalRef][]LocalRef{}
 	if request.InstallationID != "" {
 		installation, _, err := s.loadInstallation(ctx, request.InstallationID)
 		if err != nil {
 			return nil, err
 		}
+		gameDefaults = installation.GameDefaults
 		for _, binding := range installation.Bindings {
 			for _, id := range binding.Requires {
 				at := slices.IndexFunc(installation.Bindings, func(other Binding) bool { return other.ResourceID == id })
@@ -518,6 +538,8 @@ func (s *Service) Export(ctx context.Context, request ExportRequest) ([]byte, er
 			if err != nil {
 				return "", err
 			}
+		} else if ref.Kind == "project.creator" {
+			resource.Path = path.Join(prefix, book.CreatorFileName)
 		} else if ref.Kind == "style.reference" {
 			resource.Path = path.Join(prefix, "resource.md")
 		} else if ref.Kind == "project.cover" {
@@ -544,6 +566,13 @@ func (s *Service) Export(ctx context.Context, request ExportRequest) ([]byte, er
 		if _, err := add(ref); err != nil {
 			return nil, err
 		}
+	}
+	if err := validateResourcePaths(manifest.Resources); err != nil {
+		return nil, err
+	}
+	manifest.GameDefaults, err = s.exportGameDefaults(ctx, gameDefaults, seen)
+	if err != nil {
+		return nil, err
 	}
 	currentState, err := s.platform.InstallState()
 	if err != nil {

@@ -348,7 +348,7 @@ func (s *Service) preparePackage(ctx context.Context, dir, root string, manifest
 	if err := validateResourcePaths(manifest.Resources); err != nil {
 		return PackagePreview{}, err
 	}
-	result := PackagePreview{ID: root, Package: manifest.Package, Format: manifest.Format, Resources: []PreviewResource{}}
+	result := PackagePreview{ID: root, Package: manifest.Package, Format: manifest.Format, Resources: []PreviewResource{}, GameDefaults: manifest.GameDefaults}
 	seen := map[string]bool{}
 	for _, resource := range manifest.Resources {
 		if !resourceID.MatchString(resource.ID) || seen[resource.ID] || !validKind(resource.Kind) {
@@ -438,6 +438,8 @@ func (s *Service) preparePackage(ctx context.Context, dir, root string, manifest
 				item.ItemCount = len(collection.Items)
 			} else if resource.Kind == "project.cover" {
 				item.Name = "Cover"
+			} else if resource.Kind == "project.creator" {
+				item.Name = "CREATOR.md"
 			} else if resource.Kind == "style.reference" {
 				item.Name = path.Base(resource.Path)
 			} else {
@@ -504,6 +506,9 @@ func (s *Service) preparePackage(ctx context.Context, dir, root string, manifest
 		if _, err := selectResources(result.Resources, []string{resource.ID}); err != nil {
 			return result, err
 		}
+	}
+	if err := validatePackageGameDefaults(dir, result); err != nil {
+		return result, err
 	}
 	return result, nil
 }

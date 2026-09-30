@@ -99,7 +99,7 @@ func TestGenerateSpeechAppendsValidatedAudioWithoutChangingLoreOnFailure(t *test
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatalf("failed generation changed lore: %v", err)
 	}
-	files, err := os.ReadDir(filepath.Join(workspace, "assets/lore/media"))
+	files, err := os.ReadDir(filepath.Join(workspace, "assets/lore"))
 	if err != nil || len(files) != 2 {
 		t.Fatalf("failed generation leaked files: %v, %v", files, err)
 	}
