@@ -26,11 +26,21 @@ func (m *Manager) Catalog() ([]CatalogEntry, error) {
 		for _, item := range items {
 			entry := CatalogEntry{Kind: kind, Installed: item}
 			release, _, err := m.release(ReleaseRef{Package: PackageRef{Kind: kind, ID: item.ID}, ReleaseID: item.CurrentRelease})
-			if err == nil && release.Manifest.APIMajor != APIMajor {
-				err = failure("API_INCOMPATIBLE", "Package requires API %d", release.Manifest.APIMajor)
+			if item.Problem != nil {
+				err = item.Problem
 			}
 			if err == nil {
-				_, err = m.resolveDependencies(release.Manifest, nil)
+				err = compatibleManifest(release.Manifest)
+			}
+			if err == nil {
+				var pins []DependencyPin
+				pins, err = m.resolveDependencies(release.Manifest, nil)
+				if err == nil {
+					_, _, err = m.pluginBindings(release, pins)
+				}
+			}
+			if err == nil {
+				_, err = m.settingsValues(release, "installed", nil)
 			}
 			if err != nil {
 				_, body := ErrorResponse(err)

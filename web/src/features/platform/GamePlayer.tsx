@@ -17,6 +17,8 @@ export function GamePlayer({
   onExit,
   onOpenInstance,
   menuContent,
+  variant = 'game',
+  onStop,
 }: {
   runtime: RuntimeSnapshot
   title?: string
@@ -25,6 +27,8 @@ export function GamePlayer({
   onOpenInstance?: (instance: Instance) => void | Promise<void>
   /** Host-owned story controls belong in the overlay, never outside the game surface. */
   menuContent?: ReactNode
+  variant?: 'game' | 'plugin'
+  onStop?: () => Promise<void>
 }) {
   const { t, i18n } = useTranslation()
   const { resolvedTheme } = useTheme()
@@ -33,17 +37,20 @@ export function GamePlayer({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [frameMounted, setFrameMounted] = useState(true)
+  const [confirmClose, setConfirmClose] = useState(false)
+  const viewState = useRef({ busy: false, dirty: false })
   const exitGuard = useRef(false)
   const exiting = useRef(false)
   const exitReply = useRef<{ id: string; finish: (ok: boolean) => void } | null>(null)
-  const exit = useCallback(async () => {
+  const exit = useCallback(async (force = false) => {
     if (exiting.current) return
+    if (variant === 'plugin' && !force && (viewState.current.busy || viewState.current.dirty)) { setMenuOpen(false); setConfirmClose(true); return }
     exiting.current = true
     setBusy(true)
     setMenuOpen(false)
     setError('')
     try {
-      if (exitGuard.current && frame.current?.contentWindow) {
+      if (!force && exitGuard.current && frame.current?.contentWindow) {
         const ready = await new Promise<boolean>(resolve => {
           const id = crypto.randomUUID()
           // This bounds a frame handshake, never the Agent's execution time.
@@ -51,18 +58,19 @@ export function GamePlayer({
           exitReply.current = { id, finish: ok => { clearTimeout(timer); exitReply.current = null; resolve(ok) } }
           frame.current?.contentWindow?.postMessage({ type: 'denova:prepare-exit', requestId: id }, new URL(runtime.viewUrl!).origin)
         })
-        if (!ready) { setError(t('platform.exitNotReady')); return }
+        if (!ready) { setError(t(variant === 'plugin' ? 'platform.plugins.exitNotReady' : 'platform.exitNotReady')); return }
         // The frame confirmed its durable cursor. Dispose optional material
         // requests before revoking their runtime; a stop failure can rehydrate it.
         flushSync(() => setFrameMounted(false))
       }
       // Views without a save handshake remain mounted until stopping succeeds.
-      await management(`/runtimes/${runtime.id}/stop`, 'POST', {})
+      if (onStop) await onStop()
+      else await management(`/runtimes/${runtime.id}/stop`, 'POST', {})
       flushSync(() => setFrameMounted(false))
       onExit()
     } catch (error) { setFrameMounted(true); setError(platformError(error)) }
     finally { exiting.current = false; setBusy(false) }
-  }, [runtime.id, runtime.viewUrl, onExit, t])
+  }, [runtime.id, runtime.viewUrl, onExit, onStop, variant, t])
   useEffect(() => {
     if (!runtime.viewUrl) return
     const origin = new URL(runtime.viewUrl).origin
@@ -71,6 +79,10 @@ export function GamePlayer({
         event.source !== frame.current?.contentWindow ||
         event.origin !== origin
       ) return
+      if (event.data?.type === 'denova:state' && variant === 'plugin') {
+        viewState.current = { busy: event.data.busy === true, dirty: event.data.dirty === true }
+        return
+      }
       if (event.data?.type === 'denova:exit-ready') {
         if (event.data.requestId === exitReply.current?.id) exitReply.current?.finish(event.data.ok === true)
         return
@@ -125,7 +137,7 @@ export function GamePlayer({
       origin,
     )
     return () => window.removeEventListener('message', receive)
-  }, [runtime, i18n.language, resolvedTheme, visible, onOpenInstance, t, exit])
+  }, [runtime, i18n.language, resolvedTheme, visible, onOpenInstance, t, exit, variant])
   useEffect(() => () => { exitReply.current?.finish(false) }, [])
   useEffect(() => {
     if (!runtime.viewUrl) return
@@ -141,19 +153,19 @@ export function GamePlayer({
               (item) => item.id === runtime.id && item.status === 'running',
             )
           )
-            setError(t('platform.runtimeStopped'))
+            setError(t(variant === 'plugin' ? 'platform.plugins.runtimeStopped' : 'platform.runtimeStopped'))
         })
         .catch((error) => setError(platformError(error)))
     }, 3000)
     return () => window.clearInterval(timer)
-  }, [runtime.id, t, visible])
+  }, [runtime.id, t, visible, variant])
   return (
     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background" data-game-surface>
-      <Button className="absolute top-3 left-3 z-10 bg-background/85 shadow-sm backdrop-blur-sm" size="icon" variant="outline" aria-label={t('platform.storyMenu')} disabled={busy} onClick={() => setMenuOpen(true)}><Ellipsis /></Button>
+      <Button className="absolute top-3 left-3 z-10 bg-background/85 shadow-sm backdrop-blur-sm" size="icon" variant="outline" aria-label={t(variant === 'plugin' ? 'platform.plugins.panelMenu' : 'platform.storyMenu')} disabled={busy} onClick={() => setMenuOpen(true)}><Ellipsis /></Button>
       {error && <InlineErrorNotice className="absolute top-16 right-3 left-3 z-10" message={error} />}
       {frameMounted && <iframe
         ref={frame}
-        title={t('platform.gameFrame')}
+        title={t(variant === 'plugin' ? 'platform.plugins.frame' : 'platform.gameFrame')}
         src={runtime.viewUrl}
         sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
         allow="autoplay; fullscreen"
@@ -163,7 +175,7 @@ export function GamePlayer({
       <Dialog open={menuOpen} onOpenChange={setMenuOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t('platform.storyMenu')}</DialogTitle>
+            <DialogTitle>{t(variant === 'plugin' ? 'platform.plugins.panelMenu' : 'platform.storyMenu')}</DialogTitle>
             <DialogDescription>{title ?? t('platform.gameFrame')}{runtime.context.environment === 'preview' ? ` · ${t('platform.preview')}` : ''}</DialogDescription>
           </DialogHeader>
           {menuContent}
@@ -172,9 +184,15 @@ export function GamePlayer({
             // Fullscreen the game document so its own dialogs remain in the top layer.
             void frame.current?.requestFullscreen().catch(error => toast.error(platformError(error)))
           }}><Maximize />{t('platform.fullscreen')}</Button>
-          <Button variant="outline" disabled={busy} onClick={() => void exit()}><ArrowLeft />{t('platform.exitGame')}</Button>
+          <Button variant="outline" disabled={busy} onClick={() => void exit()}><ArrowLeft />{t(variant === 'plugin' ? 'platform.plugins.closePanel' : 'platform.exitGame')}</Button>
+          {variant === 'plugin' && error && <Button variant="destructive" disabled={busy} onClick={() => { setMenuOpen(false); setConfirmClose(true) }}>{t('platform.plugins.forceClose')}</Button>}
         </DialogContent>
       </Dialog>
+      <Dialog open={confirmClose} onOpenChange={setConfirmClose}><DialogContent>
+        <DialogHeader><DialogTitle>{t('platform.plugins.closePanel')}</DialogTitle><DialogDescription>{t('platform.plugins.closeWarning')}</DialogDescription></DialogHeader>
+        <Button variant="outline" onClick={() => setConfirmClose(false)}>{t('common.cancel')}</Button>
+        <Button variant="destructive" onClick={() => { setConfirmClose(false); void exit(true) }}>{t('platform.plugins.forceClose')}</Button>
+      </DialogContent></Dialog>
     </div>
   )
 }

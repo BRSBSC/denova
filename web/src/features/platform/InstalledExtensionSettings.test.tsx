@@ -11,7 +11,7 @@ afterEach(() => { cleanup(); vi.resetAllMocks() })
 it('keeps settings and permissions visible and saves their drafts independently', async () => {
   const release: Release = {
     ref: { package: { kind: 'game', id: 'test.game' }, releaseId: 'r1' }, digest: 'digest', installedAt: '',
-    manifest: { id: 'test.game', version: '1.0.0', apiMajor: 1, name: { 'en-US': 'Game', 'zh-CN': '游戏' }, settings: { schema: 'settings.json', defaults: 'defaults.toml' }, permissions: { required: ['gameData'], optional: ['tools.invoke'] } },
+    manifest: { id: 'test.game', version: '1.0.0', apiMajor: 1, minHostVersion: '0.6.0', name: { 'en-US': 'Game', 'zh-CN': '游戏' }, settings: { schema: 'settings.json', defaults: 'defaults.toml' }, permissions: { required: ['gameData'], optional: ['tools.invoke'] } },
   }
   const item: CatalogEntry = { kind: 'game', id: 'test.game', enabled: true, currentRelease: 'r1', releases: [release], grants: ['gameData'] }
   const doc = { releaseId: 'r1', revision: 'original', values: { hints: true }, overrides: {}, form: { schema: { type: 'object', properties: { hints: { type: 'boolean', title: 'Show hints' } } }, defaults: { hints: true }, uiSchema: {} } }

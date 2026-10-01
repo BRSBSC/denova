@@ -1,6 +1,6 @@
 # Denova 插件与游戏平台 HTTP API
 
-状态：API v1，当前工作区实现，尚未发布。更新：2026-09-13。当前实现以 [OpenAPI 生成代码](../internal/platform/openapi.go) 和隔离运行实例的 GET /api/platform/v1/openapi.json 为准。
+状态：API v1，v0.6.0 工作区实现，尚未发布。更新：2026-10-01。当前实现以 [OpenAPI 生成代码](../internal/platform/openapi.go) 和隔离运行实例的 GET /api/platform/v1/openapi.json 为准。
 
 [插件开发手册](plugin-developer-guide.md) · [游戏开发手册](game-developer-guide.md) · [系统设计](plugin-platform-design.md)。
 
@@ -9,6 +9,8 @@
 Consumer API 使用普通 HTTP + JSON，事件使用 SSE。每个游戏开局或显式插件目标拥有独立运行来源；baseUrl 和 bearer token 通过受验证页面握手或后台 stdin 提供。SDK 是可选封装。
 
 请求使用 Authorization: Bearer <token>。凭证绑定包身份、准确发行、Project/Session/游戏实例范围与已授予权限；body 不能选择其他范围。可信 App 的 /api/platform/manage/* 仅允许本机宿主管理，第三方页面不能借用该路由或历史内部 API。第一版第三方作品在本机桌面使用，不承诺 LAN 远程运行。
+
+同一 Project 插件的面板与命令共享激活，但 `connection` 为每个消费者提供独立的 `{ baseUrl, token, consumerId }`。请求附带 `X-Denova-Consumer: <consumerId>`；浏览器 SDK 自动添加，后端向宿主转发时必须保留此 header。消费者令牌即使省略 header 也绑定原消费者，关闭后失效。异步 Agent 与图像操作可以超过发起请求的 HTTP 生命周期，但不能超过所属消费者的生命周期；关闭不自动重放未知副作用。
 
 包引用为 { kind: "plugin" | "game", id }，发行引用为 { package, releaseId }。公共贡献引用 pluginId/localId，游戏私有定义 local:id。运行时路径仅作当前系统投影；所有受管来源与文件引用按规范相对路径持久化。
 
@@ -19,23 +21,31 @@ Consumer API 使用普通 HTTP + JSON，事件使用 SSE。每个游戏开局或
 | 400 | INVALID_ARGUMENT、INVALID_CONFIGURATION、INVALID_TOML |
 | 403 | PERMISSION_DENIED |
 | 404 | NOT_FOUND |
-| 409 | DOCUMENT_CONFLICT、IDEMPOTENCY_CONFLICT、SESSION_BUSY、API_INCOMPATIBLE、DEPENDENCY_UNAVAILABLE、SAVE_INCOMPATIBLE、CURSOR_EXPIRED |
+| 409 | DOCUMENT_CONFLICT、IDEMPOTENCY_CONFLICT、SESSION_BUSY、API_INCOMPATIBLE、DEPENDENCY_UNAVAILABLE、SAVE_INCOMPATIBLE、CURSOR_EXPIRED、RUNTIME_RESTART_REQUIRED |
 | 413 | LIMIT_EXCEEDED |
 | 503 | RUNTIME_UNAVAILABLE、RUNTIME_FAILED |
 
-apiMajor 必须为 1，不兼容的清单在检查阶段即拒绝。JSON Schema 使用 2020-12，不下载外部引用。清单与定义上限 1 MiB，单个分发文件 16 MiB，包最多 10000 文件、256 MiB；当前管理服务上传请求还受宿主 HTTP body 限制。消费者 JSON 请求上限 1 MiB，文本文件读取上限 16 MiB，Agent 输入和 instructions 分别最多 256 KiB，超限完整拒绝。GET /capabilities 返回当前权限及容量。
+apiMajor 必须为 1，清单还须提供严格语义版本 minHostVersion；本版命令/面板填写 "0.6.0"。不兼容的清单在检查及激活阶段拒绝。JSON Schema 使用 2020-12，不下载外部引用。清单与定义上限 1 MiB，单个分发文件 16 MiB，包最多 10000 文件、256 MiB；当前管理服务上传请求还受宿主 HTTP body 限制。消费者 JSON 请求上限 1 MiB，文本文件读取上限 16 MiB，Agent 输入和 instructions 分别最多 256 KiB，超限完整拒绝。GET /capabilities 返回当前权限及容量。
 
 ## 发现
 
 | 方法与路径（相对 baseUrl） | 结果 |
 | --- | --- |
 | GET /context | source、scope、locale、theme、environment、settings、可选 setup |
-| GET /capabilities | apiMajor、permissions、limits、schemaDialect |
+| GET /capabilities | apiMajor、hostVersion、permissions、capabilities、models、limits、schemaDialect |
 | GET /contributions | 已固定且当前范围可见的贡献与发行列表 |
 | GET /openapi.json | 本版完整路径与请求/响应 schema |
 | GET /agents/definitions | 当前可使用定义的 items 列表 |
 
 扩展可以组合资料库、图像生成、Agent、工具、可选的现有 Story 引擎与自有前端。宿主不定义角色立绘、演出稿、CG 或台词播放协议；完整应用界面由包的 view 提供。通用 DOM 修改、宿主组件覆盖和内部 planner 接口不属于公开协议。
+
+`capabilities[permission]` 分别返回 `implemented`、`granted`、`applicable`、`configured`；满足条件不跳过具体操作的输入、归属及细分权限检查。普通 Plugin 面板的 Story 条件为不适用。`models` 只返回 `builtin/assistant` 及本包声明模型槽的配置状态，不返回 profile 内容、密钥或 headers。插件命名槽只接受 image，文本复用 builtin/assistant；游戏保留自己的 text/image 槽。
+
+## 插件面板握手
+
+宿主只加载清单中声明的 view。页面向可信父窗口发送 `{ type: 'denova:ready', nonce }`，验证 `denova:bootstrap` 的来源、父窗口和 nonce 后读取 context/connection；业务调用走 HTTP。`denova:appearance` 更新语言与主题，`denova:visibility` 表示显示或收起。`denova:state` 携带布尔 busy/dirty，使宿主在关闭前提示；`denova:exit` 请求关闭。可选 prepare-exit/exit-ready 握手用于退出保存，超时或拒绝后用户仍可强制关闭。宿主只接受对应 iframe 的消息，不开放任意事件总线。
+
+SDK 与类型在 `extensionassets/sdk/client.mjs`、`client.d.mts`，原始协议示例在 `examples/plugins/relationship-map`。贡献声明、表单及正式入口见[插件开发手册](plugin-developer-guide.md)。
 
 ## 资料库与图像资源
 
@@ -45,11 +55,18 @@ apiMajor 必须为 1，不兼容的清单在检查阶段即拒绝。JSON Schema 
 | --- | --- | --- |
 | GET /library/items | library.read | `offset=0&limit=50&query=...`；返回 `{ items, total, nextOffset? }` |
 | GET /library/items/{id} | library.read | 返回一条完整资料 |
-| GET /assets/content | assets.read | `kind=project或generated&path=规范相对路径`；返回图片字节 |
+| POST /library/items | library.write | `{ item, baseRevision?, sourceName?, sourceId?, sourceHash? }`；新增或按修订采用到原生资料库 |
+| GET /assets/content | assets.read | `kind=project、generated或shared&path=规范相对路径`；返回媒体字节 |
+| POST /assets/upload | assets.write | `application/octet-stream` 媒体字节；返回 `{ asset, mimeType, sizeBytes }` |
+| GET /assets/documents | assets.read | 当前 Project、本扩展的 JSON 文件名列表 `{ items }` |
+| GET /assets/document?path=board.json | assets.read | `{ content, revision }`，不存在返回 NOT_FOUND |
+| PUT /assets/document | assets.write | `{ path, content, expectedRevision }`；返回新 `{ revision }` |
+
+共享文档只接受单层规范 `.json` 文件名和最多 512 KiB 的有效 JSON。expectedRevision 缺省或 null 表示仅创建，已有文档必须提交读取的准确 revision；冲突不覆盖。shared 媒体按内容摘要保存，支持 PNG/JPEG/WebP/GIF 及 WAV/MP3/Ogg/FLAC，单文件最多 32 MiB。宿主不解释业务 JSON；作者自行验证 format/schemaVersion。它们归属 Project Store 的 `extensions/<pluginId>/content/`，同包面板和不同会话的工具可共享，其他插件或 Project 无权读取。
 
 资料字段为 `id、type、name、tags、briefDescription、updatedAt、enabled、keywords?、content?、image?`。列表省略正文，`limit` 为 1–100，`offset` 非负；query 不区分大小写，在名称、类型、简介、标签和关键词中匹配。`nextOffset` 缺失表示没有下一页。详细读取正文最多 1 MiB，超限返回 `LIMIT_EXCEEDED`，不截断；扩展应按用户选择加载正文，再遵循自身模型上下文预算。
 
-`image` 是 `{ "kind": "project", "path": "assets/lore/images/.../image.png" }`。资产引用仅使用两种来源：`project` 表示已绑定 Project 的 `assets/` 目录，`generated` 表示当前扩展、当前范围生成的图片。路径必须是规范 `/` 相对路径，不允许绝对路径、链接、大小写冲突或目录逃逸。图片类型限 PNG、JPEG、WebP、GIF，单张最多 32 MiB，SVG 和其他活动内容不提供。
+`image` 是 `{ "kind": "project", "path": "assets/lore/example.png" }`。`project` 表示已绑定 Project 的 `assets/` 目录，`generated` 表示当前扩展、当前范围生成的图片，`shared` 表示当前扩展采用到 Project 的媒体。路径必须是规范 `/` 相对路径，不允许绝对路径、链接、大小写冲突或目录逃逸。SVG 和其他活动内容不提供。
 
 浏览器读取图片需要 bearer header，不能将 token 拼入 URL。可使用 `fetch` 获取 Blob，再用 `URL.createObjectURL(blob)` 显示；切换页面或替换图片时调用 `URL.revokeObjectURL`。**只保存资产引用，不保存运行端口、baseUrl、blob URL 或宿主路径。** 相同 `generated` 引用在其他实例或其他包的凭证下不可见。
 
@@ -184,6 +201,8 @@ commandId 按会话去重，收据写入同一 canonical JSONL 后才允许运�
 | POST /agents/runs/{runId}/cancel | 请求取消，保留历史 |
 | POST /agents/runs/{runId}/interactions/{interactionId}/responses | 仅普通问题回答，不能批准权限 |
 
+平台助手和游戏私有 Agent 复用 Native `Ask` 工具；模型可以提出选择题或自由文本问题，通过上述接口回答后继续原任务。权限决策由宿主控制，不通过插件问答入口批准。
+
 终态及定义保存在 Product Session JSONL，索引可重建。进程重启时未持久完成的请求返回 incomplete，不自动重放工具副作用；已完成的相同请求不再调用模型。completion.recordId 指向本会话已提交的 assistant 记录，不承诺其他会话或游戏数据库处于同一事务。
 
 SSE 首帧 snapshot 含当前 RunResult 与 cursor，其后发送 delta、state、interaction、result。Last-Event-ID 仅在当前进程保留窗口内有效；窗口最多 256 项，过期或重启返回 CURSOR_EXPIRED，调用方应不带旧游标重新获取 snapshot。连接断开不会取消任务。
@@ -250,7 +269,7 @@ GitHub 来源为 `{ url, ref, path, commit }`：URL 规范化为公开 HTTPS 仓
 
 同版本号可以安装不同摘要。未指定固定依赖的新增消费者使用当前安装并检查版本范围；已有游戏存档与平台消费者绑定保留准确发行；普通宿主 Agent 的后续执行采用当前插件，更新不改写会话 journal。
 
-停用只禁止新建和重启，不撤销运行中的凭证；卸载及重新授权会先停止受影响实例。已有存档始终保留准确发行，不能随默认游戏改变而改写。
+全局/项目停用、卸载及重新授权会停止受影响运行并撤销凭证；项目策略只影响该 Project。已有存档保留准确发行，不能随默认游戏改变而改写。设置和模型修改不热换活动运行，新消费者遇到绑定变化必须关闭旧运行再打开。
 
 每个扩展的安装与发行聚合于 plugins/{id} 或 games/{id}，包括 installed.json、settings/<releaseId>/settings.toml、releases、previews 和 backups。自管存档位于 games/{id}/instances/{instanceId}；插件 data 按范围隔离。托管 Story 的应用绑定和扩展 JSON 位于该 Story journal，生成资产位于同一 Project Store 的扩展范围，不能在安装目录维护另一份 Story 恢复事实。扩展设置与游戏 setup 分开，保存设置保留运行快照，预览不读取已安装覆盖。字段、合并、兼容性与保存协议见[扩展设置标准](extension-settings.md)。
 

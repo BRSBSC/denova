@@ -1,10 +1,10 @@
 # Denova 插件开发手册
 
-更新：2026-09-13。接口以当前代码和运行实例的 OpenAPI 为准。
+更新：2026-10-01，v0.6.0 工作区实现。接口以当前代码和运行实例的 OpenAPI 为准。
 
 配套：[扩展能力开发手册](extension-development.md) · [游戏开发手册](game-developer-guide.md) · [系统设计](plugin-platform-design.md) · [HTTP API](plugin-platform-api.md)。
 
-扩展页使用二级目录管理已安装的插件与游戏；工作台统一承接源码开发。插件提供可复用工具、工具集与服务；游戏交付可玩的作品。Skills 与 Agents 继续由各自页面管理，插件清单不分发这两类资源。宿主模型调用 API 和游戏私有角色定义保留。
+扩展页管理已安装的插件与游戏；工作台承接源码开发。插件可以组合 Agent 工具、用户命令和独立面板；游戏交付有独立存档生命周期的作品。Skills 与公开 Agents 继续由各自页面管理。插件不能访问当前正文、选区、编辑器内部或任意宿主组件。
 
 ## 扩展示例
 
@@ -13,6 +13,44 @@
 | 示例源码目录 | 示例 | 演示能力 |
 | --- | --- | --- |
 | `creative-toolkit` | 创作工具箱 | 文本统计与批量整理、独立笔记、资料库、图像模型槽、工具集、设置与权限 |
+| `examples/plugins/relationship-map` | 人物关系图 | 原始 HTTP、无后端、资料读取、关系编辑、并发保护的项目内容 |
+| `examples/plugins/asset-board` | 素材工作台 | 可选 SDK、无后端、模型选择、任务取消、文本与媒体保存 |
+| `extensionassets/starters/plugin` | 通用组合骨架 | 命令参数表单、面板保存草稿、独立 Agent 工具读取同一份项目内容 |
+
+两个界面示例可直接复制到仓库之外再安装；无需安装依赖或修改宿主。具体步骤见[示例说明](../examples/plugins/README.md)。
+
+## 声明命令、面板和 Agent 工具
+
+贡献目录由清单计算，列出入口时不启动代码。`contexts` 只接受 `writing`、`game`、`general`，必须非空；`tools[].agentContexts` 默认为空，表示不自动暴露给宿主 Agent，但仍允许用户命令或显式依赖调用。
+
+```json
+{
+  "apiMajor": 1,
+  "minHostVersion": "0.6.0",
+  "views": [{ "id": "main", "source": { "kind": "static", "path": "index.html" } }],
+  "contributes": {
+    "tools": [{ "id": "read-draft", "definition": "tools/read-draft.json", "agentContexts": ["writing", "general"] }],
+    "commands": [{ "id": "inspect", "titleKey": "inspect", "contexts": ["writing", "general"], "target": { "kind": "tool", "id": "read-draft" } }],
+    "panels": [{ "id": "board", "titleKey": "board", "contexts": ["writing", "game", "general"], "viewId": "main" }]
+  }
+}
+```
+
+这是清单片段；完整包还需身份、双语 locale、权限和分发白名单。`titleKey` 在中英文资源中均须存在。命令目标只能是工具或本包面板；外部工具用 `pluginId/toolId` 并在 `requires` 声明。工具的英文描述供模型使用；面向用户的参数表单复用 inputSchema，字段使用 `x-titleKey` 和可选 `x-descriptionKey`，不能拿英文模型描述替代翻译。格式不适合声明式表单的复杂交互放入面板，不引入另一套 UI DSL。
+
+用户在写作、游戏和工作台的项目操作入口发现贡献；扩展详情的「打开插件」先选择 Project。工具命令不经过模型，支持输入校验、结果复制和取消。相同 Project、插件和面板重复打开会聚焦原页面；不同项目分别绑定。面板可收起，切换产品页面后仍保留原项目，不能跟随当前项目隐式换绑。
+
+同一插件和 Project 的交互共享一次激活；每个面板或命令拥有独立消费者、凭证和取消范围。关闭一个页面不会停止其他页面，最后一个消费者退出后停止后端。通过 `client.setState({ busy, dirty })` 通知宿主关闭保护；原始协议使用相同的 `denova:state` 消息。浏览器正常卸载也释放消费者；进程异常退出由宿主关闭处理，不承诺崩溃页面自动恢复。插件不能拒绝用户强制关闭。
+
+## 项目配置与内容
+
+项目配置沿用 Project Store 的 `config.toml`，仅增加 `[extensions]` 下的 `disabled_plugins` 和 `[extensions.models]`。新项目默认不额外停用已全局启用的插件，模型绑定默认为空。模型保存的是用户 profile ID，不含密钥：`builtin/assistant` 提供文本 Agent，`<pluginId>/<slotId>` 提供声明的图像槽。插件不声明文本 modelSlot。必需槽未配置时阻止启动，可选槽缺失时保留其他功能；面板用 `/capabilities` 区分未授权、范围不适用和未配置。
+
+Project 界面修改模型、发行设置或依赖后，已有运行继续使用冻结值；新增消费者遇到变化返回 `RUNTIME_RESTART_REQUIRED`，关闭旧面板后再打开。其他插件的无关模型绑定不影响此运行。全局停用、项目停用、卸载或撤销权限会停止受影响的运行及其依赖图，不影响其他 Project 的项目级设置。
+
+面板和 Agent 工具共同编辑的作品数据使用 `/assets/document` 与 `/assets/upload`，保存于 `stores/<store_dir>/extensions/<pluginId>/content/`。JSON 写入必须提供上次读取的 revision；冲突保留本地内容，让用户重读处理，不自动覆盖。文档由插件声明自己的格式版本；`dataDir` 是执行范围数据，不能替代跨会话共享的项目内容。
+
+项目插件菜单提供「导出插件内容」和「导入插件内容」：ZIP 只包含该插件的 JSON 与媒体，导入同身份插件的空内容目录，已有内容或正在运行时明确拒绝。它不包含代码、设置、模型密钥或 Agent/Story journal，也不冒充整本书/整个 Project 的导出。复制完整 `.denova` 时，稳定 ProjectID、不可变 Store 目录和相对资产引用共同保证可移动性。卸载和升级不删除作品内容。
 
 ## 在 App 中开发
 
@@ -72,30 +110,30 @@ ID 为 example.text-tools 的参考示例公开六个工具：count-characters�
 
 ## 清单和发布
 
-清单使用 denova.plugin.json，至少声明 manifestVersion: 1、id、严格语义版本 version、apiMajor: 1、中英文 name、permissions 和 contributes。ID 使用小写字母、数字、点和连字符；builtin、local 保留。一个产物根只能有一种清单。
+清单使用 denova.plugin.json，至少声明 manifestVersion: 1、id、严格语义版本 version、apiMajor: 1、minHostVersion: "0.6.0"、中英文 name、permissions 和 contributes。最低宿主版本与 API 主版本分别校验，不兼容时在检查与激活阶段拒绝。ID 使用小写字母、数字、点和连字符；builtin、local 保留。一个产物根只能有一种清单。
 
 - distribution.files 是文件或目录白名单；未列出的依赖、入口或定义会使检查失败。
 - runtime.backend 支持 protocol: denova-runtime-v1 与 launch.kind: runtime、runtime: node、entry、args。
-- modelSlots 支持 text 与 image；titleKey 必须存在于中英 locale 文件。宿主分别提供文本和图像配置选择；扩展只能使用实际绑定的槽位。
+- 插件 modelSlots 只支持 image；文本调用复用 builtin/assistant。titleKey 必须存在于中英 locale 文件，宿主只公开绑定状态，不公开 provider 配置。游戏仍可以声明 text/image 私有模型槽。
 - settings 引用分发内的 JSON Schema 与 defaults TOML，可选 uiSchema 提供声明式布局；字段必须有中英文标题。详见[扩展设置标准](extension-settings.md)。
 - requires 声明插件 ID、语义版本范围和所需贡献。运行时使用准确发行，不按加载顺序替换。
-- 声明 agents.run、tools.invoke、pluginData 权限；消费者直接调用或游戏 NPC 使用 `effect: write/propose` 的工具还需显式授予 `tools.write`。尚未实现的能力会明确拒绝。
+- 按实际调用声明 agents.run、tools.invoke、pluginData 等权限，纯前端插件不必声明不用的能力；消费者直接调用或游戏 NPC 使用 `effect: write/propose` 的工具还需显式授予 `tools.write`。尚未实现的能力会明确拒绝。
 
 ## 写作与游戏共用工具
 
-插件管理统一在扩展页中完成。启用并授权后，插件的公开工具自动供写作、工作台和内置游戏 Agent 使用，无需逐会话选择；工具集与成员不重复暴露。新执行读取当前已安装版本及其设置，现有会话同样采用最新配置。正在执行的任务使用已经装载的工具；暂停期间修改相关版本或设置后，原任务可能无法原地恢复，需要保留历史并按当前配置重新发起。
+插件管理统一在扩展页中完成。启用、授权并通过项目策略后，仅 `agentContexts` 包含当前场景的工具进入宿主 Agent；工具集与成员不重复暴露。新执行读取当前已安装版本及其设置，现有会话同样采用最新配置。正在执行的任务使用已经装载的工具；暂停期间修改相关版本或设置后，原任务可能无法原地恢复，需要保留历史并按当前配置重新发起。坏插件不会阻止其他正常工具进入上下文；明确依赖坏插件的能力显示归属错误。
 
 三个入口和委派子 Agent 使用同一 Toolset 适配器。`pure/read` 工具按只读执行，`write/propose` 按外部变更沿用宿主 Agent 审批；插件结果回到原 Agent 的模型上下文，写作内容与游戏回合仍由原流程接纳。第三方游戏私有 NPC 通过定义中的 `tools/toolsets` 引用相同插件，并受游戏已授予权限限制。公开 Agent 定义、动态 context 和编辑器面板仍不属于本版插件贡献。
 
 工具 schema 的检查不启动插件代码；第一次实际调用才启动后端，本轮结束或取消后清理。数据按 Project、Product Session 或 Story 分支隔离。插件启停与当前版本归 installed.json，参数归 settings/<releaseId>/settings.toml；会话 JSONL／Story JSONL 不保存插件选择、版本或参数副本。插件进程路径、凭证和连接信息只存在于运行时。
 
-安装使用已检查字节，内容摘要区分同版本号的不同快照。旧快照保留，禁用只阻止新启动，当前游戏与任务可以继续至正常停止。停止后需重新启用才能启动；缺少可用依赖的游戏不会出现在新建故事线的可选列表中。卸载会停止受影响实例，同时保留数据与冻结快照。
+安装使用已检查字节，内容摘要区分同版本号的不同快照。旧快照保留，停用立即停止受影响的运行并阻止新启动；重新启用后才能启动。缺少可用依赖的游戏不会出现在新建故事线的可选列表中。卸载保留数据与冻结快照。
 
 重新安装相同发行可以调整授权；宿主先停止受影响的实例并撤销旧凭证，再保存新的授权快照。源码和发行字节保持不变。
 
 ## 后端启动协议
 
-宿主以 Node 启动已冻结入口，通过 stdin 的一行 JSON 发送 type: bootstrap、protocol、context、connection、packageDir、dataDir、tempDir、hostToken。路径仅是当前宿主运行时投影，不应写入业务身份。平台凭证和内部服务凭证分别使用，均不得写入 URL、argv、日志或发行包。
+宿主以 Node 22 或更高版本启动已冻结入口，通过 stdin 的一行 JSON 发送 type: bootstrap、protocol、context、connection、packageDir、dataDir、tempDir、hostToken。纯静态面板无需 Node。路径仅是当前宿主运行时投影，不应写入业务身份。平台凭证和内部服务凭证分别使用，均不得写入 URL、argv、日志或发行包。处理工具请求时，调用宿主 API 必须转发 `X-Denova-Consumer`，将异步任务归属原页面/命令；`runtime.mjs` 的 requestHost 已处理转发。
 
 提供器监听独立 loopback 端口，stdout 第一行返回：
 

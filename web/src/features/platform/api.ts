@@ -3,19 +3,24 @@ import { APIError, jsonHeaders, requestJSON } from '@/lib/api-client/client'
 import { errorMessage } from '@/lib/error-diagnostics'
 
 export type PackageKind = 'plugin' | 'game'
+export type ContributionContext = 'writing' | 'game' | 'general'
 export type LocalizedText = { 'zh-CN': string; 'en-US': string }
 export type ReleaseRef = {
   package: { kind: PackageKind; id: string }
   releaseId: string
 }
 export interface Contributions {
-  tools?: { id: string; definition: string }[]
+  tools?: { id: string; definition: string; agentContexts?: ContributionContext[] }[]
   toolsets?: { id: string; tools: string[] }[]
+  commands?: { id: string; titleKey: string; contexts: ContributionContext[]; target: { kind: 'tool' | 'panel'; id: string } }[]
+  panels?: { id: string; titleKey: string; contexts: ContributionContext[]; viewId: string }[]
 }
 export interface Manifest {
   id: string
   version: string
   apiMajor: number
+  minHostVersion: string
+  views?: { id: string; source: { kind: 'static' | 'backend'; path: string } }[]
   name: LocalizedText
   description?: LocalizedText
   runtime?: { backend?: unknown }
@@ -117,7 +122,7 @@ export interface RuntimeSnapshot {
   id: string
   status: string
   viewUrl?: string
-  connection: { baseUrl: string; token: string }
+  connection: { baseUrl: string; token: string; consumerId?: string }
   context: {
     source: ReleaseRef
     scope: { kind: string; projectId?: string; instanceId?: string; storyId?: string; branchId?: string }
@@ -146,6 +151,27 @@ export interface RuntimeSetupDocument extends ConfigurationDocument {
   models: { key: string; kind: string; required: boolean }[]
 }
 
+export interface PluginAction {
+  id: string
+  kind: 'command' | 'panel'
+  title: LocalizedText
+  target: { kind: 'tool' | 'panel'; id: string }
+  form?: NonNullable<ConfigurationDocument['form']>
+}
+export interface ProjectPlugin {
+  id: string
+  releaseId: string
+  name: LocalizedText
+  enabled: boolean
+  problem?: ConfigurationProblem
+  models: RuntimeSetupDocument['models']
+  actions: PluginAction[]
+}
+export interface ProjectExtensionConfiguration {
+  revision: string
+  extensions: { disabledPlugins: string[]; models: Record<string, string> }
+}
+
 export function management<T>(
   path: string,
   method = 'GET',
@@ -163,12 +189,15 @@ export async function consumer<T>(
   path: string,
   method = 'GET',
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   return requestJSON<T>(runtime.connection.baseUrl + path, {
     method,
+    signal,
     headers: {
       ...jsonHeaders,
       Authorization: `Bearer ${runtime.connection.token}`,
+      ...(runtime.connection.consumerId ? { 'X-Denova-Consumer': runtime.connection.consumerId } : {}),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
@@ -191,4 +220,9 @@ export function platformError(error: unknown): string {
 }
 export function localized(text: LocalizedText | undefined, language: string) {
   return text?.[language.startsWith('zh') ? 'zh-CN' : 'en-US'] ?? ''
+}
+
+/** Best-effort release also survives a normal browser page unload. */
+export async function releasePluginConsumer(runtime: RuntimeSnapshot) {
+  if (runtime.connection.consumerId) await requestJSON(managementBase + `/runtimes/${runtime.id}/consumers/${runtime.connection.consumerId}`, { method: 'DELETE', keepalive: true })
 }

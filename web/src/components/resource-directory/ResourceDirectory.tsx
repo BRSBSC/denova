@@ -48,6 +48,8 @@ interface ResourceDirectoryProps {
   searchAccessory?: ReactNode
   /** 搜索行右侧的附加按钮（如批量生成、分类） */
   headerActions?: ReactNode
+  /** Current search/filter conditions and result count, rendered below the search row. */
+  searchDetails?: ReactNode
   /** 展示「展开/收起全部」按钮 */
   showExpandCollapseAll?: boolean
   /** Expand the matching group when the value changes, such as when switching creative setup types. */
@@ -80,6 +82,7 @@ export function ResourceDirectory({
   filterItem,
   searchAccessory,
   headerActions,
+  searchDetails,
   showExpandCollapseAll = false,
   expandedSectionId,
   emptySectionsLast = false,
@@ -202,7 +205,7 @@ export function ResourceDirectory({
                     aria-expanded={!collapsed}
                     title={section.description ?? section.label}
                   >
-                    <ChevronDown className={cn('transition-transform', collapsed && '-rotate-90')} aria-hidden="true" />
+                    <ChevronDown className={cn('transition-transform duration-[var(--nova-motion-fast)] ease-[var(--nova-panel-motion-ease)]', collapsed && '-rotate-90')} aria-hidden="true" />
                     {SectionIcon && <SectionIcon aria-hidden="true" />}
                     <span data-resource-directory-section-label className="min-w-0 flex-1 truncate text-sidebar-foreground">{section.label}</span>
                     <span className="shrink-0 font-normal text-sidebar-foreground/50">{items.length}</span>
@@ -220,7 +223,7 @@ export function ResourceDirectory({
                     <Plus aria-hidden="true" />
                   </SidebarGroupAction>
                 )}
-                <CollapsibleContent>
+                <CollapsibleContent className="nova-resource-directory-content">
                   <SidebarGroupContent className="pl-2">
                     <SidebarMenu>
                       {reorderable ? (
@@ -298,6 +301,7 @@ export function ResourceDirectory({
                   {headerActions}
                 </div>
               )}
+              {showSearch && searchDetails}
             </SidebarHeader>
             <SidebarSeparator />
           </>

@@ -368,7 +368,7 @@ test('shows frozen installed metadata with source links across themes and screen
   await request.patch('/api/settings', { data: { layer: 'user', changes: { language: 'zh-CN', theme: 'dark' } } })
 })
 
-test('chooses game types within new stories and preserves active games on disable', async ({ page, request, browserDiagnostics }) => {
+test('chooses game types and stops disabled games while preserving their saves', async ({ page, request, browserDiagnostics }) => {
   test.slow()
   browserDiagnostics.allow(/console\.error: Failed to load resource:.*404.*game-data\/file/)
   const book = await createAndOpenBook(request, 'Mixed Game Stories')
@@ -399,12 +399,10 @@ test('chooses game types within new stories and preserves active games on disabl
   const toggle = page.getByRole('switch', { name: '启用 test.story-state' })
   await toggle.click()
   await expect(toggle).not.toBeChecked()
-  expect((await (await request.get('/api/platform/manage/runtimes')).json()).some((item: { id: string }) => item.id === save.instanceId)).toBe(true)
+  expect((await (await request.get('/api/platform/manage/runtimes')).json()).some((item: { id: string }) => item.id === save.instanceId)).toBe(false)
   expect(await (await request.get('/api/platform/manage/game-preferences')).json()).toEqual({ defaultGameId: 'builtin.story' })
   await navigate(page, '游戏')
-  await expect(frame.locator('#value')).toHaveText('1')
-  await frame.getByRole('button', { name: '保存测试数据' }).click()
-  await expect(frame.locator('#value')).toHaveText('2')
+  await expect(page.getByText('此游戏已停止，请退出后继续游玩。', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '故事与存档', exact: true }).click()
   await page.getByRole('button', { name: '退出并停止' }).click()
   await expect(page.getByRole('button', { name: '继续游玩' })).toBeDisabled()
@@ -412,6 +410,8 @@ test('chooses game types within new stories and preserves active games on disabl
   await toggle.click()
   await expect(toggle).toBeChecked()
   await navigate(page, '游戏')
+  await expect(frame.locator('#value')).toHaveText('1')
+  await frame.getByRole('button', { name: '保存测试数据' }).click()
   await expect(frame.locator('#value')).toHaveText('2')
   await page.getByRole('button', { name: '故事与存档', exact: true }).click()
   await page.getByRole('button', { name: '选择故事线', exact: true }).filter({ visible: true }).click()

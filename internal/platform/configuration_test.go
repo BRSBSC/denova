@@ -230,11 +230,10 @@ func TestPluginProviderConsumesSettingsOnlyOnNextStart(t *testing.T) {
 	if _, err := m.SavePackageConfiguration(Plugin, release.Manifest.ID, "en-US", ConfigurationInput{ReleaseID: release.Ref.ReleaseID, ExpectedRevision: doc.Revision, Overrides: map[string]any{"enabled": true}}); err != nil {
 		t.Fatal(err)
 	}
-	reused, err := m.ActivatePlugin(context.Background(), input)
-	if err != nil || reused.Connection.Token != runtime.Connection.Token {
-		t.Fatalf("save interrupted active plugin: %v", err)
+	if _, err := m.ActivatePlugin(context.Background(), input); err == nil {
+		t.Fatal("new consumer silently inherited outdated settings")
 	}
-	count(reused, 3)
+	count(runtime, 3) // The already-open consumer remains frozen and usable.
 	if err := m.Stop(context.Background(), runtime.ID); err != nil {
 		t.Fatal(err)
 	}

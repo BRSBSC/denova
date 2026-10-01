@@ -14,7 +14,7 @@ func (m *Manager) PreviewBundled(kind Kind, source fs.FS) (Candidate, error) {
 	if !kind.valid() {
 		return Candidate{}, failure("INVALID_ARGUMENT", "Invalid package kind")
 	}
-	files, err := readPackageFiles(source, []string{"."})
+	files, err := readArchiveFiles(source, []string{"."}, MaxFileBytes)
 	if err != nil {
 		return Candidate{}, err
 	}

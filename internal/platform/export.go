@@ -25,7 +25,7 @@ func (m *Manager) ExportInstalled(ref ReleaseRef, writer io.Writer) error {
 		return err
 	}
 	defer root.Close()
-	files, err := readPackageFiles(root.FS(), []string{"."})
+	files, err := readArchiveFiles(root.FS(), []string{"."}, MaxFileBytes)
 	if err != nil {
 		return err
 	}

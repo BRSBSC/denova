@@ -3,6 +3,7 @@
   "id": "test.fixture",
   "version": "1.0.0",
   "apiMajor": 1,
+  "minHostVersion": "0.6.0",
   "name": {
     "zh-CN": "测试包",
     "en-US": "Test package"

@@ -2,6 +2,7 @@ package platform
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,6 +19,9 @@ func (m *Manager) packagePath(ref PackageRef) string {
 }
 
 func (m *Manager) saveInstalled(kind Kind, item Installed) error {
+	if item.Problem != nil {
+		return item.Problem
+	}
 	return writeJSON(filepath.Join(m.packagePath(PackageRef{Kind: kind, ID: item.ID}), "installed.json"), item)
 }
 
@@ -39,7 +43,8 @@ func (m *Manager) packageIDs(kind Kind) ([]string, error) {
 			continue
 		}
 		if err := validateID(entry.Name()); err != nil {
-			return nil, err
+			slog.Warn("platform_package_directory_invalid", "kind", kind, "directory", entry.Name(), "error", err)
+			continue
 		}
 		if err := portablepath.CheckNoCollision(root, entry.Name()); err != nil {
 			return nil, err
@@ -61,11 +66,12 @@ func (m *Manager) List(kind Kind) ([]Installed, error) {
 		if os.IsNotExist(err) {
 			continue
 		} // A preview need not be installed.
-		if err != nil {
-			return nil, err
+		if err == nil && item.ID != id {
+			err = failure("INVALID_PACKAGE", "Installation identity does not match directory %s", id)
 		}
-		if item.ID != id {
-			return nil, failure("INVALID_PACKAGE", "Installation identity does not match directory %s", id)
+		if err != nil {
+			slog.Warn("platform_installation_unavailable", "kind", kind, "package", id, "error", err)
+			item = Installed{ID: id, Releases: []Release{}, Problem: &Error{Code: "INVALID_PACKAGE", MessageKey: "platform.errors.INVALID_PACKAGE", Diagnostic: err.Error()}}
 		}
 		items = append(items, item)
 	}

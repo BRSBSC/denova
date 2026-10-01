@@ -25,6 +25,7 @@ export function DevelopmentPreviewDialog({ candidate, projectId, open, onClose, 
   const { resolvedTheme } = useTheme()
   const [setup, setSetup] = useState({ ...emptySetup, projectId })
   const [runtime, setRuntime] = useState<RuntimeSnapshot | null>(null)
+  const [panelId, setPanelId] = useState(candidate.manifest.contributes?.panels?.[0]?.viewId ?? '')
   const [busy, setBusy] = useState(false)
   const [optionalGrants, setOptionalGrants] = useState<string[]>([])
   const storyPreview = candidate.manifest.game?.storage.kind === 'story'
@@ -48,11 +49,12 @@ export function DevelopmentPreviewDialog({ candidate, projectId, open, onClose, 
         onPlay(await management(`/instances/${instance.instanceId}/open`, 'POST', options))
         onClose()
       } else {
-        setRuntime(await management('/runtimes/plugin', 'POST', {
+        const opened = await management<RuntimeSnapshot>('/runtimes/plugin', 'POST', {
           pluginId: release.manifest.id, releaseId: release.ref.releaseId,
           scope: { kind: 'project', projectId }, settings: setup.configuration,
-          models: setup.models, ...options,
-        }))
+          models: setup.models, viewId: panelId, ...options,
+        })
+        if (panelId) { onPlay(opened); onClose() } else setRuntime(opened)
       }
     } catch (error) {
       console.error('[development] start preview failed', { projectId, packageId: candidate.manifest.id, error })
@@ -65,6 +67,7 @@ export function DevelopmentPreviewDialog({ candidate, projectId, open, onClose, 
       <DialogHeader><DialogTitle>{t('platform.preview')}</DialogTitle><DialogDescription>{t('platform.previewDescription')}</DialogDescription></DialogHeader>
       {runtime ? <ToolConsole runtime={runtime} manifest={candidate.manifest} onStop={() => setRuntime(null)} onFeedback={onFeedback} /> : <fieldset disabled={busy} className="flex min-w-0 flex-col gap-3">
         {storyPreview && <p className="text-sm text-muted-foreground">{t(previewProjectId ? 'platform.storyPreviewProject' : 'platform.storyPreviewProjectRequired')}</p>}
+        {candidate.kind === 'plugin' && !!candidate.manifest.contributes?.panels?.length && <label className="flex flex-col gap-2 text-sm">{t('platform.plugins.previewView')}<select className="rounded-md border bg-background p-2" value={panelId} onChange={event => setPanelId(event.target.value)}><option value="">{t('platform.plugins.toolConsole')}</option>{candidate.manifest.contributes.panels.map(panel => <option key={panel.id} value={panel.viewId}>{panel.id}</option>)}</select></label>}
         <RuntimeSetup projectLocked manifest={candidate.manifest}
           configurationEndpoint={`/candidates/${candidate.candidateId}/setup`}
           value={{ ...setup, projectId: previewProjectId }} onChange={setSetup} />

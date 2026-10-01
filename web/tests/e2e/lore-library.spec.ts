@@ -10,7 +10,7 @@ const portrait = Buffer.from(
 const itemsURL = (project: string) => `/api/projects/${project}/book/lore/items`
 const readItems = async (request: APIRequestContext, project: string): Promise<LoreItem[]> =>
   (await (await request.get(itemsURL(project))).json()).items
-async function seed(request: APIRequestContext, project: string, id: string, type = 'character') {
+async function seed(request: APIRequestContext, project: string, id: string, type = 'character', metadata: Partial<LoreItem> = {}) {
   const response = await request.post(itemsURL(project), {
     data: {
       id,
@@ -19,6 +19,7 @@ async function seed(request: APIRequestContext, project: string, id: string, typ
       content: `Body of ${id}`,
       brief_description: '简介与长文本 '.repeat(30),
       enabled: true,
+      ...metadata,
     },
   })
   expect(response.ok(), await response.text()).toBe(true)
@@ -129,15 +130,20 @@ for (const theme of ['dark', 'light']) {
     await page.screenshot({ path: testInfo.outputPath(`library-${theme}-selection.png`), animations: 'disabled' })
     await library.getByRole('button', { name: '全选当前结果', exact: true }).click()
     await expect(library.getByRole('status')).toHaveText('已选 5 项')
-    await library.getByRole('combobox', { name: '资料分类' }).click()
+    await library.getByRole('button', { name: '筛选资料', exact: true }).click()
+    const filters = page.getByRole('dialog', { name: '资料筛选', exact: true })
+    await filters.getByRole('combobox', { name: '资料分类' }).click()
     await page.getByRole('option', { name: '地点', exact: true }).click()
+    await expect(page.getByRole('listbox')).toBeHidden()
+    await filters.press('Escape')
+    await expect(filters).toBeHidden()
     await expect(library.getByRole('status')).toHaveText('已选 0 项')
     await expect(library.getByTestId('lore-card-hero')).toHaveCount(0)
     await library.getByRole('button', { name: '退出多选', exact: true }).click()
     await library.getByRole('button', { name: 'city · 资料', exact: true }).click()
     await expect(page.getByLabel('名称', { exact: true })).toHaveValue('city · 资料')
     await page.getByRole('button', { name: '返回资料总览', exact: true }).click()
-    await expect(library.getByRole('combobox', { name: '资料分类' })).toHaveText('地点')
+    await expect(library.getByRole('button', { name: '移除筛选：地点', exact: true })).toBeVisible()
     await library.getByPlaceholder('搜索名称、简介、标签或正文…').fill('missing')
     await expect(library.getByText('没有匹配的资料', { exact: true })).toBeVisible()
     await library.getByRole('button', { name: '清除筛选', exact: true }).click()
@@ -174,6 +180,126 @@ for (const theme of ['dark', 'light']) {
     }
   })
 }
+
+test('shares all Lore filters with the directory and keeps the active editor', async ({ page, request }, testInfo) => {
+  const next = await createAndOpenBook(request, 'Next filter project')
+  const book = await createAndOpenBook(request, 'Lore filters')
+  const longTag = 'VeryLongUnbrokenTag'.repeat(8)
+  await seed(request, book.projectId, 'alpha', 'character', { tags: ['protagonist', '东陵', longTag], load_mode: 'auto', importance: 'major' })
+  await seed(request, book.projectId, 'beta', 'character', { tags: ['西域'], load_mode: 'manual', enabled: false, importance: 'minor' })
+  await seed(request, book.projectId, 'gamma', 'location', { tags: ['东陵'], load_mode: 'resident', importance: 'important' })
+  await seed(request, book.projectId, 'delta', 'item', { tags: [], load_mode: 'manual', importance: 'minor' })
+  const upload = await request.post(`${itemsURL(book.projectId)}/beta/materials/upload`, {
+    multipart: { file: { name: 'beta.png', mimeType: 'image/png', buffer: portrait } },
+  })
+  expect(upload.ok(), await upload.text()).toBe(true)
+  const beta = (await readItems(request, book.projectId)).find(item => item.id === 'beta')!
+  const cover = await request.post(`${itemsURL(book.projectId)}/beta/materials`, {
+    data: { op: 'cover', asset_id: beta.resolved_materials![0].id },
+  })
+  expect(cover.ok(), await cover.text()).toBe(true)
+  const before = await readItems(request, book.projectId)
+  await openLibrary(page)
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  const library = page.getByTestId('lore-library')
+  const directory = page.locator('.nova-embedded-sidebar').filter({ has: page.getByRole('textbox', { name: '搜索资料', exact: true }) })
+  const filters = page.getByRole('dialog', { name: '资料筛选', exact: true })
+  const choose = async (field: string, value: string) => {
+    await filters.getByRole('combobox', { name: field, exact: true }).click()
+    await page.getByRole('option', { name: value, exact: true }).click()
+    await expect(page.getByRole('listbox')).toBeHidden()
+  }
+  await expect(directory.getByRole('button', { name: '整理资料类型', exact: true })).toHaveCount(0)
+  await library.getByRole('button', { name: '批量操作', exact: true }).click()
+  await library.getByTestId('lore-card-alpha').getByRole('checkbox').check()
+  await directory.getByRole('button', { name: '筛选资料', exact: true }).click()
+  await filters.getByRole('checkbox', { name: /^东陵/ }).check()
+  await expect(library.getByLabel('当前筛选条件')).toContainText('2 / 4 项')
+  await expect(directory.getByLabel('当前筛选条件')).toContainText('2 / 4 项')
+  await expect(library.getByRole('status')).toHaveText('已选 0 项')
+  await filters.getByRole('checkbox', { name: /^西域/ }).check()
+  await expect(library.getByLabel('当前筛选条件')).toContainText('3 / 4 项')
+  await choose('加载策略', '手动引用')
+  await choose('启用状态', '已停用')
+  await choose('重要度', '次要')
+  await choose('资料分类', '角色')
+  await choose('按封面筛选', '有封面')
+  await expect(library.getByTestId('lore-card-beta')).toBeVisible()
+  await expect(library.getByLabel('当前筛选条件')).toContainText('1 / 4 项')
+  await expect(filters.getByRole('checkbox', { name: /^东陵/ })).toBeChecked()
+  await filters.press('Escape')
+  await expect(filters).toBeHidden()
+  await library.getByRole('button', { name: '筛选资料', exact: true }).click()
+  await expect(filters.getByRole('combobox', { name: '加载策略', exact: true })).toHaveText('手动引用')
+  await choose('按封面筛选', '无封面')
+  await expect(library.getByText('没有匹配的资料', { exact: true })).toBeVisible()
+  await filters.getByRole('button', { name: '清除筛选', exact: true }).click()
+  await filters.getByRole('checkbox', { name: '未打标签', exact: true }).check()
+  await expect(library.getByLabel('当前筛选条件')).toContainText('1 / 4 项')
+  await expect(library.getByTestId('lore-card-delta')).toBeVisible()
+  await filters.getByRole('checkbox', { name: /^主角/ }).check()
+  await expect(filters.getByRole('checkbox', { name: '未打标签', exact: true })).not.toBeChecked()
+  await expect(library.getByTestId('lore-card-alpha')).toBeVisible()
+  await filters.press('Escape')
+  await expect(filters).toBeHidden()
+  await library.getByRole('button', { name: '清除筛选', exact: true }).click()
+  await library.getByRole('button', { name: '退出多选', exact: true }).click()
+  await library.getByRole('button', { name: 'alpha · 资料', exact: true }).click()
+  await directory.getByRole('button', { name: '筛选资料', exact: true }).click()
+  await choose('加载策略', '手动引用')
+  await filters.press('Escape')
+  await expect(filters).toBeHidden()
+  await expect(page.getByLabel('名称', { exact: true })).toHaveValue('alpha · 资料')
+  await expect(directory.getByRole('button', { name: /^alpha · 资料/ })).toHaveCount(0)
+  await page.getByRole('button', { name: '返回资料总览', exact: true }).click()
+  await expect(library.getByLabel('当前筛选条件')).toContainText('2 / 4 项')
+  await library.getByRole('button', { name: '更多', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: '整理资料类型', exact: true })).toBeVisible()
+  // Opening the preview remains a whole-library operation, independent of the browsing conditions.
+  await page.route(`**/api/projects/${book.projectId}/book/lore/classification/preview`, async route => {
+    expect(route.request().postDataJSON()).toEqual({ mode: 'semantic' })
+    await route.fulfill({ json: { revision: 'preview', mode: 'semantic', counts: {}, items: before.map(item => ({
+      id: item.id, name: item.name, current_type: item.type, current_type_source: item.type_source,
+      suggested_type: item.type, confidence: 'high', suggestion_source: 'heuristic',
+    })) } })
+  })
+  await page.getByRole('menuitem', { name: '整理资料类型', exact: true }).click()
+  const classification = page.getByRole('dialog', { name: '整理资料类型', exact: true })
+  await expect(classification.getByText('alpha · 资料', { exact: true })).toBeVisible()
+  await classification.getByRole('button', { name: '取消', exact: true }).click()
+  await library.getByRole('button', { name: '清除筛选', exact: true }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await library.getByRole('button', { name: '筛选资料', exact: true }).click()
+  await filters.getByRole('textbox', { name: '搜索标签', exact: true }).fill(longTag)
+  await filters.getByRole('checkbox', { name: new RegExp(`^${longTag}`) }).check()
+  expect(await filters.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('lore-filters-390.png'), animations: 'disabled' })
+  await filters.press('Escape')
+  await expect(filters).toBeHidden()
+  expect(await library.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('lore-filter-summary-390.png'), animations: 'disabled' })
+  expect(await readItems(request, book.projectId)).toEqual(before)
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  await page.getByRole('button', { name: /^切换书籍，当前：/ }).click()
+  await page.getByRole('menuitem').filter({ hasText: next.title }).click()
+  await expect(library.getByText('还没有资料', { exact: true })).toBeVisible()
+  await expect(library.getByRole('button', { name: /移除筛选/ })).toHaveCount(0)
+  await seed(request, next.projectId, 'next', 'character', { load_mode: 'resident', tags: ['protagonist', longTag] })
+  const settings = await (await request.get('/api/settings')).json()
+  const localized = await request.patch('/api/settings', { data: {
+    layer: 'user', base_revision: settings.revisions.user, changes: { language: 'en-US', theme: 'light' },
+  } })
+  expect(localized.ok(), await localized.text()).toBe(true)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.reload()
+  await expect(library.getByTestId('lore-card-next')).toBeVisible()
+  await library.getByRole('button', { name: 'Filter lore', exact: true }).click()
+  const englishFilters = page.getByRole('dialog', { name: 'Lore filters', exact: true })
+  await expect(englishFilters.getByRole('combobox', { name: 'Load Strategy', exact: true })).toHaveText('All load strategies')
+  await englishFilters.getByRole('checkbox', { name: /^Protagonist/ }).check()
+  await expect(library.getByLabel('Active filters')).toContainText('Tag: Protagonist')
+  await page.screenshot({ path: testInfo.outputPath('lore-filters-en-light-390.png'), animations: 'disabled' })
+})
 
 test('uploads and regenerates covers while keeping old images and text', async ({
   page,

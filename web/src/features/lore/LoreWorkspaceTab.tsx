@@ -23,6 +23,8 @@ import { LoreWorkspaceEditor } from './LoreWorkspaceEditor'
 import { useLoreWorkspace } from './use-lore-workspace'
 import { hasLoreProtagonistTag } from './tags'
 import { LoadingState } from '@/components/common/LoadingState'
+import { EMPTY_LORE_FILTERS, filterLoreItems, type LoreFilters } from './lore-filters'
+import { LoreFiltersButton, LoreFilterSummary } from './LoreFilters'
 import type { ToolNavigationIntent } from '@/components/Chat/tool-navigation'
 
 interface LoreWorkspaceTabProps {
@@ -49,6 +51,8 @@ export function LoreWorkspaceTab({
 }: LoreWorkspaceTabProps) {
   const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
+  const [filters, setFilters] = useState<LoreFilters>(EMPTY_LORE_FILTERS)
+  useEffect(() => { setFilters(EMPTY_LORE_FILTERS); setSearchQuery('') }, [projectId])
   const lore = useLoreWorkspace({
     projectId,
     refreshSignal,
@@ -70,13 +74,14 @@ export function LoreWorkspaceTab({
     if (!targetID || targetID === lore.activeId) return
     void lore.selectItem(targetID)
   }, [lore.activeId, lore.items, lore.selectItem, toolNavigationIntent?.nonce])
+  const filteredItems = useMemo(() => filterLoreItems(lore.items, filters, searchQuery, projectId), [lore.items, filters, searchQuery, projectId])
   const sections = useMemo<ResourceDirectorySection[]>(
     () =>
-      KNOWLEDGE_SECTIONS.map((section) => ({
+      KNOWLEDGE_SECTIONS.filter((section) => filters.category === 'all' || section.id === filters.category).map((section) => ({
         id: section.id,
         label: t(section.labelKey),
         icon: section.icon,
-        items: sectionItems(lore.items, section).map((item) =>
+        items: sectionItems(filteredItems, section).map((item) =>
           loreDirectoryItem(item, projectId, t),
         ),
         onCreate: () => {
@@ -96,7 +101,7 @@ export function LoreWorkspaceTab({
           section: t(section.labelKey),
         }),
       })),
-    [lore.createItem, lore.items, projectId, t],
+    [lore.createItem, filteredItems, filters.category, projectId, t],
   )
 
   const directory = (
@@ -127,6 +132,9 @@ export function LoreWorkspaceTab({
           searchPlaceholder={t('loreWorkspace.search')}
           query={searchQuery}
           onQueryChange={setSearchQuery}
+          filterItem={() => true}
+          headerActions={<LoreFiltersButton presentation="icon" items={lore.items} filters={filters} onChange={setFilters} />}
+          searchDetails={<LoreFilterSummary filters={filters} onChange={setFilters} query={searchQuery} onQueryChange={setSearchQuery} matched={filteredItems.length} total={lore.items.length} />}
           emptySectionsLast
           headerContent={
             <div className="grid gap-2">

@@ -3,17 +3,43 @@
 ## Source and packaging
 
 Each package root has exactly one `denova.plugin.json` or `denova.game.json`.
-Required fields include `manifestVersion: 1`, `apiMajor: 1`, a stable lowercase
+Required fields include `manifestVersion: 1`, `apiMajor: 1`, `minHostVersion: "0.6.0"`, a stable lowercase
 package `id`, semantic `version`, `name` with `zh-CN` and `en-US`, and permissions.
 Use the generated manifest as the schema example for the chosen package kind.
 `distribution.files` is the runtime file/directory allowlist; include referenced
 entry points and definitions, exclude credentials, caches and development logs.
 
-Plugins contribute tools and toolsets, not Skills or public Agents. Tool schemas
+Plugins contribute tools, toolsets, commands and panels, not Skills or public Agents. Tool schemas
 use JSON Schema 2020-12 and English model-facing descriptions. A tool declares
 its effect (`pure`, `read`, `propose`, `write`) and backend HTTP endpoint. The
 provider receives the tool input as its JSON request body and returns
 `{ content: "English model feedback", data: optionalStructuredResult }`.
+
+Tools declare `agentContexts: ["writing", "game", "general"]`; omitted/empty
+means callable only through explicit dependencies or user commands. Commands
+declare `{ id, titleKey, contexts, target: {kind: "tool"|"panel", id} }`; panels
+declare `{ id, titleKey, contexts, viewId }`. Entry contexts must be nonempty and
+all references resolve before code starts. Command input fields need localized
+x-titleKey/x-descriptionKey; reuse the existing JSON Schema form subset.
+
+Static views need no Node; backends require Node 22+. Plugin named model slots
+are image-only; text uses builtin/assistant. Project plugin settings bind model
+profiles and local disablement. A shared Project activation owns separate panel
+and command consumers. Forward connection.consumerId as X-Denova-Consumer on
+host requests (SDKs do this); closing a consumer cancels its asynchronous work
+and revokes its token. Last close stops the runtime. Report busy/dirty via
+client.setState for close protection. Hide/navigation does not change Project.
+
+Read /capabilities for hostVersion, implemented/granted/applicable/configured
+per permission, and configured model keys. Changed settings/models/dependencies
+never hot-swap a running snapshot; RUNTIME_RESTART_REQUIRED requires closing it
+before opening again. Disablement or revoked grants stop affected runtimes.
+
+Use /assets/document with revisions for cross-session Project/plugin JSON and
+/assets/upload for adopted media, not execution-scoped dataDir. The host Project
+plugin menu exports this content and imports only into an empty inactive target;
+this is separate from code/package export. Author format changes need explicit
+validation, conflict handling and backups before replacing user content.
 
 Games declare `views`, `game.viewId`, and `game.storage` with `kind: "self"` or
 `kind: "story"`, and an optional stable `saveFormat`. Story games also declare

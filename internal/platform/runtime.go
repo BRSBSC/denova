@@ -40,8 +40,9 @@ type RuntimeContext struct {
 // Connection is an ephemeral bearer connection delivered only to the trusted
 // manager, a validated view handshake, or the owning backend's stdin pipe.
 type Connection struct {
-	BaseURL string `json:"baseUrl"`
-	Token   string `json:"token"`
+	BaseURL    string `json:"baseUrl"`
+	Token      string `json:"token"`
+	ConsumerID string `json:"consumerId,omitempty"`
 }
 
 type RuntimeSnapshot struct {
@@ -87,6 +88,7 @@ type Runtime struct {
 	mu           sync.RWMutex
 	closeMu      sync.Mutex
 	status       string
+	consumers    map[string]runtimeConsumer
 }
 
 func (m *Manager) OpenInstance(ctx context.Context, id string, options OpenOptions) (RuntimeSnapshot, error) {
@@ -124,11 +126,14 @@ func (m *Manager) OpenInstance(ctx context.Context, id string, options OpenOptio
 }
 
 type ActivatePlugin struct {
-	PluginID  string            `json:"pluginId"`
-	ReleaseID string            `json:"releaseId"`
-	Scope     Scope             `json:"scope"`
-	Settings  map[string]any    `json:"settings"`
-	Models    map[string]string `json:"models"`
+	// ConsumerID is an ephemeral host-owned page or command reference.
+	ConsumerID string            `json:"consumerId,omitempty"`
+	ViewID     string            `json:"viewId,omitempty"`
+	PluginID   string            `json:"pluginId"`
+	ReleaseID  string            `json:"releaseId"`
+	Scope      Scope             `json:"scope"`
+	Settings   map[string]any    `json:"settings"`
+	Models     map[string]string `json:"models"`
 	OpenOptions
 }
 
@@ -150,27 +155,55 @@ func (m *Manager) ActivatePlugin(ctx context.Context, request ActivatePlugin) (R
 		id = "preview-" + stableID(id, request.ReleaseID)
 		request.Scope = Scope{Kind: "project", ProjectID: request.Scope.ProjectID, SessionID: id}
 	}
-	if current := m.runtimes[id]; current != nil && current.ctx.Err() == nil {
-		configuration, err := validateConfiguration(&ConfigurationForm{Schema: map[string]any{"type": "object"}, Defaults: current.owner.context.Settings}, request.Settings)
-		if err != nil {
-			return RuntimeSnapshot{}, err
-		}
-		requested, _ := json.Marshal([]any{request.ReleaseID, configuration, request.Models})
-		existing, _ := json.Marshal([]any{current.owner.release.Ref.ReleaseID, current.owner.context.Settings, current.models})
-		if string(requested) != string(existing) {
-			return RuntimeSnapshot{}, failure("DOCUMENT_CONFLICT", "Stop the active runtime before changing its release, models or configuration")
-		}
-		return current.snapshot(), nil
-	}
-	if err := m.stopLocked(ctx, id); err != nil {
-		return RuntimeSnapshot{}, err
-	}
 	release, _, err := m.release(ReleaseRef{Package: PackageRef{Kind: Plugin, ID: request.PluginID}, ReleaseID: request.ReleaseID})
 	if err != nil {
 		return RuntimeSnapshot{}, err
 	}
 	pins, err := m.resolveDependencies(release.Manifest, nil)
 	if err != nil {
+		return RuntimeSnapshot{}, err
+	}
+	slots, err := m.modelRequirements(release, pins)
+	if err != nil {
+		return RuntimeSnapshot{}, err
+	}
+	// Project preferences contain bindings for other plugins. Only this graph's
+	// declared bindings participate in activation and its frozen configuration.
+	models := map[string]string{}
+	for _, slot := range slots {
+		if value := request.Models[slot.Key]; value != "" {
+			models[slot.Key] = value
+		}
+	}
+	request.Models = models
+	if current := m.runtimes[id]; current != nil && current.ctx.Err() == nil {
+		configuration, err := m.settingsValues(current.owner.release, environment, request.Settings)
+		if err != nil {
+			return RuntimeSnapshot{}, err
+		}
+		requested, _ := json.Marshal([]any{request.ReleaseID, configuration, request.Models})
+		existing, _ := json.Marshal([]any{current.owner.release.Ref.ReleaseID, current.owner.context.Settings, current.models})
+		if string(requested) != string(existing) {
+			return RuntimeSnapshot{}, failure("RUNTIME_RESTART_REQUIRED", "Stop the active runtime before changing its release, models or configuration")
+		}
+		for _, pin := range pins {
+			provider := current.providers[pin.PluginID]
+			if provider == nil || provider.release.Ref.ReleaseID != pin.ReleaseID {
+				return RuntimeSnapshot{}, failure("RUNTIME_RESTART_REQUIRED", "Plugin dependency changed")
+			}
+			settings, err := m.settingsValues(provider.release, environment, nil)
+			if err != nil {
+				return RuntimeSnapshot{}, err
+			}
+			requested, _ := json.Marshal(settings)
+			frozen, _ := json.Marshal(provider.context.Settings)
+			if string(requested) != string(frozen) {
+				return RuntimeSnapshot{}, failure("RUNTIME_RESTART_REQUIRED", "Plugin dependency settings changed")
+			}
+		}
+		return current.retainConsumer(request.ConsumerID, request.ViewID)
+	}
+	if err := m.stopLocked(ctx, id); err != nil {
 		return RuntimeSnapshot{}, err
 	}
 	configuration, err := m.settingsValues(release, environment, request.Settings)
@@ -180,12 +213,15 @@ func (m *Manager) ActivatePlugin(ctx context.Context, request ActivatePlugin) (R
 	if err := m.validateModels(release, pins, request.Scope.ProjectID, request.Models); err != nil {
 		return RuntimeSnapshot{}, err
 	}
+	if err := validateConsumer(release.Manifest, request.ConsumerID, request.ViewID); err != nil {
+		return RuntimeSnapshot{}, err
+	}
 	runtime, err := m.startRuntime(id, release, request.Scope, pins, RuntimeConfiguration{Settings: configuration}, request.Models, request.OpenOptions)
 	if err != nil {
 		return RuntimeSnapshot{}, err
 	}
 	m.runtimes[id] = runtime
-	return runtime.snapshot(), nil
+	return runtime.retainConsumer(request.ConsumerID, request.ViewID)
 }
 
 func (m *Manager) startRuntime(id string, owner Release, scope Scope, pins []DependencyPin, configuration RuntimeConfiguration, models map[string]string, options OpenOptions) (*Runtime, error) {
@@ -214,16 +250,19 @@ func (m *Manager) startRuntime(id string, owner Release, scope Scope, pins []Dep
 		}
 		releases = append(releases, release)
 	}
+	if err := m.checkProjectPlugins(scope.ProjectID, releases); err != nil {
+		return nil, err
+	}
 	for index, release := range releases {
 		_, installed, err := m.release(release.Ref)
 		if err != nil {
 			return nil, err
 		}
-		if (!installed.Enabled && !options.hostOnly) || installed.Removed {
+		if !installed.Enabled || installed.Removed {
 			return nil, failure("DEPENDENCY_UNAVAILABLE", "Package %s is disabled", release.Manifest.ID)
 		}
-		if release.Manifest.APIMajor != APIMajor {
-			return nil, failure("API_INCOMPATIBLE", "Package %s requires API %d", release.Manifest.ID, release.Manifest.APIMajor)
+		if err := compatibleManifest(release.Manifest); err != nil {
+			return nil, err
 		}
 		if err := portablepath.PreflightTree(m.releasePath(release.Ref)); err != nil {
 			return nil, err

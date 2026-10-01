@@ -24,11 +24,14 @@ func OpenAPI() map[string]any {
 		if t == reflect.TypeFor[json.RawMessage]() {
 			return &jsonschema.Schema{}
 		}
+		if t == reflect.TypeFor[ContributionContext]() {
+			return &jsonschema.Schema{Type: "string", Enum: []any{ContextWriting, ContextGame, ContextGeneral}}
+		}
 		return nil
 	}}
 	schemas := map[string]any{}
 	for name, value := range map[string]any{
-		"Error": Error{}, "PackageRef": PackageRef{}, "ReleaseRef": ReleaseRef{},
+		"Capabilities": Capabilities{}, "Connection": Connection{}, "Manifest": Manifest{}, "Error": Error{}, "PackageRef": PackageRef{}, "ReleaseRef": ReleaseRef{},
 		"Scope": Scope{}, "Context": RuntimeContext{}, "AgentRef": AgentRef{},
 		"AgentSession": AgentSession{}, "EnsureSession": EnsureAgentSession{},
 		"RunRef": RunRef{}, "RunResult": RunResult{}, "RunInput": agentRunInput{},
@@ -62,7 +65,7 @@ func OpenAPI() map[string]any {
 			response["content"] = content(responseSchema)
 		}
 		operation := map[string]any{"summary": summary, "responses": map[string]any{success: response, "default": map[string]any{"description": "Localized error; never retry an uncertain mutation with a new commandId", "content": content(ref("Error"))}}}
-		parameters := []map[string]any{}
+		parameters := []map[string]any{{"name": "X-Denova-Consumer", "in": "header", "schema": str, "description": "Forward connection.consumerId for page/command-owned requests and asynchronous work."}}
 		for _, segment := range strings.Split(path, "/") {
 			if strings.HasPrefix(segment, "{") {
 				parameters = append(parameters, map[string]any{"name": strings.Trim(segment, "{}"), "in": "path", "required": true, "schema": str})
@@ -93,7 +96,7 @@ func OpenAPI() map[string]any {
 	add("get", "/settings", "Read settings for the owning installed release", nil, ref("ConfigurationDocument"), "200", nil)
 	add("put", "/settings", "Save owning extension preferences through native revision checks", ref("ConfigurationInput"), ref("ConfigurationDocument"), "200", nil)
 	paths["/settings"].(map[string]any)["put"].(map[string]any)["description"] = "Requires settings.write on the owning installed view. Preview and host-only Agent runtimes cannot edit shared preferences. Preserves native schema validation, backups and release/revision conflict checks. The current runtime context stays frozen; a view may apply returned values locally."
-	add("get", "/capabilities", "Read granted permissions and capacity limits", nil, jsonObject, "200", nil)
+	add("get", "/capabilities", "Read capability admission conditions and capacity limits", nil, ref("Capabilities"), "200", nil)
 	add("get", "/openapi.json", "Read this API description", nil, jsonObject, "200", nil)
 	add("get", "/contributions", "List visible pinned capabilities", nil, array(jsonObject), "200", nil)
 	add("get", "/agents/definitions", "List allowed Agent definitions", nil, object(map[string]any{"items": array(str)}, "items"), "200", nil)

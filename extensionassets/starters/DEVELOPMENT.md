@@ -8,11 +8,12 @@ implementation guidance and the current public HTTP API reference.
 
 The project kind selects one neutral scaffold, not a genre or a fixed feature set.
 
-- Plugin: denova.plugin.json declares a Node backend and one replaceable echo
-  tool. server.mjs handles requests, tools/echo.json describes its input/output,
-  and runtime.mjs handles the host handshake, authentication and shutdown.
-  Test with {"text":"Hello"}. Replace the tool and its declaration with your
-  own behavior. Model configuration and extension settings are not prerequisites.
+- Plugin: denova.plugin.json combines an echo command, a draft panel, and
+  echo/read-draft Agent tools. The panel saves its own Project JSON through
+  /assets/document; the independently scoped read-draft tool reads the same data.
+  server.mjs uses runtime.mjs for handshake, authentication, request ownership
+  and shutdown. view.mjs uses client.mjs; client.d.mts describes the optional SDK.
+  Test the command with {"text":"Hello"}. No model configuration is required.
 - Game: denova.game.json declares a static view. index.html, game.mjs and
   style.css form an independent UI; client.mjs provides a scoped host connection.
   locales/ contains separate Chinese and English strings. The starter has no
@@ -25,7 +26,7 @@ Keep model-facing descriptions, prompts and tool feedback in English.
 
 ## Add only the capabilities your extension needs
 
-All platform operations are ordinary HTTP. For a game, await connect() from
+All platform operations are ordinary HTTP. For a panel or game, await connect() from
 client.mjs, then use client.request('/context'), '/capabilities' and '/openapi.json'
 to inspect the bound scope and precise contracts. Reuse the existing handshake;
 never persist credentials, runtime ports or absolute host paths.
@@ -34,6 +35,16 @@ never persist credentials, runtime ports or absolute host paths.
   contributes, include their files in distribution.files, and implement the
   declared backend endpoints. Skills and public Agent profiles remain in their
   own management pages and are not distributed by plugin manifests.
+- Declare tool.agentContexts explicitly: writing, game and/or general. Empty
+  means dependency/command-only. Commands target a declared tool or local panel;
+  panels reference a declared view. Entry contexts must be nonempty. User-facing
+  input fields need x-titleKey in both locale files; model descriptions stay English.
+- Set minHostVersion to 0.6.0 and apiMajor to 1. Plain static panels need no Node.
+  A plugin's named model slots are image-only; text uses builtin/assistant.
+  Read /capabilities for implemented, granted, applicable and configured states.
+- Panel consumers own their asynchronous work. Report client.setState({busy, dirty})
+  for close protection. Never share or persist connection tokens. Backend host
+  requests must forward X-Denova-Consumer; runtime.mjs does this automatically.
 - A game owns its UI and interactions. Use game.storage.kind = "self" for
   independent state, or "story" to reuse the existing Story engine through
   /story and /story/commands. The host does not impose characters or presentation.
@@ -55,7 +66,7 @@ have separate test saves; close a running preview before resetting its save.
 Static code needs no build. If your implementation needs a build, declare
 development.build.command and development.build.args and run it through More
 development actions > Build in the existing visible terminal before testing or
-publishing. The Node plugin starter requires Node.js on the host.
+publishing. The Node plugin starter requires Node.js 22 or newer on the host.
 
 Publish locally asks for the basic details, saves source editors, validates the
 package and installs the checked bytes on this device. This action enables the
@@ -92,13 +103,22 @@ independent private Agent; scope derived-work session keys to their source.
 
 After installing a game, open Game and create a storyline with that game type.
 Enable or disable installed games and plugins in Extensions. Disabling blocks
-new starts while active journeys and tasks continue until stopped.
+new starts, revokes credentials and stops affected active runtimes. Project plugin
+settings additionally provide local disablement and model bindings. Changes to
+models/settings do not replace a live snapshot; close old panels before reopening.
+
+Save cross-session plugin authoring content through /assets/document (JSON,
+compare-and-swap) and /assets/upload (raster/audio). These belong to the Project
+and plugin, survive uninstall, and can be transferred with Project plugins >
+Plugin content. Import accepts only an empty, inactive target. Handle format
+versions explicitly; never overwrite an unrecognized format or a stale revision.
+Execution dataDir is separate; it is not a substitute for shared Project content.
 
 Extension settings use manifest.settings with JSON Schema, TOML defaults and
 optional declarative uiSchema. Include all files in distribution.files. Every
 field uses x-titleKey and optional x-descriptionKey backed by both locale files;
 keep defaults only in TOML. The host renders the form and owns validation and
-persistence. One settings.toml belongs to the extension across releases. Read the
+persistence. Overrides belong to settings/<releaseId>/settings.toml. Read the
 next-start snapshot from context.settings; never write the managed file directly.
 Game starting options use game.setup with the same declaration format, persist
 with the instance, and appear in context.setup. Preview uses package defaults and

@@ -40,7 +40,7 @@ func ErrorResponse(err error) (int, *Error) {
 		status = http.StatusNotFound
 	case "PERMISSION_DENIED":
 		status = http.StatusForbidden
-	case "NOT_CONFIGURED", "UNSUPPORTED", "API_INCOMPATIBLE", "DEPENDENCY_UNAVAILABLE", "SESSION_BUSY", "DOCUMENT_CONFLICT", "IDEMPOTENCY_CONFLICT", "SAVE_INCOMPATIBLE", "CURSOR_EXPIRED":
+	case "NOT_CONFIGURED", "UNSUPPORTED", "API_INCOMPATIBLE", "DEPENDENCY_UNAVAILABLE", "SESSION_BUSY", "DOCUMENT_CONFLICT", "IDEMPOTENCY_CONFLICT", "SAVE_INCOMPATIBLE", "CURSOR_EXPIRED", "RUNTIME_RESTART_REQUIRED":
 		status = http.StatusConflict
 	case "LIMIT_EXCEEDED":
 		status = http.StatusRequestEntityTooLarge
@@ -113,17 +113,28 @@ func (r *Runtime) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	}
 	if request.Method == "OPTIONS" {
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Last-Event-ID")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Last-Event-ID, X-Denova-Consumer")
 		w.WriteHeader(204)
 		return
 	}
 	var caller *activation
 	token := strings.TrimPrefix(request.Header.Get("Authorization"), "Bearer ")
+	consumerID := request.Header.Get("X-Denova-Consumer")
 	for _, provider := range r.providers {
 		if subtle.ConstantTimeCompare([]byte(token), []byte(provider.connection.Token)) == 1 {
 			caller = provider
 			break
 		}
+	}
+	if caller == nil {
+		r.mu.RLock()
+		for id, consumer := range r.consumers {
+			if subtle.ConstantTimeCompare([]byte(token), []byte(consumer.token)) == 1 && (consumerID == "" || consumerID == id) {
+				caller, consumerID = r.owner, id
+				break
+			}
+		}
+		r.mu.RUnlock()
 	}
 	if caller == nil {
 		writeError(w, failure("PERMISSION_DENIED", "A valid scope credential is required"))
@@ -133,6 +144,18 @@ func (r *Runtime) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	defer cancel()
 	stop := context.AfterFunc(r.ctx, cancel)
 	defer stop()
+	if id := consumerID; id != "" {
+		r.mu.RLock()
+		consumer, exists := r.consumers[id]
+		r.mu.RUnlock()
+		if !exists || consumer.ctx.Err() != nil {
+			writeError(w, failure("RUNTIME_UNAVAILABLE", "Plugin consumer has closed"))
+			return
+		}
+		stopConsumer := context.AfterFunc(consumer.ctx, cancel)
+		defer stopConsumer()
+		ctx = context.WithValue(ctx, consumerContextKey{}, consumerRequest{id: id, ctx: consumer.ctx})
+	}
 	request = request.WithContext(ctx)
 	route := strings.TrimPrefix(request.URL.Path, "/api/platform/v1")
 	switch {
@@ -141,7 +164,7 @@ func (r *Runtime) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	case route == "/settings":
 		r.serveSettings(w, request, caller)
 	case request.Method == "GET" && route == "/capabilities":
-		writeResponse(w, 200, map[string]any{"permissions": caller.grants, "apiMajor": APIMajor, "limits": map[string]int{"requestBytes": MaxDefinitionBytes, "fileBytes": MaxFileBytes, "instructionsBytes": 256 << 10, "assetBytes": MaxAssetBytes, "libraryItemBytes": MaxLibraryItemBytes, "libraryPageItems": 100, "imagePromptBytes": 64 << 10}, "schemaDialect": "https://json-schema.org/draft/2020-12/schema"})
+		writeResponse(w, 200, r.capabilities(caller))
 	case request.Method == "GET" && route == "/openapi.json":
 		writeResponse(w, 200, OpenAPI())
 	case request.Method == "GET" && route == "/contributions":
@@ -496,6 +519,9 @@ func (r *Runtime) invokeTool(ctx context.Context, caller *activation, providerID
 		}
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Authorization", "Bearer "+provider.process.token)
+		if consumer, ok := ctx.Value(consumerContextKey{}).(consumerRequest); ok {
+			request.Header.Set("X-Denova-Consumer", consumer.id)
+		}
 		response, err := localHTTPClient.Do(request)
 		if err != nil {
 			return ToolResult{}, failure("RUNTIME_FAILED", "Call %s/%s: %v", providerID, toolID, err)

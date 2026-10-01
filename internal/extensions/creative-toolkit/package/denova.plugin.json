@@ -3,6 +3,7 @@
   "id": "example.text-tools",
   "version": "1.2.0",
   "apiMajor": 1,
+  "minHostVersion": "0.6.0",
   "name": {
     "zh-CN": "创作工具箱",
     "en-US": "Creative Toolkit"
@@ -58,6 +59,7 @@
       {
         "id": "count-characters",
         "definition": "tools/count.json",
+        "agentContexts": ["writing", "game", "general"],
         "endpoint": {
           "method": "POST",
           "path": "/tools/count"
@@ -66,6 +68,7 @@
       {
         "id": "clean-text",
         "definition": "tools/clean.json",
+        "agentContexts": ["writing", "game", "general"],
         "endpoint": {
           "method": "POST",
           "path": "/tools/clean"
@@ -74,6 +77,7 @@
       {
         "id": "read-notes",
         "definition": "tools/notes-read.json",
+        "agentContexts": ["writing", "game", "general"],
         "endpoint": {
           "method": "POST",
           "path": "/tools/notes-read"
@@ -82,6 +86,7 @@
       {
         "id": "save-note",
         "definition": "tools/notes-save.json",
+        "agentContexts": ["writing", "game", "general"],
         "endpoint": {
           "method": "POST",
           "path": "/tools/notes-save"
@@ -90,6 +95,7 @@
       {
         "id": "search-library",
         "definition": "tools/library.json",
+        "agentContexts": ["writing", "game", "general"],
         "endpoint": {
           "method": "POST",
           "path": "/tools/library"
@@ -98,6 +104,7 @@
       {
         "id": "illustrate",
         "definition": "tools/illustrate.json",
+        "agentContexts": ["writing", "game", "general"],
         "endpoint": {
           "method": "POST",
           "path": "/tools/illustrate"

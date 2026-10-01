@@ -27,6 +27,7 @@ export function InstalledGameStory({ instance, item, active, picker, onRefresh }
   const [upgrade, setUpgrade] = useState<string | null>(null)
   const release = item?.releases.find(release => release.ref.releaseId === instance.releaseId)
   const gameName = localized(release?.manifest.name, i18n.language) || t('platform.type.game')
+  const available = !!item?.enabled && !item.removed && !item.unavailableReason
   const open = async () => {
     setBusy(true); setError('')
     try { setRuntime(await management(`/instances/${instance.instanceId}/open`, 'POST', { locale: i18n.language, theme: resolvedTheme })) }
@@ -34,7 +35,7 @@ export function InstalledGameStory({ instance, item, active, picker, onRefresh }
     finally { setBusy(false) }
   }
   useEffect(() => {
-    if (!active) return
+    if (!active || !available) return
     let cancelled = false
     setBusy(true)
     void management<RuntimeSnapshot>(`/instances/${instance.instanceId}/open`, 'POST', { locale: i18n.language, theme: resolvedTheme })
@@ -44,7 +45,7 @@ export function InstalledGameStory({ instance, item, active, picker, onRefresh }
     return () => { cancelled = true }
     // Appearance changes are delivered to the frame without starting another runtime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instance.instanceId, active])
+  }, [instance.instanceId, active, available])
   const storyControls = <div className="flex flex-wrap items-center gap-2">
       <StoryPicker {...picker} />
       <Badge variant="outline" className="max-w-full truncate">{gameName}{release ? ' · ' + release.manifest.version : ''}</Badge>

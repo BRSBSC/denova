@@ -1,0 +1,67 @@
+{
+  "manifestVersion": 1,
+  "id": "example.asset-board",
+  "version": "1.0.0",
+  "apiMajor": 1,
+  "minHostVersion": "0.6.0",
+  "name": {
+    "zh-CN": "素材工作台",
+    "en-US": "Asset workbench"
+  },
+  "distribution": {
+    "files": [
+      "index.html",
+      "view.mjs",
+      "style.css",
+      "locales",
+      "client.mjs",
+      "client.d.mts"
+    ]
+  },
+  "permissions": {
+    "required": [
+      "assets.read",
+      "assets.write"
+    ],
+    "optional": [
+      "agents.run",
+      "images.generate",
+      "library.write"
+    ]
+  },
+  "modelSlots": [
+    {
+      "id": "illustrator",
+      "kind": "image",
+      "titleKey": "image",
+      "required": false
+    }
+  ],
+  "locales": {
+    "zh-CN": "locales/zh-CN.json",
+    "en-US": "locales/en-US.json"
+  },
+  "views": [
+    {
+      "id": "board",
+      "source": {
+        "kind": "static",
+        "path": "index.html"
+      }
+    }
+  ],
+  "contributes": {
+    "panels": [
+      {
+        "id": "board",
+        "titleKey": "title",
+        "contexts": [
+          "writing",
+          "game",
+          "general"
+        ],
+        "viewId": "board"
+      }
+    ]
+  }
+}

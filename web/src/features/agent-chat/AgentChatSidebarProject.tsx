@@ -12,6 +12,7 @@ import { projectSettingsTarget, settingsQueryOptions } from '@/features/settings
 import { customAgentsForRuntime } from '@/features/agents/CustomAgentSelect'
 import { queryClient } from '@/lib/query-client'
 import type { AgentChatProject, AgentChatSession } from './api'
+import { PluginActionsMenuItem } from '@/features/platform/PluginWorkspace'
 import { AgentChatProjectDetailsCard } from './AgentChatProjectDetailsCard'
 import type { AgentChatActivityStatus, AgentChatSidebarActivity } from './sidebar-activity'
 
@@ -179,6 +180,7 @@ export function AgentChatSidebarProject({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-36">
+                  <PluginActionsMenuItem projectId={project.id} context="general" />
                   {!managedProject ? (
                     <>
                       <DropdownMenuItem onSelect={onRename}>{t('agentChat.project.rename')}</DropdownMenuItem>

@@ -83,7 +83,7 @@ func (m *Manager) PreviewDirectory(kind Kind, directory string) (Candidate, erro
 	if manifest.Distribution != nil {
 		paths = append(slices.Clone(manifest.Distribution.Files), kind.manifestFile())
 	}
-	files, err := readPackageFiles(root.FS(), paths)
+	files, err := readArchiveFiles(root.FS(), paths, MaxFileBytes)
 	if err != nil {
 		return Candidate{}, err
 	}
@@ -92,7 +92,7 @@ func (m *Manager) PreviewDirectory(kind Kind, directory string) (Candidate, erro
 
 // Source collection follows its distribution list; installed exports collect
 // every frozen file so their content identity survives an export/import roundtrip.
-func readPackageFiles(root fs.FS, paths []string) (map[string][]byte, error) {
+func readArchiveFiles(root fs.FS, paths []string, fileLimit int) (map[string][]byte, error) {
 	files := map[string][]byte{}
 	total := 0
 	for _, path := range paths {
@@ -124,19 +124,19 @@ func readPackageFiles(root fs.FS, paths []string) (map[string][]byte, error) {
 			if _, exists := files[name]; exists {
 				return nil
 			}
-			if len(files) >= MaxPackageFiles || info.Size() > MaxFileBytes || int64(total)+info.Size() > MaxPackageBytes {
+			if len(files) >= MaxPackageFiles || info.Size() > int64(fileLimit) || int64(total)+info.Size() > MaxPackageBytes {
 				return failure("LIMIT_EXCEEDED", "Package exceeds file or byte limit")
 			}
 			file, err := root.Open(name)
 			if err != nil {
 				return err
 			}
-			data, err := io.ReadAll(io.LimitReader(file, MaxFileBytes+1))
+			data, err := io.ReadAll(io.LimitReader(file, int64(fileLimit)+1))
 			_ = file.Close()
 			if err != nil {
 				return err
 			}
-			if len(data) > MaxFileBytes || total+len(data) > MaxPackageBytes {
+			if len(data) > fileLimit || total+len(data) > MaxPackageBytes {
 				return failure("LIMIT_EXCEEDED", "Package changed beyond byte limit")
 			}
 			files[name] = data
@@ -169,10 +169,10 @@ func readPackageZIP(raw []byte) (map[string][]byte, error) {
 	if len(reader.File) > MaxPackageFiles {
 		return nil, failure("LIMIT_EXCEEDED", "Archive exceeds entry limits")
 	}
-	return readPackageEntries(reader.File)
+	return readPackageEntries(reader.File, MaxFileBytes)
 }
 
-func readPackageEntries(entries []*zip.File) (map[string][]byte, error) {
+func readPackageEntries(entries []*zip.File, fileLimit int) (map[string][]byte, error) {
 	files := map[string][]byte{}
 	seen := map[string]bool{}
 	total := 0
@@ -191,20 +191,20 @@ func readPackageEntries(entries []*zip.File) (map[string][]byte, error) {
 		if file.FileInfo().IsDir() {
 			continue
 		}
-		if len(files) >= MaxPackageFiles || file.UncompressedSize64 > MaxFileBytes {
+		if len(files) >= MaxPackageFiles || file.UncompressedSize64 > uint64(fileLimit) {
 			return nil, failure("LIMIT_EXCEEDED", "Archive exceeds file limits")
 		}
 		stream, err := file.Open()
 		if err != nil {
 			return nil, err
 		}
-		data, err := io.ReadAll(io.LimitReader(stream, MaxFileBytes+1))
+		data, err := io.ReadAll(io.LimitReader(stream, int64(fileLimit)+1))
 		_ = stream.Close()
 		if err != nil {
 			return nil, err
 		}
 		total += len(data)
-		if len(data) > MaxFileBytes || total > MaxPackageBytes {
+		if len(data) > fileLimit || total > MaxPackageBytes {
 			return nil, failure("LIMIT_EXCEEDED", "Archive exceeds byte limits")
 		}
 		files[name] = data

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Masterminds/semver/v3"
 	"io"
 	"log/slog"
 	"net/http"
@@ -33,6 +34,13 @@ func startBackend(runtime *Runtime, owner *activation) (*backendProcess, error) 
 	node, err := exec.LookPath("node")
 	if err != nil {
 		return nil, failure("NOT_CONFIGURED", "Node.js is required to run %s", owner.release.Manifest.ID)
+	}
+	versionContext, versionCancel := context.WithTimeout(runtime.ctx, 3*time.Second)
+	versionOutput, versionErr := exec.CommandContext(versionContext, node, "--version").Output()
+	versionCancel()
+	version, parseErr := semver.NewVersion(strings.TrimSpace(string(versionOutput)))
+	if versionErr != nil || parseErr != nil || version.Major() < 22 {
+		return nil, failure("NOT_CONFIGURED", "Node.js 22 or newer is required to run %s", owner.release.Manifest.ID)
 	}
 	tempDir, err := os.MkdirTemp("", "denova-runtime-")
 	if err != nil {

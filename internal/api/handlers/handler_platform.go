@@ -42,6 +42,9 @@ func (h *Handlers) HandlePlatformManagement(ctx context.Context, c *hertzapp.Req
 			c.JSON(200, result)
 		}
 	}
+	if handlePlatformPluginActions(ctx, c, manager, parts, decode, respond) {
+		return
+	}
 	if len(parts) == 1 && parts[0] == "catalog" && method == "GET" {
 		respond(h.app.ResourceExchange().ExtensionCatalog(ctx))
 		return

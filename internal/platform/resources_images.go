@@ -94,7 +94,7 @@ func (s *ResourceService) serveImages(w http.ResponseWriter, request *http.Reque
 			writeError(w, err)
 			return
 		}
-		result, err := s.startImage(runtime, caller, input)
+		result, err := s.startImage(request.Context(), runtime, caller, input)
 		if err != nil {
 			writeError(w, err)
 			return
@@ -168,7 +168,7 @@ func (s *ResourceService) imageReceipt(key string) (imageReceipt, error) {
 	return receipt, nil
 }
 
-func (s *ResourceService) startImage(runtime *Runtime, caller *activation, input ImageRequest) (ImageResult, error) {
+func (s *ResourceService) startImage(requestContext context.Context, runtime *Runtime, caller *activation, input ImageRequest) (ImageResult, error) {
 	if !validImageCommand(input.CommandID) || strings.TrimSpace(input.Prompt) == "" || len(input.Prompt) > 64<<10 {
 		return ImageResult{}, failure("INVALID_ARGUMENT", "Image command is required and prompt must contain 1 to 65536 bytes")
 	}
@@ -211,7 +211,7 @@ func (s *ResourceService) startImage(runtime *Runtime, caller *activation, input
 	if err := runtime.ctx.Err(); err != nil {
 		return ImageResult{}, err
 	}
-	ctx, cancel := context.WithCancel(runtime.ctx)
+	ctx, cancel := context.WithCancel(runtime.executionContext(requestContext))
 	operation := &imageOperation{runtime: runtime, ctx: ctx, cancel: cancel, done: make(chan struct{}), receipt: imageReceipt{
 		Version: 1, InputHash: hash, Result: ImageResult{CommandID: input.CommandID, Status: "running", Images: []GeneratedImage{}},
 	}}

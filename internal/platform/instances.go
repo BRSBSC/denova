@@ -306,12 +306,11 @@ type PackageAvailability struct {
 	Removed bool `json:"removed"`
 }
 
-// Disabling blocks new activations while current journeys and tasks finish.
-// Removal explicitly stops affected runtimes, retaining releases and saves.
+// Disabling or removal revokes affected runtimes, retaining releases and saves.
 func (m *Manager) SetAvailability(ctx context.Context, kind Kind, id string, state PackageAvailability) error {
 	m.runtimeMu.Lock()
 	defer m.runtimeMu.Unlock()
-	if state.Removed {
+	if state.Removed || !state.Enabled {
 		for key, runtime := range m.runtimes {
 			if runtime.uses(kind, id) {
 				if err := m.stopLocked(ctx, key); err != nil {

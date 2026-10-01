@@ -1,0 +1,6 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="style.css"></head><body><main>
+<h1 data-label="title"></h1><p data-label="help"></p><nav><button id="library" data-label="library"></button><button id="save" data-label="save"></button><button id="reload" data-label="reload"></button></nav>
+<form id="add"><label><span data-label="name"></span><input id="name" required maxlength="120"></label><button data-label="add"></button></form>
+<form id="link"><label><span data-label="from"></span><select id="from"></select></label><label><span data-label="to"></span><select id="to"></select></label><button data-label="link"></button></form>
+<p id="status" role="status"></p><svg viewBox="0 0 800 480" role="img" id="map"></svg><ul id="nodes"></ul>
+</main><script type="module" src="view.mjs"></script></body></html>

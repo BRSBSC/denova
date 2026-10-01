@@ -1,13 +1,12 @@
 import { ResourceExchangeActions } from '@/features/market/ResourceExchangeActions'
 import { closeMobilePanes } from '@/components/layout/mobile-pane-events'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookMarked, Bot, Database, LayoutGrid, SlidersHorizontal, Sparkles, Tags, Trash2 } from 'lucide-react'
+import { BookMarked, Bot, Database, LayoutGrid, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
 import { APIError, createProjectLoreItem, deleteProjectLoreItem, getProjectLoreItems, loreImageURL, readOptionalProjectFile, readProjectFile, type LoreItem } from '@/lib/api'
 import { rebaseJSONValue, rebaseText } from '@/lib/three-way-rebase'
 import { rebaseJSONWithRecovery, rebaseTextWithRecovery } from '@/lib/autosave/rebase-with-recovery'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ConfigManagerChat } from '@/components/Chat/ConfigManagerChat'
 import { ConfigManagerToggle } from '@/components/Chat/ConfigManagerToggle'
@@ -20,7 +19,6 @@ import { ResourceWorkspace, useResponsiveAgentOpen } from '@/components/layout/r
 import { FeaturePageShell } from '@/components/layout/feature-page-shell'
 import { ResourceDirectory } from '@/components/resource-directory/ResourceDirectory'
 import type { ResourceDirectoryBadge, ResourceDirectoryItem, ResourceDirectorySection } from '@/components/resource-directory/types'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { INTERACTIVE_OPENING_PRESET_PATH, INTERACTIVE_OPENING_PRESET_UPDATED_EVENT, INTERACTIVE_OPENING_PRESET_ENTRY_ID, LEGACY_INTERACTIVE_OPENING_PRESET_PATH, parseBookOpeningPresets, serializeBookOpeningPresets, type BookOpeningPreset } from '../opening'
 import type { GamePlanningTemplate, ImagePreset, Teller } from '../types'
 import { CreatorDirectory, CreatorEditor } from './setting-panel/CreatorEditor'
@@ -37,7 +35,9 @@ import { hasLoreProtagonistTag } from '@/features/lore/tags'
 import { LORE_UPDATED_EVENT, notifyLoreUpdated, type LoreUpdatedDetail } from '@/features/lore/events'
 import { useProjectFileAutosave } from './setting-panel/use-project-file-autosave'
 import { EMPTY_IMAGE_PRESETS, EMPTY_STORY_DIRECTORS, EMPTY_TELLERS } from './setting-panel/presetResources'
-import { KNOWLEDGE_SECTIONS, sectionItems, type KnowledgeSection, type LoreLoadModeFilter } from '@/features/lore/knowledge-sections'
+import { KNOWLEDGE_SECTIONS, sectionItems, type KnowledgeSection } from '@/features/lore/knowledge-sections'
+import { EMPTY_LORE_FILTERS, filterLoreItems, type LoreFilters } from '@/features/lore/lore-filters'
+import { LoreFiltersButton, LoreFilterSummary } from '@/features/lore/LoreFilters'
 import { isProjectChangeForProject, type WorkspaceChangeEvent } from '@/features/changes/types'
 import type { DocumentReviewController, DocumentReviewNavigationIntent } from '@/features/document-review/controller'
 import type { DocumentReviewSnapshot } from '@/components/Editor/documentReviewAnchors'
@@ -129,7 +129,8 @@ function LoreSettingPanel({
   const [draft, setDraft] = useState<LoreItem | null>(null)
   const [tagDraft, setTagDraft] = useState('')
   const [query, setQuery] = useState('')
-  const [loadModeFilter, setLoadModeFilter] = useState<LoreLoadModeFilter>('all')
+  const [filters, setFilters] = useState<LoreFilters>(EMPTY_LORE_FILTERS)
+  const filteredItems = useMemo(() => filterLoreItems(items, filters, query, projectId), [items, filters, query, projectId])
   const [creatorContent, setCreatorContent] = useState('')
   const [creatorRevision, setCreatorRevision] = useState('')
   const [creatorProjectId, setCreatorProjectId] = useState('')
@@ -344,6 +345,7 @@ function LoreSettingPanel({
     setTagDraft('')
     loreBaselineDraftRef.current = null
     setQuery('')
+    setFilters(EMPTY_LORE_FILTERS)
     void loadLoreItems()
   }, [loadLoreItems])
 
@@ -768,49 +770,14 @@ function LoreSettingPanel({
       : isOpeningPresetActive
         ? t('settingPanel.openingPreset.subtitle')
         : editorSubtitle(draft, t)
-  const loadModeFilterLabel = loadModeFilter === 'resident'
-    ? t('settingPanel.lore.loadModeFilter.resident')
-    : loadModeFilter === 'on_demand'
-      ? t('settingPanel.lore.loadModeFilter.onDemand')
-      : t('settingPanel.lore.loadModeFilter.all')
-  const loadModeFilterAriaLabel = `${t('settingPanel.lore.loadModeFilter')}: ${loadModeFilterLabel}`
-  const loreDirectorySections: ResourceDirectorySection[] = KNOWLEDGE_SECTIONS.map((section) => ({
+  const loreDirectorySections: ResourceDirectorySection[] = KNOWLEDGE_SECTIONS.filter((section) => filters.category === 'all' || section.id === filters.category).map((section) => ({
     id: section.id,
     label: t(section.labelKey),
     icon: section.icon,
-    items: sectionItems(items, section, query, loadModeFilter).map((item) => loreItemToDirectoryItem(item, projectId, t)),
+    items: sectionItems(filteredItems, section).map((item) => loreItemToDirectoryItem(item, projectId, t)),
     onCreate: () => void handleCreateLore(section),
     createLabel: `${t('chat.new')}${t(section.labelKey)}`,
   }))
-  const loreLoadModeFilterControl = (
-    <Select value={loadModeFilter} onValueChange={(value) => setLoadModeFilter(value as LoreLoadModeFilter)}>
-      <SelectTrigger
-        size="sm"
-        className={cn(
-          'size-7 justify-center border-0 p-0 shadow-none [&>svg:last-child]:hidden',
-          loadModeFilter !== 'all' && 'bg-muted text-foreground',
-        )}
-        aria-label={loadModeFilterAriaLabel}
-      >
-        <SlidersHorizontal />
-        <span className="sr-only">{loadModeFilterLabel}</span>
-      </SelectTrigger>
-      <SelectContent position="popper" align="end">
-        <SelectGroup>
-          <SelectItem value="all">{t('settingPanel.lore.loadModeFilter.all')}</SelectItem>
-          <SelectItem value="resident">{t('settingPanel.lore.loadModeFilter.resident')}</SelectItem>
-          <SelectItem value="on_demand">{t('settingPanel.lore.loadModeFilter.onDemand')}</SelectItem>
-        </SelectGroup>
-      </SelectContent>
-    </Select>
-  )
-  const loreDirectoryActions = (
-    <>
-      <Button className={iconActionClassName} variant="outline" size="icon" disabled={saving || items.length === 0} onClick={() => setLoreClassificationOpen(true)} aria-label={t('settingPanel.loreClassification.open')}>
-        <Tags data-icon="inline-start" />
-      </Button>
-    </>
-  )
   const directoryPanel = (
     <div className="nova-sidebar flex h-full min-h-0 flex-col bg-[var(--nova-surface-2)]">
       {activeMode === 'lore' ? (
@@ -838,8 +805,8 @@ function LoreSettingPanel({
             query={query}
             onQueryChange={setQuery}
             filterItem={() => true}
-            searchAccessory={loreLoadModeFilterControl}
-            headerActions={loreDirectoryActions}
+            headerActions={<LoreFiltersButton presentation="icon" items={items} filters={filters} onChange={setFilters} />}
+            searchDetails={<LoreFilterSummary filters={filters} onChange={setFilters} query={query} onQueryChange={setQuery} matched={filteredItems.length} total={items.length} />}
             emptySectionsLast
           />
         )
@@ -947,6 +914,11 @@ function LoreSettingPanel({
                       key={projectId}
                       projectId={projectId}
                       items={items}
+                      filteredItems={filteredItems}
+                      filters={filters}
+                      onFiltersChange={setFilters}
+                      onOrganizeTypes={() => setLoreClassificationOpen(true)}
+                      organizingDisabled={saving}
                       query={query}
                       onQueryChange={setQuery}
                       onSelect={(id) => void handleSelectLore(id)}

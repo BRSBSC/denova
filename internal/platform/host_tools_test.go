@@ -284,9 +284,9 @@ func TestSharedPluginChangesApplyToNewExecutions(t *testing.T) {
 	if err != nil || disabled != nil {
 		t.Fatalf("disabled plugin is still available: %v", err)
 	}
-	// Disabling admits no new work, but an already prepared task may finish.
-	if _, err := currentTools[0].Tool.Run(ctx, `{"text":"A B"}`); err != nil {
-		t.Fatal(err)
+	// Disabling revokes already prepared tasks as well as new admission.
+	if _, err := currentTools[0].Tool.Run(ctx, `{"text":"A B"}`); err == nil {
+		t.Fatal("disabled plugin retained execution authority")
 	}
 	if err := m.SetAvailability(ctx, Plugin, release.Manifest.ID, PackageAvailability{Removed: true}); err != nil {
 		t.Fatal(err)

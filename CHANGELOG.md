@@ -29,8 +29,8 @@ Denova records only major user-visible features, important compatibility or data
 - Added unified extension management and workbench development: install games and plugins from GitHub or local files, check upstream updates, enable, configure through forms, create, build, preview and export.
 - 游戏页支持在新建故事线时选择已安装游戏、设置默认游戏，并按故事线保存和恢复各自的进度；游戏可使用工具插件与私有 NPC。
 - Games now supports installed game types and a default game during storyline creation, with separate persistent saves, shared tool plugins and private NPCs.
-- 扩展页统一管理插件工具，启用后自动供写作、工作台、内置游戏及委派 Agent 使用；后续任务采用当前安装版本及对应设置，沿用现有审批方式。
-- Manage plugin tools in Extensions and make enabled tools available to Writing, Workbench, built-in Game and delegated Agents. New tasks use the installed versions and their settings with existing approval policies.
+- 插件支持按场景供 Agent 使用的工具、无需模型的用户命令和独立面板，可组合资料库、文本与图像生成、项目内容保存及导入导出；项目可独立停用插件并配置模型，关闭与撤权按使用范围停止任务。
+- Plugins support context-specific Agent tools, direct user commands and independent panels, combining Lore, text and image generation, and Project content persistence and transfer. Projects can disable plugins and bind models; closing or revoking access stops the owned work.
 
 ### Fixed / 修复
 

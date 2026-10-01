@@ -67,8 +67,8 @@ func validateManifest(kind Kind, files map[string][]byte) (Manifest, error) {
 	if m.ManifestVersion != 1 {
 		return m, failure("UNSUPPORTED", "Unsupported manifest version %d", m.ManifestVersion)
 	}
-	if m.APIMajor != APIMajor {
-		return m, failure("API_INCOMPATIBLE", "Package %s needs API %d; host provides %d", m.ID, m.APIMajor, APIMajor)
+	if err := compatibleManifest(m); err != nil {
+		return m, err
 	}
 	if err := validateID(m.ID); err != nil {
 		return m, err
@@ -198,6 +198,9 @@ func validateManifest(kind Kind, files map[string][]byte) (Manifest, error) {
 	permissions := map[string]bool{}
 	slots := map[string]bool{}
 	for _, slot := range m.ModelSlots {
+		if kind == Plugin && slot.Kind != "image" {
+			return m, failure("INVALID_ARGUMENT", "Plugin model slots support images; text uses builtin/assistant")
+		}
 		if err := validateID(slot.ID); err != nil {
 			return m, err
 		}
@@ -210,7 +213,7 @@ func validateManifest(kind Kind, files map[string][]byte) (Manifest, error) {
 		}
 	}
 	for _, permission := range append(slices.Clone(m.Permissions.Required), m.Permissions.Optional...) {
-		if !slices.Contains([]string{"agents.run", "tools.invoke", "tools.write", "gameData", "pluginData", "library.read", "library.write", "assets.read", "assets.write", "images.generate", "stories.read", "stories.write", "settings.write"}, permission) {
+		if !slices.Contains(supportedPermissions, permission) {
 			return m, failure("UNSUPPORTED", "Unsupported permission %s", permission)
 		}
 		if permissions[permission] {
@@ -260,6 +263,9 @@ func validateManifest(kind Kind, files map[string][]byte) (Manifest, error) {
 		return nil
 	}
 	for _, tool := range c.Tools {
+		if err := validContexts(tool.AgentContexts, false); err != nil {
+			return m, err
+		}
 		if err := addID(tool.ID); err != nil {
 			return m, err
 		}
@@ -329,6 +335,28 @@ func validateManifest(kind Kind, files map[string][]byte) (Manifest, error) {
 			return failure("INVALID_ARGUMENT", "Reference %s is not covered by requires", ref)
 		}
 		return nil
+	}
+	if err := validateUIContributions(kind, m, views, localeKeys, addID, func(ref string) error { return checkRef(ref, tools) }); err != nil {
+		return m, err
+	}
+	for _, command := range c.Commands {
+		if command.Target.Kind != "tool" {
+			continue
+		}
+		id := strings.TrimPrefix(command.Target.ID, m.ID+"/")
+		for _, tool := range c.Tools {
+			if tool.ID != id {
+				continue
+			}
+			var definition ToolDefinition
+			data, _ := read(tool.Definition) // Already decoded and validated above.
+			_ = json.Unmarshal(data, &definition)
+			var schema map[string]any
+			_ = json.Unmarshal(definition.InputSchema, &schema)
+			if err := localizeFormSchema(schema, localeKeys, "", toolInputFormSchema); err != nil {
+				return m, err
+			}
+		}
 	}
 	for _, entry := range m.privateAgents() {
 		data, err := read(entry.Definition)

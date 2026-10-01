@@ -1,5 +1,6 @@
 import { closeMobilePanes, showMobileWritingView } from '@/components/layout/mobile-pane-events'
 import { memo } from 'react'
+import { PluginActionsButton } from '@/features/platform/PluginWorkspace'
 import { useTranslation } from 'react-i18next'
 import { LoadingState } from '@/components/common/LoadingState'
 import { SearchPanel } from '@/components/Sidebar/SearchPanel'
@@ -89,6 +90,7 @@ export const WritingSidebar = memo(function WritingSidebar({
   return (
     <section className="nova-sidebar flex h-full flex-col border-r">
       <div data-slot="writing-sidebar-view-switcher" className="px-3 pt-2">
+        {projectId && <PluginActionsButton projectId={projectId} context="writing" />}
         <div className="grid grid-cols-3 gap-1">
           {(['outline', 'files', 'search'] as const).map((view) => (
             <button

@@ -40,3 +40,13 @@ export async function readJSON(request) {
   for await (const chunk of request) { size += chunk.length; if (size > 1048576) throw new Error('Request too large'); chunks.push(chunk); }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
+
+// Forward the invoking page/command owner when a backend calls host services.
+// The bearer still comes exclusively from the backend's stdin bootstrap.
+export function requestHost(bootstrap, request, path, options = {}) {
+  return fetch(bootstrap.connection.baseUrl + path, { ...options, headers: {
+    'Content-Type': 'application/json', ...options.headers,
+    Authorization: `Bearer ${bootstrap.connection.token}`,
+    ...(request.headers['x-denova-consumer'] ? { 'X-Denova-Consumer': request.headers['x-denova-consumer'] } : {}),
+  } });
+}

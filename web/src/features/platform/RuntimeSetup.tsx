@@ -36,12 +36,14 @@ export function RuntimeSetup({
   onChange,
   projectLocked = false,
   configurationEndpoint,
+  modelRequirements,
 }: {
   manifest?: Manifest
   value: Setup
   onChange: (value: Setup) => void
   projectLocked?: boolean
   configurationEndpoint?: string
+  modelRequirements?: RuntimeSetupDocument['models']
 }) {
   const { t, i18n } = useTranslation()
   const inputId = useId()
@@ -55,7 +57,7 @@ export function RuntimeSetup({
     queryKey: ['platform', 'settings'],
     queryFn: fetchSettings,
   })
-  const slots = form.data?.models ?? []
+  const slots = modelRequirements ?? form.data?.models ?? []
   const profiles = modelProfilesWithDefault(settings.data?.effective).filter(
     (profile): profile is typeof profile & { id: string } => !!profile.id,
   )
@@ -93,19 +95,20 @@ export function RuntimeSetup({
             {slot.required ? ` (${t('platform.required')})` : ''}
           </FieldLabel>
           <Select
-            value={value.models[slot.key] ?? ''}
-            onValueChange={(profile) =>
-              onChange({
-                ...value,
-                models: { ...value.models, [slot.key]: profile },
-              })
-            }
+            value={value.models[slot.key] ?? (slot.required ? '' : '__unconfigured')}
+            onValueChange={(profile) => {
+              const models = { ...value.models }
+              if (profile === '__unconfigured') delete models[slot.key]
+              else models[slot.key] = profile
+              onChange({ ...value, models })
+            }}
           >
             <SelectTrigger id={inputId + '-model-' + index} className="w-full">
               <SelectValue placeholder={t('platform.selectModel')} />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
+                {!slot.required && <SelectItem value="__unconfigured">{t('platform.selectModel')}</SelectItem>}
                 {(slot.kind === 'image' ? imageProfiles : profiles).map((profile) => (
                   <SelectItem key={profile.id} value={profile.id}>
                     {profile.name || profile.id}

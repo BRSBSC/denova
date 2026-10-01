@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CheckCheck, ImagePlus, ListChecks, Plus, Search, Sparkles, Trash2, X } from 'lucide-react'
+import { CheckCheck, ImagePlus, ListChecks, MoreHorizontal, Plus, Search, Sparkles, Tags, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -15,21 +14,12 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   createVersion,
   deleteProjectLoreItem,
   getVersionStatus,
-  loreImageURL,
   type LoreItem,
   type LoreItemImageGenerateRequest,
 } from '@/lib/api'
@@ -41,6 +31,8 @@ import { LoreCoverDialog } from './LoreCoverDialog'
 import { LoreMaterialGenerateDialog } from './LoreMaterialGenerateDialog'
 import { notifyLoreUpdated } from './events'
 import type { LoreBatchImageMode } from './lore-image-task'
+import { LoreFiltersButton, LoreFilterSummary } from './LoreFilters'
+import type { LoreFilters } from './lore-filters'
 
 export const LORE_OVERVIEW_ID = '__lore_overview__'
 
@@ -66,6 +58,9 @@ function readCardSize(): LoreCardSize {
 export function LoreLibrary({
   projectId,
   items,
+  filteredItems,
+  filters,
+  onFiltersChange,
   query,
   onQueryChange,
   onSelect,
@@ -73,15 +68,22 @@ export function LoreLibrary({
   onChanged,
   onReload,
   onGenerate,
+  onOrganizeTypes,
+  organizingDisabled,
 }: {
   projectId: string
   items: LoreItem[]
+  filteredItems: LoreItem[]
+  filters: LoreFilters
+  onFiltersChange: (filters: LoreFilters) => void
   query: string
   onQueryChange: (query: string) => void
   onSelect: (id: string) => void
   onCreate: (section: KnowledgeSection) => void
   onChanged: (item: LoreItem) => void
   onReload: () => Promise<void>
+  onOrganizeTypes: () => void
+  organizingDisabled: boolean
   onGenerate: (
     ids: string[],
     request: LoreItemImageGenerateRequest,
@@ -92,8 +94,6 @@ export function LoreLibrary({
   const imageConfigured = useImageModelConfigured(projectId)
   // Density is a browser preference shared by writing and game libraries.
   const [cardSize, setCardSize] = useState(readCardSize)
-  const [category, setCategory] = useState('all')
-  const [cover, setCover] = useState('all')
   const [selecting, setSelecting] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [coverTarget, setCoverTarget] = useState<{ id: string; action: LoreCoverAction } | null>(
@@ -104,21 +104,16 @@ export function LoreLibrary({
   const [generationMode, setGenerationMode] = useState<LoreBatchImageMode>('missing_covers')
   const [busy, setBusy] = useState(false)
   const selected = useMemo(
-    () => items.filter((item) => selectedIds.includes(item.id)),
-    [items, selectedIds],
+    () => filteredItems.filter((item) => selectedIds.includes(item.id)),
+    [filteredItems, selectedIds],
   )
   const sections = useMemo(
     () =>
-      KNOWLEDGE_SECTIONS.filter((section) => category === 'all' || section.id === category).map(
-        (section) => ({
-          ...section,
-          items: sectionItems(items, section, query).filter(
-            (item) =>
-              cover === 'all' || Boolean(loreImageURL(projectId, item)) === (cover === 'with'),
-          ),
-        }),
-      ),
-    [category, cover, items, projectId, query],
+      KNOWLEDGE_SECTIONS.map((section) => ({
+        ...section,
+        items: sectionItems(filteredItems, section),
+      })),
+    [filteredItems],
   )
   const visible = sections.flatMap((section) => section.items)
   const coverItem = items.find((item) => item.id === coverTarget?.id)
@@ -126,7 +121,7 @@ export function LoreLibrary({
     setSelectedIds((ids) => (ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]))
   useEffect(() => {
     setSelectedIds([])
-  }, [category, cover, query])
+  }, [filters, query])
 
   const deleteSelected = async () => {
     if (!deleteTargets) return
@@ -168,7 +163,6 @@ export function LoreLibrary({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-semibold tracking-tight">{t('lore.library.title')}</h1>
-            <Badge variant="outline">{items.length}</Badge>
           </div>
           <div className="flex flex-wrap gap-2">
             <DropdownMenu>
@@ -201,6 +195,20 @@ export function LoreLibrary({
               {selecting ? <X data-icon="inline-start" /> : <ListChecks data-icon="inline-start" />}
               {t(selecting ? 'lore.library.exitSelection' : 'lore.library.batch')}
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon-sm" variant="ghost" aria-label={t('lore.library.more')} title={t('lore.library.more')}>
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem disabled={organizingDisabled || !items.length} onSelect={onOrganizeTypes}>
+                    <Tags />{t('settingPanel.loreClassification.open')}
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -215,36 +223,7 @@ export function LoreLibrary({
               aria-label={t('lore.library.search')}
             />
           </InputGroup>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger aria-label={t('lore.library.category')}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">{t('lore.library.allCategories')}</SelectItem>
-                {KNOWLEDGE_SECTIONS.map((section) => (
-                  <SelectItem key={section.id} value={section.id}>
-                    {t(section.labelKey)}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <ToggleGroup
-            type="single"
-            value={cover}
-            onValueChange={(value) => value && setCover(value)}
-            variant="outline"
-            size="sm"
-            spacing={0}
-            aria-label={t('lore.library.coverFilter')}
-          >
-            {['all', 'with', 'without'].map((value) => (
-              <ToggleGroupItem value={value} key={value}>
-                {t(`lore.library.cover.${value}`)}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+          <LoreFiltersButton items={items} filters={filters} onChange={onFiltersChange} />
           <ToggleGroup
             type="single"
             value={cardSize}
@@ -270,6 +249,7 @@ export function LoreLibrary({
             ))}
           </ToggleGroup>
         </div>
+        <LoreFilterSummary filters={filters} onChange={onFiltersChange} query={query} onQueryChange={onQueryChange} matched={visible.length} total={items.length} />
         {selecting && (
           <div
             className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border bg-background p-3"
@@ -356,18 +336,6 @@ export function LoreLibrary({
                 {t(items.length ? 'lore.library.noMatchesHint' : 'lore.library.emptyHint')}
               </EmptyDescription>
             </EmptyHeader>
-            {!!items.length && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  onQueryChange('')
-                  setCategory('all')
-                  setCover('all')
-                }}
-              >
-                {t('lore.library.clearFilters')}
-              </Button>
-            )}
           </Empty>
         )}
       </div>

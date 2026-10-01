@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"maps"
 	"slices"
 	"sort"
 	"sync"
@@ -39,64 +40,81 @@ func (m *Manager) HostAgentTools(cfg *config.Config, agentKind string) (agent.To
 	if err != nil {
 		return nil, err
 	}
-	manifest := Manifest{}
-	providers := []string{}
-	for _, item := range items {
-		if !item.Enabled || item.Removed {
-			continue
-		}
-		release, _, err := m.release(ReleaseRef{Package: PackageRef{Kind: Plugin, ID: item.ID}, ReleaseID: item.CurrentRelease})
-		if err != nil {
-			return nil, err
-		}
-		if len(release.Manifest.Contributes.Tools) == 0 {
-			continue
-		}
-		// An unavailable optional extension must not prevent ordinary Agent
-		// work. The Extensions catalog exposes the same dependency failure.
-		if _, err := m.resolveDependencies(release.Manifest, nil); err != nil {
-			slog.Warn("platform_agent_plugin_unavailable", "plugin", item.ID, "error", err)
-			continue
-		}
-		if !slices.Contains(release.Grants, "tools.invoke") {
-			slog.Warn("platform_agent_plugin_unavailable", "plugin", item.ID, "reason", "tools.invoke permission is missing")
-			continue
-		}
-		contributions := make([]string, 0, len(release.Manifest.Contributes.Tools))
-		for _, tool := range release.Manifest.Contributes.Tools {
-			contributions = append(contributions, tool.ID)
-		}
-		providers = append(providers, item.ID)
-		manifest.Requires = append(manifest.Requires, Dependency{PluginID: item.ID, VersionRange: "=" + release.Manifest.Version, Contributions: contributions})
-	}
-	if len(providers) == 0 {
-		return nil, nil
-	}
-	dependencies, err := m.resolveDependencies(manifest, nil)
+	projectConfig, err := m.ProjectConfiguration(scope.ProjectID)
 	if err != nil {
 		return nil, err
 	}
-	releases := make(map[string]Release, len(dependencies))
-	settings := make(map[string]map[string]any, len(dependencies))
-	for _, dependency := range dependencies {
-		release, _, err := m.release(ReleaseRef{Package: PackageRef{Kind: Plugin, ID: dependency.PluginID}, ReleaseID: dependency.ReleaseID})
-		if err != nil {
-			return nil, err
-		}
-		values, err := m.settingsValues(release, "installed", nil)
-		if err != nil {
-			return nil, err
-		}
-		releases[dependency.PluginID], settings[dependency.PluginID] = release, values
+	consumerContext := ContextGeneral
+	switch agentKind {
+	case config.AgentKindIDE:
+		consumerContext = ContextWriting
+	case config.AgentKindInteractiveStory:
+		consumerContext = ContextGame
 	}
+	models := maps.Clone(projectConfig.Extensions.Models)
 	profileID := config.ResolveAgentModel(cfg, agentKind).ProfileID
 	if profileID == "" {
 		profileID = "default"
 	}
-	return &hostPluginToolset{manager: m, providers: providers, releases: releases, settings: settings, scope: scope, models: map[string]string{"builtin/assistant": profileID}}, nil
+	models["builtin/assistant"] = profileID
+	set := &hostPluginToolset{manager: m, context: consumerContext, releases: map[string]Release{}, settings: map[string]map[string]any{}, scope: scope, models: models}
+	for _, item := range items {
+		if !item.Enabled || item.Removed || slices.Contains(projectConfig.Extensions.DisabledPlugins, item.ID) {
+			continue
+		}
+		release, _, err := m.release(ReleaseRef{Package: PackageRef{Kind: Plugin, ID: item.ID}, ReleaseID: item.CurrentRelease})
+		if err == nil && !slices.ContainsFunc(release.Manifest.contributions().Tools, func(tool Tool) bool { return slices.Contains(tool.AgentContexts, consumerContext) }) {
+			continue
+		}
+		var pins []DependencyPin
+		if err == nil {
+			pins, err = m.resolveDependencies(release.Manifest, nil)
+		}
+		var releases map[string]Release
+		var settings map[string]map[string]any
+		if err == nil {
+			releases, settings, err = m.pluginBindings(release, pins)
+		}
+		if err == nil {
+			for id := range releases {
+				if slices.Contains(projectConfig.Extensions.DisabledPlugins, id) {
+					err = failure("DEPENDENCY_UNAVAILABLE", "Plugin %s is disabled in this Project", id)
+					break
+				}
+			}
+		}
+		if err == nil && !slices.Contains(release.Grants, "tools.invoke") {
+			err = failure("PERMISSION_DENIED", "tools.invoke is not granted")
+		}
+		if err == nil {
+			err = m.validateModels(release, pins, scope.ProjectID, models)
+		}
+		if err == nil {
+			for _, tool := range release.Manifest.contributions().Tools {
+				if !slices.Contains(tool.AgentContexts, consumerContext) {
+					continue
+				}
+				if _, err = m.agentTool(release, tool, settings[item.ID], nil); err != nil {
+					break
+				}
+			}
+		}
+		if err != nil {
+			slog.Warn("platform_agent_plugin_unavailable", "plugin", item.ID, "release", item.CurrentRelease, "scope", scope, "error", err)
+			continue
+		}
+		set.providers = append(set.providers, item.ID)
+		maps.Copy(set.releases, releases)
+		maps.Copy(set.settings, settings)
+	}
+	if len(set.providers) == 0 {
+		return nil, nil
+	}
+	return set, nil
 }
 
 type hostPluginToolset struct {
+	context   ContributionContext
 	manager   *Manager
 	providers []string
 	releases  map[string]Release
@@ -112,7 +130,7 @@ func (t *hostPluginToolset) Identity() agent.CapabilityIdentity {
 	for id, release := range t.releases {
 		configuration[id] = []any{release.Ref.ReleaseID, t.settings[id]}
 	}
-	raw, _ := json.Marshal(configuration)
+	raw, _ := json.Marshal([]any{configuration, t.providers, t.context, t.models})
 	return agent.CapabilityIdentity{Kind: "denova.plugin.tools", Version: 1, ConfigHash: stableID(string(raw))}
 }
 
@@ -124,15 +142,22 @@ func (t *hostPluginToolset) PrepareTools(ctx context.Context, request agent.Tool
 	definitions := []agent.ToolDefinition{}
 	for _, id := range t.providers {
 		release := t.releases[id]
+		prepared := []agent.ToolDefinition{}
 		for _, tool := range release.Manifest.Contributes.Tools {
+			if !slices.Contains(tool.AgentContexts, t.context) {
+				continue
+			}
 			definition, err := t.manager.agentTool(release, tool, t.settings[id], func(ctx context.Context, input json.RawMessage) (ToolResult, error) {
 				return invocation.invoke(ctx, id, tool.ID, input)
 			})
 			if err != nil {
-				return nil, err
+				slog.Warn("platform_agent_plugin_unavailable", "plugin", id, "operation", "prepare_tools", "error", err)
+				prepared = nil
+				break
 			}
-			definitions = append(definitions, definition)
+			prepared = append(prepared, definition)
 		}
+		definitions = append(definitions, prepared...)
 	}
 	return definitions, nil
 }
@@ -178,17 +203,6 @@ func (call *hostPluginInvocation) runtime(provider string) (*Runtime, error) {
 	m := call.toolset.manager
 	m.runtimeMu.Lock()
 	defer m.runtimeMu.Unlock()
-	// A disabled package may finish an admitted run; removal or changed grants
-	// revoke that admission even if its first tool has not started a process yet.
-	for id, admitted := range call.releases {
-		current, installed, err := m.release(admitted.Ref)
-		if err != nil {
-			return nil, err
-		}
-		if installed.Removed || !slices.Equal(current.Grants, admitted.Grants) {
-			return nil, failure("PERMISSION_DENIED", "Plugin %s authorization changed", id)
-		}
-	}
 	release := call.releases[provider]
 	// Resolve just this provider's graph using the already loaded releases.
 	pins := []DependencyPin{}
@@ -205,6 +219,18 @@ func (call *hostPluginInvocation) runtime(provider string) (*Runtime, error) {
 		}
 	}
 	add(release.Manifest)
+	// Revocation is checked only for this tool's graph; an unrelated plugin
+	// cannot invalidate another provider's already prepared invocation.
+	for _, pin := range append([]DependencyPin{{PluginID: provider, ReleaseID: release.Ref.ReleaseID}}, pins...) {
+		admitted := call.releases[pin.PluginID]
+		current, installed, err := m.release(admitted.Ref)
+		if err != nil {
+			return nil, err
+		}
+		if !installed.Enabled || installed.Removed || !slices.Equal(current.Grants, admitted.Grants) {
+			return nil, failure("PERMISSION_DENIED", "Plugin %s authorization changed", pin.PluginID)
+		}
+	}
 	sort.Slice(pins, func(i, j int) bool { return pins[i].PluginID < pins[j].PluginID })
 	id := "agent-" + randomToken()
 	runtime, err := m.startRuntime(id, release, call.toolset.scope, pins, RuntimeConfiguration{frozenSettings: call.settings}, call.toolset.models, OpenOptions{hostOnly: true})

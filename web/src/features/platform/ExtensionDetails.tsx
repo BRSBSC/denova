@@ -16,6 +16,7 @@ import { type ExtensionEntry } from './extension-directory'
 import { openExtensionSource, startExtensionGame } from './extension-navigation'
 import { InstalledExtensionSettings } from './InstalledExtensionSettings'
 import { GitHubInstallation } from './GitHubInstallation'
+import { PluginActionsButton } from './PluginWorkspace'
 
 export function ExtensionDetails({ entry, runtimes, active, dirty, onDirtyChange, onRefresh, onUpdate }: {
   entry: ExtensionEntry
@@ -65,7 +66,7 @@ export function ExtensionDetails({ entry, runtimes, active, dirty, onDirtyChange
               <FieldLabel htmlFor={enabledId} className="text-xs text-muted-foreground">{t(item.enabled ? 'platform.extensions.enabled' : 'platform.disabled')}</FieldLabel>
               <Switch id={enabledId} checked={item.enabled} disabled={busy} aria-label={t('platform.enableNamed', { name })} onCheckedChange={enabled => void run(async () => {
                 await management(`/packages/${item.kind}/${item.id}`, 'PATCH', { enabled }); onRefresh()
-                if (!enabled) toast.info(t('platform.disableKeepsRunning'))
+                if (!enabled) toast.info(t('platform.disabledStopped'))
               })} />
             </Field>
             <DropdownMenu>
@@ -80,6 +81,7 @@ export function ExtensionDetails({ entry, runtimes, active, dirty, onDirtyChange
           <span aria-hidden="true">·</span><span className="select-text [overflow-wrap:anywhere]">{item.id}</span>
         </div>
         <div className={'flex flex-wrap items-center gap-2' + (item.kind === 'game' ? ' @xl:col-span-2' : ' @xl:justify-end')}>
+          {item.kind === 'plugin' && <PluginActionsButton pluginId={item.id} label={t('platform.plugins.open')} />}
           {item.kind === 'game' && <Button size="lg" className="h-10 px-5 @xl:min-w-36" disabled={busy || !item.enabled || Boolean(item.unavailableReason) || !current} onClick={() => startExtensionGame(item.id)}><Play data-icon="inline-start" />{t('platform.extensions.startGame')}</Button>}
           {sources.length === 1 && <Button variant="outline" className="h-10 px-4 @xl:min-w-32" disabled={busy} onClick={() => void run(() => openExtensionSource(sources[0]))}><FolderOpen data-icon="inline-start" />{t('platform.openSource')}</Button>}
           {sources.length > 1 && <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" disabled={busy}><FolderOpen data-icon="inline-start" />{t('platform.openSource')}<ChevronDown data-icon="inline-end" /></Button></DropdownMenuTrigger>

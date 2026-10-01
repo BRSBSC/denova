@@ -258,17 +258,33 @@ func (m *Manager) gameSetup(release Release, supplied map[string]any) (map[strin
 // Localization affects only the management projection. Schema constraints and
 // model-visible definitions remain unchanged in the frozen package.
 func localizeConfiguration(value any, locales map[string]map[string]json.RawMessage, locale string) error {
+	return localizeFormSchema(value, locales, locale, configurationFormSchema)
+}
+
+type formSchemaPurpose int
+
+const (
+	configurationFormSchema formSchemaPurpose = iota
+	toolInputFormSchema
+)
+
+// Tool descriptions are English model instructions. A command form displays
+// only explicitly localized descriptions; its JSON Schema defaults remain valid.
+func localizeFormSchema(value any, locales map[string]map[string]json.RawMessage, locale string, purpose formSchemaPurpose) error {
 	switch node := value.(type) {
 	case map[string]any:
-		if _, exists := node["default"]; exists {
+		if _, exists := node["default"]; exists && purpose == configurationFormSchema {
 			return failure("INVALID_PACKAGE", "Configuration defaults belong in the TOML defaults file")
+		}
+		if purpose == toolInputFormSchema && node["x-descriptionKey"] == nil {
+			delete(node, "description")
 		}
 		if err := localizeConfigurationText(node, locales, locale, [][2]string{{"x-titleKey", "title"}, {"x-descriptionKey", "description"}}); err != nil {
 			return err
 		}
 		for key, child := range node {
 			switch key {
-			case "const", "enum", "examples", "x-titleKey", "x-descriptionKey", "title", "description":
+			case "const", "enum", "examples", "default", "x-titleKey", "x-descriptionKey", "title", "description":
 				// These contain literal values rather than nested schemas.
 				continue
 			case "properties", "$defs", "definitions", "patternProperties", "dependentSchemas":
@@ -280,19 +296,19 @@ func localizeConfiguration(value any, locales map[string]map[string]json.RawMess
 							return failure("INVALID_PACKAGE", "Configuration field %s requires x-titleKey", name)
 						}
 					}
-					if err := localizeConfiguration(field, locales, locale); err != nil {
+					if err := localizeFormSchema(field, locales, locale, purpose); err != nil {
 						return err
 					}
 				}
 			default:
-				if err := localizeConfiguration(child, locales, locale); err != nil {
+				if err := localizeFormSchema(child, locales, locale, purpose); err != nil {
 					return err
 				}
 			}
 		}
 	case []any:
 		for _, child := range node {
-			if err := localizeConfiguration(child, locales, locale); err != nil {
+			if err := localizeFormSchema(child, locales, locale, purpose); err != nil {
 				return err
 			}
 		}

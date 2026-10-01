@@ -1633,22 +1633,26 @@ html[data-nova-motion="off"] .shimmer {
 }
 
 .nova-agent-execution-content,
+.nova-resource-directory-content,
 .nova-tool-content {
   overflow: hidden;
 }
 
 .nova-agent-execution-content[data-state="open"],
+.nova-resource-directory-content[data-state="open"],
 .nova-tool-content[data-state="open"] {
   animation: nova-collapsible-expand var(--nova-motion-fast) var(--nova-panel-motion-ease);
 }
 
 .nova-agent-execution-content[data-state="closed"],
+.nova-resource-directory-content[data-state="closed"],
 .nova-tool-content[data-state="closed"] {
   animation: nova-collapsible-collapse var(--nova-motion-fast) var(--nova-panel-motion-ease);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .nova-agent-execution-content,
+  .nova-resource-directory-content,
   .nova-tool-content {
     animation-duration: 1ms !important;
   }

@@ -1,5 +1,6 @@
 import { lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookCreationProvider } from './book-creation'
+import { PluginWorkspaceProvider } from '@/features/platform/PluginWorkspace'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
 import { WRITING_COMPOSER_SETTING_DEFAULTS } from '@/components/Chat/AgentPanel'
@@ -820,6 +821,7 @@ export function ModeRouter(props: ModeRouterProps) {
   return (
     <TrajectoryNavigationProvider value={trajectoryNavigation}>
       <ToolNavigationProvider value={toolNavigation}>
+        <PluginWorkspaceProvider>
         <WorkbenchShell
           mode={mode}
           presentedLayout={presentedLayout}
@@ -846,6 +848,7 @@ export function ModeRouter(props: ModeRouterProps) {
           onDismissNotice={onDismissNotice}
         />
         {writingAgent.portal}
+        </PluginWorkspaceProvider>
       </ToolNavigationProvider>
     </TrajectoryNavigationProvider>
   )

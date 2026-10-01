@@ -10,7 +10,6 @@ import type { LucideIcon } from 'lucide-react'
 import type { LoreItem } from '@/lib/api'
 
 export type LoreType = LoreItem['type']
-export type LoreLoadModeFilter = 'all' | 'resident' | 'on_demand'
 
 export interface KnowledgeSection {
   id: string
@@ -78,34 +77,16 @@ export const KNOWLEDGE_SECTIONS: KnowledgeSection[] = [
   },
 ]
 
-/** 按分组归属 + 加载策略 + 搜索词过滤资料条目。 */
+/** Project lore items into the fixed directory groups. Browsing filters are applied first. */
 export function sectionItems(
   items: LoreItem[],
   section: KnowledgeSection,
-  query = '',
-  loadModeFilter: LoreLoadModeFilter = 'all',
 ) {
-  const normalizedQuery = query.trim().toLowerCase()
   return items.filter((item) => {
     if (!section.types.includes(item.type)) return false
-    if (loadModeFilter === 'resident' && item.load_mode !== 'resident')
-      return false
-    if (loadModeFilter === 'on_demand' && item.load_mode === 'resident')
-      return false
     const tags = item.tags || []
     if (section.tag && !tags.includes(section.tag)) return false
     if (section.excludeTag && tags.includes(section.excludeTag)) return false
-    if (normalizedQuery) {
-      const haystack = [
-        item.name,
-        item.brief_description || '',
-        item.content || '',
-        tags.join('\n'),
-      ]
-        .join('\n')
-        .toLowerCase()
-      if (!haystack.includes(normalizedQuery)) return false
-    }
     return true
   })
 }

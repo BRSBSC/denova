@@ -168,16 +168,11 @@ func TestSharedPluginSelectionPinsAndDisable(t *testing.T) {
 	if err := m.SetAvailability(context.Background(), Plugin, tool.Manifest.ID, PackageAvailability{Enabled: false}); err != nil {
 		t.Fatal(err)
 	}
-	if len(m.RuntimeSnapshots()) == 0 {
-		t.Fatal("disabling interrupted active runtimes")
+	if len(m.RuntimeSnapshots()) != 0 {
+		t.Fatal("disabled dependency retained active runtimes")
 	}
-	continued, err := m.OpenInstance(context.Background(), instance.ID, OpenOptions{ParentOrigin: "http://127.0.0.1:15173"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	status, data := testRequest(t, continued.Connection, "POST", "/tools/test.provider/probe/invoke", "", map[string]any{"input": map[string]string{"text": "A🌷中"}})
-	if status != 200 || !strings.Contains(string(data), `"value":3`) {
-		t.Fatalf("disabled dependency interrupted ongoing tool use: %d %s", status, data)
+	if _, err := m.OpenInstance(context.Background(), instance.ID, OpenOptions{ParentOrigin: "http://127.0.0.1:15173"}); err == nil {
+		t.Fatal("disabled dependency accepted a new activation")
 	}
 	catalog, err := m.Catalog()
 	if err != nil {

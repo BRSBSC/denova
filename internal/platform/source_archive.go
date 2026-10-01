@@ -42,7 +42,7 @@ func readGitHubSubtree(raw []byte, relative string) (map[string][]byte, error) {
 		selected.Name = name
 		entries = append(entries, &selected)
 	}
-	return readPackageEntries(entries)
+	return readPackageEntries(entries, MaxFileBytes)
 }
 
 func readGitHubArchive(raw []byte) (map[string][]byte, error) {

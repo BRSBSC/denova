@@ -24,6 +24,8 @@ async function installTool(request: APIRequestContext, name = 'Conversation plug
   const candidate = await candidates.json()
   const installed = await request.post('/api/platform/manage/packages/install', { data: { candidateId: candidate.candidateId, grants: manifest.permissions.required } })
   expect(installed.ok(), await installed.text()).toBe(true)
+  const enabled = await request.patch(`/api/platform/manage/packages/plugin/${manifest.id}`, { data: { enabled: true } })
+  expect(enabled.ok(), await enabled.text()).toBe(true)
   return { project, directory, release: await installed.json() }
 }
 
@@ -62,7 +64,7 @@ test('enabled plugin tools work in writing, workbench and game without conversat
   await expect.poll(async () => (await getStorySnapshot(request, story.id)).turns.at(-1)?.narrative).toContain('Plugin result adopted: 3.')
 
   await page.getByLabel('工作台侧边栏').getByRole('button', { name: '扩展', exact: true }).click()
-  await expect(page.getByText('启用后，写作、工作台和内置游戏 Agent 均可调用本插件的工具，无需单独配置会话。')).toBeVisible()
+  await expect(page.getByText('启用后，工具按插件声明的写作、游戏或通用场景供 Agent 使用，并遵循项目停用设置。')).toBeVisible()
   const article = page.getByRole('article').filter({ visible: true })
   await expect(article.getByText('下次任务开始时生效', { exact: true })).toBeVisible()
   for (const width of [390, 1440]) {
@@ -73,7 +75,7 @@ test('enabled plugin tools work in writing, workbench and game without conversat
   await request.patch('/api/settings', { data: { layer: 'user', changes: { language: 'en-US', theme: 'light' } } })
   await page.evaluate(() => { localStorage.setItem('theme', 'light'); localStorage.setItem('nova.locale.configured', 'en-US') })
   await page.reload()
-  await expect(page.getByText('When enabled, this plugin provides tools to Writing, Workbench, and built-in Game Agents without per-conversation setup.')).toBeVisible()
+  await expect(page.getByText('Enabled tools are available to Agents in their declared Writing, Game or general contexts, subject to Project settings.')).toBeVisible()
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 })
     await page.screenshot({ path: `test-results/shared-plugin-light-${width}.png`, fullPage: true })

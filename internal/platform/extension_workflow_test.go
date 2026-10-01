@@ -109,7 +109,7 @@ func TestExtensionImportDetectsKindAndOpenedSource(t *testing.T) {
 	}
 }
 
-func TestDisableKeepsCurrentGameAndBlocksNewStarts(t *testing.T) {
+func TestDisableStopsCurrentGameAndPreservesSave(t *testing.T) {
 	m, projectID := testManager(t)
 	release := testInstall(t, m, testCandidate(t, m, projectID, "static", "test.availability", Game))
 	request := CreateInstance{GameID: release.Manifest.ID, ReleaseID: release.Ref.ReleaseID, Title: "Journey", ProjectID: projectID}
@@ -118,16 +118,15 @@ func TestDisableKeepsCurrentGameAndBlocksNewStarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	options := OpenOptions{ParentOrigin: "http://127.0.0.1:15173"}
-	opened, err := m.OpenInstance(context.Background(), instance.ID, options)
+	_, err = m.OpenInstance(context.Background(), instance.ID, options)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := m.SetAvailability(context.Background(), Game, release.Manifest.ID, PackageAvailability{Enabled: false}); err != nil {
 		t.Fatal(err)
 	}
-	resumed, err := m.OpenInstance(context.Background(), instance.ID, options)
-	if err != nil || resumed.Connection != opened.Connection {
-		t.Fatalf("active journey was interrupted: %#v %v", resumed, err)
+	if _, err := m.OpenInstance(context.Background(), instance.ID, options); err == nil || len(m.RuntimeSnapshots()) != 0 {
+		t.Fatalf("disabled journey retained execution authority: %v", err)
 	}
 	if _, err := m.CreateInstance(request); err == nil {
 		t.Fatal("disabled game accepted a new journey")

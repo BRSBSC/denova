@@ -20,6 +20,7 @@ import (
 // Settings 是用户设置的持久化模型。工作区文件只会从中取出 Agent 定制字段。
 // 指针类型用于区分 "未设置"（继承上层）与 "显式置零"。
 type Settings struct {
+	Extensions           *ExtensionSettings    `toml:"extensions,omitempty" json:"extensions,omitempty"`
 	GameCreationDefaults *GameCreationDefaults `toml:"game_creation_defaults,omitempty" json:"game_creation_defaults,omitempty"`
 
 	// 模型

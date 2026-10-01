@@ -237,7 +237,7 @@ func TestPlatformManagedStoryUpgradeExportAndReattachPreserveResources(t *testin
 	}
 	install := func(version string) (platform.Candidate, platform.Release) {
 		t.Helper()
-		raw := fmt.Sprintf(`{"manifestVersion":1,"id":"test.managed","version":%q,"apiMajor":1,"name":{"en-US":"Managed","zh-CN":"托管"},"locales":{"en-US":"en.json","zh-CN":"zh.json"},"permissions":{"required":["stories.read","stories.write"],"optional":[]},"modelSlots":[{"id":"writer","titleKey":"writer","kind":"text","required":false}],"views":[{"id":"stage","source":{"kind":"static","path":"index.html"}}],"game":{"viewId":"stage","storage":{"kind":"story","saveFormat":"test-v1"},"story":{"modelSlot":"writer"}}}`, version)
+		raw := fmt.Sprintf(`{"manifestVersion":1,"id":"test.managed","version":%q,"apiMajor":1,"minHostVersion":"0.6.0","name":{"en-US":"Managed","zh-CN":"托管"},"locales":{"en-US":"en.json","zh-CN":"zh.json"},"permissions":{"required":["stories.read","stories.write"],"optional":[]},"modelSlots":[{"id":"writer","titleKey":"writer","kind":"text","required":false}],"views":[{"id":"stage","source":{"kind":"static","path":"index.html"}}],"game":{"viewId":"stage","storage":{"kind":"story","saveFormat":"test-v1"},"story":{"modelSlot":"writer"}}}`, version)
 		if err := os.WriteFile(filepath.Join(source, "denova.game.json"), []byte(raw), 0600); err != nil {
 			t.Fatal(err)
 		}

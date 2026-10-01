@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import type { ConfigurationDocument } from './api'
 
 const validator = customizeValidator({ AjvClass: Ajv2020, ajvOptionsOverrides: { strict: false } })
+export { validator as configurationValidator }
 const translationKeys = new Map(Object.entries(TranslatableString).map(([key, value]) => [value, key]))
 
 function ConfigurationField({ id, children, displayLabel, label, required, rawDescription, rawErrors, hidden, disabled, schema, uiSchema }: FieldTemplateProps) {
@@ -66,6 +67,7 @@ export function ConfigurationForm({ definition, values, disabled, onChange }: {
   values: Record<string, unknown>
   disabled: boolean
   onChange: (values: Record<string, unknown>) => void
+  onValidityChange?: (valid: boolean) => void
 }) {
   const { t } = useTranslation()
   const idPrefix = useId()
@@ -75,7 +77,7 @@ export function ConfigurationForm({ definition, values, disabled, onChange }: {
     templates={{ FieldTemplate: ConfigurationField }} widgets={{ CheckboxWidget: BooleanSetting, SelectWidget: ChoiceSetting, RangeWidget: RangeSetting }}
     translateString={(text, params = []) => params.reduce((result, parameter, index) => result.replaceAll(`%${index + 1}`, parameter), t('platform.form.' + translationKeys.get(text)))}
     transformErrors={errors => errors.map(error => ({ ...error, message: t('platform.settings.invalidValue') }))}
-    onChange={event => onChange(event.formData ?? {})}>
+    onChange={event => { onChange(event.formData ?? {}) }}>
     <span />
   </Form></FieldGroup>
 }

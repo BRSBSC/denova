@@ -281,7 +281,8 @@ func (s *AgentService) start(ctx context.Context, runtime *Runtime, caller *acti
 	if current.Provider != frozen.Provider {
 		return RunResult{}, failure("API_INCOMPATIBLE", "Session requires its frozen definition release")
 	}
-	model, modelIdentity, err := s.model(runtime.ctx, frozen.ModelProfile)
+	ownerContext := runtime.executionContext(ctx)
+	model, modelIdentity, err := s.model(ownerContext, frozen.ModelProfile)
 	if err != nil {
 		return RunResult{}, failure("NOT_CONFIGURED", "Resolve model profile %s: %v", frozen.ModelProfile, err)
 	}
@@ -306,18 +307,18 @@ func (s *AgentService) start(ctx context.Context, runtime *Runtime, caller *acti
 	}
 	definition := agent.Definition{Key: "platform/" + frozen.Definition, Name: frozen.Definition, Model: model, ModelIdentity: modelIdentity, Instructions: frozen.Content.Instructions, Tools: tools, Canonical: productCanonical{product: product}, Permission: permission}
 
-	owner, err := agent.New(runtime.ctx, definition, agent.WithSessionStore(s.store))
+	owner, err := agent.New(ownerContext, definition, agent.WithSessionStore(s.store))
 	if err != nil {
 		return RunResult{}, err
 	}
-	session, err := owner.Session(runtime.ctx, key)
+	session, err := owner.Session(ownerContext, key)
 	if err != nil {
 		_ = owner.Close(context.Background())
 		return RunResult{}, err
 	}
-	messages, err := product.ReadCanonicalMessages(runtime.ctx)
+	messages, err := product.ReadCanonicalMessages(ownerContext)
 	if err == nil {
-		err = session.LoadCanonicalMessages(runtime.ctx, messages)
+		err = session.LoadCanonicalMessages(ownerContext, messages)
 	}
 	if err != nil {
 		_ = owner.Close(context.Background())
@@ -333,7 +334,7 @@ func (s *AgentService) start(ctx context.Context, runtime *Runtime, caller *acti
 	}
 	execution := &agentExecution{runtime: runtime, owner: owner, session: session, product: product, receipt: receipt, revision: revision, done: make(chan struct{}), generation: randomToken()[:16]}
 	s.live[id] = execution
-	run, err := session.Run(runtime.ctx, agent.Input{Text: text, IdempotencyKey: commandID})
+	run, err := session.Run(ownerContext, agent.Input{Text: text, IdempotencyKey: commandID})
 	if err != nil {
 		execution.finish("failed", err)
 		return execution.receipt.Result, nil

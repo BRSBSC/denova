@@ -235,9 +235,9 @@ func (m *Manager) CreateDevelopment(request CreateDevelopment) (Development, err
 	sharedFiles := []string{"starters/DEVELOPMENT.md"}
 	switch request.Kind {
 	case Plugin:
-		sharedFiles = append(sharedFiles, "sdk/runtime.mjs")
+		sharedFiles = append(sharedFiles, "sdk/runtime.mjs", "sdk/client.mjs", "sdk/client.d.mts")
 	case Game:
-		sharedFiles = append(sharedFiles, "sdk/client.mjs")
+		sharedFiles = append(sharedFiles, "sdk/client.mjs", "sdk/client.d.mts")
 	}
 	for _, shared := range sharedFiles {
 		data, err := starterFiles.ReadFile(shared)

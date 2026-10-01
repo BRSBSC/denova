@@ -37,7 +37,9 @@ The Extensions page manages installed releases and links back to source Projects
    artifact. Fix failures and verify the requested behavior, not only compilation.
 6. Source edits do not update previews or installed releases. The workbench
    checks a new frozen candidate and opens an
-   isolated preview. Tool plugins expose a test console; games use test saves.
+   isolated preview. Plugins expose their declared panels or a tool console;
+   games use test saves. Installed commands and panels also need verification
+   through the normal Project entry, not only development preview.
    Ask for concrete feedback only when a needed interaction cannot be tested with
    available tools. Never claim a preview or test ran without observing its result.
 7. Use the semantic version to communicate compatibility; source updates may keep
@@ -68,6 +70,8 @@ Read library summaries first and load selected content within a stated budget.
 Never silently truncate model context. Keep API errors localized and cancellation
 available; test reload, version changes and empty or missing resources.
 
-Use a plugin for reusable tools/services; use a game for a playable work with its
+Use a plugin for tools, direct user commands or independent creative panels;
+combine these in one package when they share Project content. Do not expose host
+document writes or editor internals. Use a game for a playable work with its
 own UI and either self-managed or Story-owned saves. Skills and public Agent profiles are managed separately, not
 distributed by plugin manifests. A game may declare private characters.

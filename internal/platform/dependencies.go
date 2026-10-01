@@ -3,6 +3,7 @@ package platform
 import (
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 )
@@ -12,7 +13,24 @@ func (m *Manager) resolveDependencies(manifest Manifest, requested []DependencyP
 	if err != nil {
 		return nil, err
 	}
-	return resolveAvailableDependencies(manifest, requested, installed)
+	pins, err := resolveAvailableDependencies(manifest, requested, installed)
+	if err != nil {
+		return nil, err
+	}
+	for _, command := range manifest.contributions().Commands {
+		provider, _, qualified := strings.Cut(command.Target.ID, "/")
+		if command.Target.Kind != "tool" || !qualified || provider == manifest.ID {
+			continue
+		}
+		owner, tool, err := m.commandTool(Release{Manifest: manifest}, pins, command.Target.ID)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := m.commandForm(owner, tool, ""); err != nil {
+			return nil, err
+		}
+	}
+	return pins, nil
 }
 
 func resolveAvailableDependencies(manifest Manifest, requested []DependencyPin, installed []Installed) ([]DependencyPin, error) {
@@ -64,8 +82,8 @@ func resolveAvailableDependencies(manifest Manifest, requested []DependencyPin, 
 			if parseErr != nil || !constraint.Check(version) {
 				return failure("DEPENDENCY_UNAVAILABLE", "No single selected release of %s satisfies %s", dependency.PluginID, dependency.VersionRange)
 			}
-			if release.Manifest.APIMajor != APIMajor {
-				return failure("API_INCOMPATIBLE", "Plugin %s requires API %d", dependency.PluginID, release.Manifest.APIMajor)
+			if err := compatibleManifest(release.Manifest); err != nil {
+				return err
 			}
 			ids := contributionIDs(release.Manifest.contributions())
 			for _, id := range dependency.Contributions {
@@ -129,7 +147,13 @@ func (m *Manager) modelRequirements(release Release, pins []DependencyPin) ([]Mo
 		releases = append(releases, dep)
 	}
 	result := []ModelRequirement{}
+	assistant, requiredAssistant := false, false
 	for _, current := range releases {
+		if current.Ref.Package.Kind == Plugin {
+			required := slices.Contains(current.Manifest.Permissions.Required, "agents.run")
+			assistant = assistant || required || slices.Contains(current.Manifest.Permissions.Optional, "agents.run")
+			requiredAssistant = requiredAssistant || required
+		}
 		for _, slot := range current.Manifest.ModelSlots {
 			key := current.Manifest.ID + "/" + slot.ID
 			if current.Ref.Package.Kind == Game {
@@ -139,7 +163,10 @@ func (m *Manager) modelRequirements(release Release, pins []DependencyPin) ([]Mo
 		}
 	}
 	if release.Manifest.Game != nil && slices.Contains(release.Manifest.Game.Uses.Agents, "builtin/assistant") {
-		result = append(result, ModelRequirement{Key: "builtin/assistant", Kind: "text", Required: true})
+		assistant, requiredAssistant = true, true
+	}
+	if assistant {
+		result = append(result, ModelRequirement{Key: "builtin/assistant", Kind: "text", Required: requiredAssistant})
 	}
 	return result, nil
 }

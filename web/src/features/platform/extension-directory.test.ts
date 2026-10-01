@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { extensionEntries } from './extension-directory'
 import type { CatalogEntry, DevelopmentSource, Manifest } from './api'
 
-const manifest: Manifest = { id: 'test.game', version: '1.0.0', apiMajor: 1, name: { 'zh-CN': '游戏', 'en-US': 'Game' }, permissions: { required: [], optional: [] } }
+const manifest: Manifest = { id: 'test.game', version: '1.0.0', apiMajor: 1, minHostVersion: '0.6.0', name: { 'zh-CN': '游戏', 'en-US': 'Game' }, permissions: { required: [], optional: [] } }
 const source: DevelopmentSource = { developmentId: 'source-a', projectId: 'project-a', relativePath: '.', kind: 'game', projectName: 'Source', manifest }
 const installed: CatalogEntry = { kind: 'game', id: manifest.id, enabled: true, currentRelease: 'release', grants: [], releases: [{ ref: { package: { kind: 'game', id: manifest.id }, releaseId: 'release' }, manifest, digest: 'abc', installedAt: '' }] }
 

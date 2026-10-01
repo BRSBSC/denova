@@ -73,6 +73,9 @@ func testRequest(t *testing.T, connection Connection, method, route, origin stri
 		t.Fatal(err)
 	}
 	req.Header.Set("Authorization", "Bearer "+connection.Token)
+	if connection.ConsumerID != "" {
+		req.Header.Set("X-Denova-Consumer", connection.ConsumerID)
+	}
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}

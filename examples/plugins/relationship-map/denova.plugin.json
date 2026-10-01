@@ -1,0 +1,54 @@
+{
+  "manifestVersion": 1,
+  "id": "example.relationship-map",
+  "version": "1.0.0",
+  "apiMajor": 1,
+  "minHostVersion": "0.6.0",
+  "name": {
+    "zh-CN": "人物关系图",
+    "en-US": "Relationship map"
+  },
+  "distribution": {
+    "files": [
+      "index.html",
+      "view.mjs",
+      "style.css",
+      "locales"
+    ]
+  },
+  "permissions": {
+    "required": [
+      "assets.read",
+      "assets.write",
+      "library.read"
+    ],
+    "optional": []
+  },
+  "locales": {
+    "zh-CN": "locales/zh-CN.json",
+    "en-US": "locales/en-US.json"
+  },
+  "views": [
+    {
+      "id": "map",
+      "source": {
+        "kind": "static",
+        "path": "index.html"
+      }
+    }
+  ],
+  "contributes": {
+    "panels": [
+      {
+        "id": "map",
+        "titleKey": "title",
+        "contexts": [
+          "writing",
+          "game",
+          "general"
+        ],
+        "viewId": "map"
+      }
+    ]
+  }
+}

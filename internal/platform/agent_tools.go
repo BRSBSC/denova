@@ -9,6 +9,7 @@ import (
 
 	productsession "denova/internal/agents/session"
 	agent "github.com/alfredxw/denova/agent"
+	publictools "github.com/alfredxw/denova/agent/tools"
 	"github.com/invopop/jsonschema"
 )
 
@@ -194,5 +195,11 @@ func (s *AgentService) agentTools(runtime *Runtime, caller *activation, definiti
 			return nil, failure("DEPENDENCY_UNAVAILABLE", "Selected capability %s is not a tool", reference)
 		}
 	}
-	return agent.StaticTools(definitions...)
+	selected, err := agent.StaticTools(definitions...)
+	if err != nil {
+		return nil, err
+	}
+	// Ordinary questions use the Native runtime's durable interaction protocol.
+	// Consumers may answer them; permission decisions remain host-owned.
+	return agent.CombineToolsets(publictools.Ask(), selected)
 }

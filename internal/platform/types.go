@@ -76,9 +76,10 @@ type View struct {
 }
 
 type Tool struct {
-	ID         string `json:"id"`
-	Definition string `json:"definition"`
-	Endpoint   struct {
+	ID            string                `json:"id"`
+	AgentContexts []ContributionContext `json:"agentContexts,omitempty"`
+	Definition    string                `json:"definition"`
+	Endpoint      struct {
 		Method string `json:"method"`
 		Path   string `json:"path"`
 	} `json:"endpoint"`
@@ -97,8 +98,10 @@ type DefinitionFile struct {
 // Contributions expose executable extension capabilities. Skills and user Agent
 // profiles remain owned by their existing management surfaces.
 type Contributions struct {
-	Tools    []Tool    `json:"tools,omitempty"`
-	Toolsets []Toolset `json:"toolsets,omitempty"`
+	Tools    []Tool                `json:"tools,omitempty"`
+	Toolsets []Toolset             `json:"toolsets,omitempty"`
+	Commands []CommandContribution `json:"commands,omitempty"`
+	Panels   []PanelContribution   `json:"panels,omitempty"`
 }
 
 // GameDefinitions are private game content, never installed as user Agent profiles.
@@ -149,6 +152,7 @@ type Manifest struct {
 	ID              string            `json:"id"`
 	Version         string            `json:"version"`
 	APIMajor        int               `json:"apiMajor"`
+	MinHostVersion  string            `json:"minHostVersion"`
 	Name            LocalizedText     `json:"name"`
 	Description     *LocalizedText    `json:"description,omitempty"`
 	Locales         map[string]string `json:"locales,omitempty"`
@@ -216,6 +220,8 @@ type Release struct {
 }
 
 type Installed struct {
+	// Problem is a read-time diagnostic for a damaged installation, never saved.
+	Problem *Error `json:"problem,omitempty"`
 	// Source tracks upstream updates; frozen package identity remains the digest.
 	Source         *GitHubSource `json:"source,omitempty"`
 	ID             string        `json:"id"`

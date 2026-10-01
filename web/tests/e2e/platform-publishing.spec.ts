@@ -3,7 +3,8 @@ import path from 'node:path'
 import { expect, test } from '../support/fixtures'
 
 for (const kind of ['plugin', 'game'] as const) {
-  test(`creates, tests, publishes and exports a neutral ${kind}`, async ({ page, request }) => {
+  test(`creates, tests, publishes and exports a neutral ${kind}`, async ({ page, request, browserDiagnostics }) => {
+    browserDiagnostics.allow(/console\.error: Failed to load resource:.*404.*\/assets\/document/)
     const chinese = kind === 'game'
     const language = chinese ? 'zh-CN' : 'en-US'
     const theme = chinese ? 'dark' : 'light'
@@ -26,13 +27,13 @@ for (const kind of ['plugin', 'game'] as const) {
     const publishLabel = chinese ? '发布到本机' : 'Publish locally'
     await page.getByRole('button', { name: previewLabel, exact: true }).filter({ visible: true }).click()
     const preview = page.getByRole('dialog', { name: previewLabel, exact: true })
-    await expect(preview.getByRole('combobox')).toHaveCount(0)
+    await expect(preview.getByRole('combobox')).toHaveCount(kind === 'plugin' ? 1 : 0)
     await preview.getByRole('button', { name: chinese ? '启动试运行' : 'Start test run', exact: true }).click()
     if (kind === 'plugin') {
-      await preview.getByLabel('Tool input (JSON)').fill('{"text":"Starter 🧩"}')
-      await preview.getByRole('button', { name: 'Run', exact: true }).click()
-      await expect(preview.locator('pre')).toContainText('Starter 🧩')
-      await preview.getByRole('button', { name: 'Stop', exact: true }).click()
+      const frame = page.frameLocator('iframe[title="Plugin view"]')
+      await frame.getByLabel('Text', { exact: true }).fill('Starter 🧩')
+      await frame.getByRole('button', { name: 'Save draft', exact: true }).click()
+      await expect(frame.getByRole('status')).toHaveText('Done')
       await preview.getByRole('button', { name: 'Close', exact: true }).first().click()
     } else {
       const frame = page.frameLocator('iframe[title="游戏画面"]')
@@ -49,7 +50,7 @@ for (const kind of ['plugin', 'game'] as const) {
     expect(manifest.modelSlots).toBeUndefined()
     expect(manifest.settings).toBeUndefined()
     // A declared model requirement must never turn into publication setup.
-    manifest.modelSlots = [{ id: 'writer', titleKey: 'writer', kind: 'text', required: true }]
+    manifest.modelSlots = [{ id: 'writer', titleKey: 'writer', kind: kind === 'plugin' ? 'image' : 'text', required: true }]
     for (const locale of ['zh-CN', 'en-US']) {
       const localePath = path.join(project.path, 'locales', locale + '.json')
       const content = JSON.parse(await readFile(localePath, 'utf8'))
@@ -76,7 +77,7 @@ for (const kind of ['plugin', 'game'] as const) {
     const installed = catalog.find((item: { id: string }) => item.id === manifest.id)
     const release = installed.releases.find((item: { ref: { releaseId: string } }) => item.ref.releaseId === installed.currentRelease)
     expect(release.manifest.version).toBe('0.2.0')
-    expect(installed.grants).toEqual(manifest.permissions.required)
+    expect([...installed.grants].sort()).toEqual([...manifest.permissions.required].sort())
     const entryPath = path.join(project.path, kind === 'plugin' ? 'server.mjs' : 'game.mjs')
     await writeFile(entryPath, await readFile(entryPath, 'utf8') + '\n// Unpublished source edit.\n')
     const exportLink = page.getByRole('link', { name: chinese ? '导出安装包' : 'Export package', exact: true })
