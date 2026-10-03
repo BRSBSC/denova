@@ -43,6 +43,12 @@ Denova records only major user-visible features, important compatibility or data
 - Fix status queries during external runtime context compaction blocking controls in other conversations.
 - 外部运行时逐条保存控制回执，避免长会话在追加指令、暂停和结束任务时反复保存全部历史回执；升级时备份并转换已有记录，保留未完成任务和命令重试结果。
 - External runtimes persist control receipts incrementally instead of rewriting all historical receipts when accepting guidance, pausing, or finishing tasks. Existing records are backed up and converted while preserving unfinished tasks and command retry results.
+- 修复打开或切换到包含大量整章写入的长会话时，页面长时间占满 CPU、无法操作的问题。
+- Fix the page pinning the CPU and becoming unresponsive when opening or switching to a long session with many whole-chapter writes.
+- 修复打开包含大量整章写入的长会话时，后端长时间占满 CPU、页面无法打开的问题。
+- Fix the backend pinning the CPU for minutes, leaving the page unable to load, when opening a long session with many whole-chapter writes.
+- 修复 Claude Code 2.1.286 及以上版本输出界面刷新事件时，Claude 运行时任务以 `decode Claude stream` 错误中断的问题。
+- Fix Claude runtime tasks failing with `decode Claude stream` when Claude Code 2.1.286 or later reports UI refresh events.
 
 - 自动更新固定发布包校验，支持断点续传、安装中断恢复和启动确认；失败保留诊断与程序备份，刷新页面后仍可继续已准备的更新。
 - Automatic updates pin package checksums, resume downloads, recover interrupted installation and verify startup. Failures retain diagnostics and program backups; staged updates survive page reloads.
