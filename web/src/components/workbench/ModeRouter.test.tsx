@@ -133,6 +133,11 @@ vi.mock('@/features/lore/LoreWorkspaceTab', () => ({
   ),
 }))
 
+vi.mock('@/features/lore/use-lore-categories', async () => {
+  const { DEFAULT_LORE_CATEGORIES } = await import('@/features/lore/knowledge-sections')
+  return { useLoreCategories: () => ({ categories: DEFAULT_LORE_CATEGORIES }) }
+})
+
 vi.mock('@/features/interactive/components/SettingPanel', () => ({
   SettingPanel: ({ onFlushHandlerChange }: {
     onFlushHandlerChange?: (handler: (() => Promise<boolean>) | null) => void

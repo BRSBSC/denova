@@ -15,6 +15,8 @@ test('creates, autosaves, and reloads a Lore item across Writing and Game', asyn
   await page.getByLabel('名称', { exact: true }).fill(name)
   const editor = page.getByRole('textbox', { name: '正文', exact: true })
   await editor.click()
+  await expect(page.getByTestId('lore-create-editor')).toHaveCount(0)
+  await expect(editor).toBeFocused()
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A')
   await page.keyboard.insertText(content)
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+S' : 'Control+S')

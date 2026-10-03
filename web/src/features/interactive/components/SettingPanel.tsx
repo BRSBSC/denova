@@ -1,10 +1,11 @@
+import { useLoreCategories } from '@/features/lore/use-lore-categories'
 import { ResourceExchangeActions } from '@/features/market/ResourceExchangeActions'
 import { closeMobilePanes } from '@/components/layout/mobile-pane-events'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookMarked, Bot, Database, LayoutGrid, SlidersHorizontal, Sparkles, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
-import { APIError, createProjectLoreItem, deleteProjectLoreItem, getProjectLoreItems, loreImageURL, readOptionalProjectFile, readProjectFile, type LoreItem } from '@/lib/api'
+import { APIError, deleteProjectLoreItem, getProjectLoreItems, loreImageURL, readOptionalProjectFile, readProjectFile, type LoreItem } from '@/lib/api'
 import { rebaseJSONValue, rebaseText } from '@/lib/three-way-rebase'
 import { rebaseJSONWithRecovery, rebaseTextWithRecovery } from '@/lib/autosave/rebase-with-recovery'
 import { Button } from '@/components/ui/button'
@@ -24,6 +25,7 @@ import type { GamePlanningTemplate, ImagePreset, Teller } from '../types'
 import { CreatorDirectory, CreatorEditor } from './setting-panel/CreatorEditor'
 import { LoreEditor } from './setting-panel/LoreEditor'
 import { LoreLibrary, LORE_OVERVIEW_ID } from '@/features/lore/LoreLibrary'
+import { LoreCreateEditor } from '@/features/lore/LoreCreateEditor'
 import { loreImageTaskInstruction } from '@/features/lore/lore-image-task'
 import { OpeningPresetEditor } from './setting-panel/OpeningPresetEditor'
 import { loreImportanceLabel, loreLoadModeLabel, loreTypeLabel } from '@/features/lore/options'
@@ -35,7 +37,7 @@ import { hasLoreProtagonistTag } from '@/features/lore/tags'
 import { LORE_UPDATED_EVENT, notifyLoreUpdated, type LoreUpdatedDetail } from '@/features/lore/events'
 import { useProjectFileAutosave } from './setting-panel/use-project-file-autosave'
 import { EMPTY_IMAGE_PRESETS, EMPTY_STORY_DIRECTORS, EMPTY_TELLERS } from './setting-panel/presetResources'
-import { KNOWLEDGE_SECTIONS, sectionItems, type KnowledgeSection } from '@/features/lore/knowledge-sections'
+import { sectionItems, type KnowledgeSection } from '@/features/lore/knowledge-sections'
 import { EMPTY_LORE_FILTERS, filterLoreItems, type LoreFilters } from '@/features/lore/lore-filters'
 import { LoreFiltersButton, LoreFilterSummary } from '@/features/lore/LoreFilters'
 import { isProjectChangeForProject, type WorkspaceChangeEvent } from '@/features/changes/types'
@@ -121,11 +123,14 @@ function LoreSettingPanel({
   toolNavigationIntent?: ToolNavigationIntent | null
 }) {
   const { t } = useTranslation()
+  const { sections: categorySections } = useLoreCategories(projectId, refreshSignal)
   const activeMode = mode
   const [items, setItems] = useState<LoreItem[]>([])
   const [loading, setLoading] = useState(Boolean(projectId))
   const [loadError, setLoadError] = useState<string | null>(null)
   const [activeId, setActiveId] = useState(LORE_OVERVIEW_ID)
+  const [creating, setCreating] = useState<KnowledgeSection | null>(null)
+  const [createdId, setCreatedId] = useState('')
   const [draft, setDraft] = useState<LoreItem | null>(null)
   const [tagDraft, setTagDraft] = useState('')
   const [query, setQuery] = useState('')
@@ -341,6 +346,8 @@ function LoreSettingPanel({
   useEffect(() => {
     setItems([])
     setActiveId(LORE_OVERVIEW_ID)
+    setCreating(null)
+    setCreatedId('')
     setDraft(null)
     setTagDraft('')
     loreBaselineDraftRef.current = null
@@ -608,25 +615,12 @@ function LoreSettingPanel({
     }
   }
 
-  const handleCreateLore = async (section: KnowledgeSection = KNOWLEDGE_SECTIONS[0]) => {
-    setSaving(true)
-    try {
-      const createName = t(section.createNameKey)
-      const item = await createProjectLoreItem(projectId, {
-        enabled: true,
-        type: section.createType,
-        name: createName,
-        importance: section.createType === 'character' ? 'major' : 'important',
-        load_mode: section.createType === 'character' ? 'resident' : 'auto',
-        tags: section.tag ? [section.tag] : [],
-        brief_description: `${loreTypeLabel(section.createType, t)} ${createName}。用 3-5 句概括本项的身份、别名、关键事实、适用场景和触发词。`,
-        content: `## ${createName}\n\n`,
-      })
-      await refreshItems(item.id)
-      notifyLoreUpdated({ projectId, ids: [item.id] })
-    } finally {
-      setSaving(false)
-    }
+  const handleCreateLore = async (section: KnowledgeSection = categorySections[0]) => {
+    if (!(await flushActiveAutosave())) return
+    setCreating(section)
+    setCreatedId('')
+    setActiveId('')
+    closeMobilePanes()
   }
 
   const handleDelete = () => {
@@ -706,6 +700,8 @@ function LoreSettingPanel({
   }, [flushActiveAutosave, onFlushHandlerChange])
 
   const handleSelectLore = useCallback(async (id: string) => {
+    setCreating(null)
+    setCreatedId('')
     if (id === activeId) { closeMobilePanes(); return }
     try {
       if (activeId === CREATOR_ENTRY_ID) {
@@ -746,7 +742,7 @@ function LoreSettingPanel({
     void handleSelectLore(targetID)
   }, [activeId, handleSelectLore, items, projectId, toolNavigationIntent])
 
-  const isOverview = activeMode === 'lore' && activeId === LORE_OVERVIEW_ID
+  const isOverview = !creating && activeMode === 'lore' && activeId === LORE_OVERVIEW_ID
 
   const isOpeningPresetActive = activeMode === 'lore' && activeId === INTERACTIVE_OPENING_PRESET_ENTRY_ID
   const activeAutosaveStatus = isCreatorActive
@@ -760,23 +756,23 @@ function LoreSettingPanel({
       ? openingPresetAutosave.error
       : loreAutosave.error
   const editorHeaderIcon = isOverview ? LayoutGrid : isCreatorActive ? BookMarked : isOpeningPresetActive ? Sparkles : Database
-  const editorHeaderTitle = isOverview ? t('lore.library.title') : isCreatorActive
+  const editorHeaderTitle = creating ? t('lore.library.create') : isOverview ? t('lore.library.title') : isCreatorActive
       ? CREATOR_PATH
       : isOpeningPresetActive
         ? t('settingPanel.openingPreset.title')
         : editorTitle(activeMode, draft, t)
-  const editorHeaderSubtitle = isOverview ? t('lore.library.subtitle') : isCreatorActive
+  const editorHeaderSubtitle = creating ? (creating.name || t(creating.labelKey)) : isOverview ? t('lore.library.subtitle') : isCreatorActive
       ? t('settingPanel.editor.creatorSubtitle')
       : isOpeningPresetActive
         ? t('settingPanel.openingPreset.subtitle')
-        : editorSubtitle(draft, t)
-  const loreDirectorySections: ResourceDirectorySection[] = KNOWLEDGE_SECTIONS.filter((section) => filters.category === 'all' || section.id === filters.category).map((section) => ({
+        : editorSubtitle(draft, t, categorySections.find((section) => section.id === draft?.type)?.name)
+  const loreDirectorySections: ResourceDirectorySection[] = categorySections.filter((section) => filters.category === 'all' || section.id === filters.category).map((section) => ({
     id: section.id,
-    label: t(section.labelKey),
+    label: (section.name || t(section.labelKey)),
     icon: section.icon,
     items: sectionItems(filteredItems, section).map((item) => loreItemToDirectoryItem(item, projectId, t)),
     onCreate: () => void handleCreateLore(section),
-    createLabel: `${t('chat.new')}${t(section.labelKey)}`,
+    createLabel: `${t('chat.new')}${(section.name || t(section.labelKey))}`,
   }))
   const directoryPanel = (
     <div className="nova-sidebar flex h-full min-h-0 flex-col bg-[var(--nova-surface-2)]">
@@ -805,9 +801,8 @@ function LoreSettingPanel({
             query={query}
             onQueryChange={setQuery}
             filterItem={() => true}
-            headerActions={<LoreFiltersButton presentation="icon" items={items} filters={filters} onChange={setFilters} />}
-            searchDetails={<LoreFilterSummary filters={filters} onChange={setFilters} query={query} onQueryChange={setQuery} matched={filteredItems.length} total={items.length} />}
-            emptySectionsLast
+            headerActions={<LoreFiltersButton projectId={projectId} presentation="icon" items={items} filters={filters} onChange={setFilters} />}
+            searchDetails={<LoreFilterSummary projectId={projectId} filters={filters} onChange={setFilters} query={query} onQueryChange={setQuery} matched={filteredItems.length} total={items.length} />}
           />
         )
       ) : <CreatorDirectory />}
@@ -936,6 +931,24 @@ function LoreSettingPanel({
 
                   {loading ? (
                     <LoadingState label={t('common.loading')} className="h-full min-h-0" />
+                  ) : creating ? (
+                    <LoreCreateEditor
+                      key={`${projectId}:${creating.id}`}
+                      projectId={projectId}
+                      category={creating.createType}
+                      categoryLabel={creating.name || t(creating.labelKey)}
+                      importance={creating.createType === 'character' ? 'major' : 'important'}
+                      loadMode={creating.createType === 'character' ? 'resident' : 'auto'}
+                      items={items}
+                      onCancel={() => { setCreating(null); setActiveId(LORE_OVERVIEW_ID) }}
+                      onCreated={(item) => {
+                        setCreating(null)
+                        setCreatedId(item.id)
+                        setItems((current) => [...current.filter((entry) => entry.id !== item.id), item])
+                        setActiveId(item.id)
+                        notifyLoreUpdated({ projectId, ids: [item.id] })
+                      }}
+                    />
                   ) : isOverview ? null : items.length === 0 && !loadError && !activeId ? (
                     <EmptyState
                       icon={Database}
@@ -950,12 +963,14 @@ function LoreSettingPanel({
                     <OpeningPresetEditor presets={openingPresets} activeId={activeOpeningPresetId} setActiveId={setActiveOpeningPresetId} setPresets={setOpeningPresets} onSave={flushActiveAutosave} />
                   ) : (
                     <LoreEditor
+                      autoFocusContent={createdId === draft?.id}
                       projectId={projectId}
                       onInspectMaterial={(material) => {
                         setPendingLoreImageTask({ key: `lore-material-${Date.now()}`, instruction: `Read the selected image using the read tool and describe it as a creative reference. Do not modify lore. Selected material: ${JSON.stringify({ item_id: draft?.id, material_id: material.id, path: material.path, name: material.name, description: material.description })}` })
                         setAgentOpen(true)
                       }}
                       draft={draft}
+                      items={items}
                       tagDraft={tagDraft}
                       residentTotalBytes={residentLoreBytes}
                       searchQuery={query}
@@ -1045,7 +1060,7 @@ function editorTitle(mode: Exclude<SettingPanelMode, 'teller'>, draft: LoreItem 
   return draft?.name || t('settingPanel.mode.lore')
 }
 
-function editorSubtitle(draft: LoreItem | null, t: (key: string) => string) {
+function editorSubtitle(draft: LoreItem | null, t: (key: string) => string, categoryName?: string) {
   if (!draft) return t('settingPanel.editor.loreSubtitle')
-  return `${draft.enabled === false ? t('settingPanel.disabled') : t('settingPanel.enabled')} · ${loreTypeLabel(draft.type, t)} · ${loreImportanceLabel(draft.importance, t)} · ${loreLoadModeLabel(draft.load_mode, t)} · ${(draft.tags || []).join('，') || t('settingPanel.editor.noTags')}`
+  return `${draft.enabled === false ? t('settingPanel.disabled') : t('settingPanel.enabled')} · ${categoryName || loreTypeLabel(draft.type, t)} · ${loreImportanceLabel(draft.importance, t)} · ${loreLoadModeLabel(draft.load_mode, t)} · ${(draft.tags || []).join('，') || t('settingPanel.editor.noTags')}`
 }

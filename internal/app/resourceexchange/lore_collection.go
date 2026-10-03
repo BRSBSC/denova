@@ -13,7 +13,6 @@ import (
 
 	"denova/internal/book/lore"
 	"denova/internal/revisionfile"
-	"github.com/google/uuid"
 )
 
 func readLoreCollection(raw []byte) (portableCollection[json.RawMessage], []lore.Item, error) {
@@ -24,35 +23,42 @@ func readLoreCollection(raw []byte) (portableCollection[json.RawMessage], []lore
 	if collection.Version != 1 || len(collection.Items) == 0 {
 		return collection, nil, fmt.Errorf("Lore collection requires version 1 and nonempty items")
 	}
-	ops := make([]lore.Operation, 0, len(collection.Items))
+	native := lore.Collection{Version: 3, Categories: collection.Categories, Items: []lore.Item{}}
+	if len(native.Categories) == 0 {
+		native.Version = 2 // Released collections without definitions use the legacy mapping.
+	}
+	ids := []string{}
 	for _, raw := range collection.Items {
 		if err := validatePayload("lore.entry", raw); err != nil {
 			return collection, nil, err
 		}
-		var item lore.ItemInput
+		var item lore.Item
 		if err := json.Unmarshal(raw, &item); err != nil {
 			return collection, nil, err
 		}
 		if item.ID == "" || item.ID != strings.TrimSpace(item.ID) {
 			return collection, nil, fmt.Errorf("invalid Lore item ID %q", item.ID)
 		}
-		ops = append(ops, lore.Operation{Op: "create", Item: item})
+		// Portable media is validated and adopted separately after the native entry.
+		item.Materials = nil
+		ids = append(ids, item.ID)
+		native.Items = append(native.Items, item)
 	}
-	dir, err := os.MkdirTemp("", "denova-lore-validate-")
+	data, err := json.Marshal(native)
 	if err != nil {
 		return collection, nil, err
 	}
-	defer os.RemoveAll(dir)
-	result, err := lore.NewStore(dir).ApplyOperations("Import Lore collection", ops)
+	validated, err := lore.DecodeCollection(data)
 	if err != nil {
 		return collection, nil, err
 	}
-	for i, item := range result.Created {
-		if item.ID != ops[i].Item.ID {
-			return collection, nil, fmt.Errorf("Lore item ID must be canonical: %q", ops[i].Item.ID)
+	for i, item := range validated.Items {
+		if item.ID != ids[i] {
+			return collection, nil, fmt.Errorf("Lore item ID must be canonical: %q", ids[i])
 		}
 	}
-	return collection, result.Created, nil
+	collection.Categories = validated.Categories
+	return collection, validated.Items, nil
 }
 
 func loreDigest(item lore.Item) string {
@@ -80,12 +86,17 @@ func (s *Service) exportLoreCollection(ctx context.Context, ref LocalRef) (map[s
 	if err != nil {
 		return nil, err
 	}
+	categories, err := lore.NewStore(layout.ContentRoot).Categories()
+	if err != nil {
+		return nil, err
+	}
 	sourceIDs, err := s.collectionSourceIDs(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
 	collection := portableCollection[json.RawMessage]{Version: 1, Items: []json.RawMessage{}}
 	files := map[string][]byte{}
+	usedCategories := map[string]bool{"character": true}
 	for _, item := range items {
 		sourceID := item.ID
 		if ref.ID != "all" {
@@ -95,6 +106,7 @@ func (s *Service) exportLoreCollection(ctx context.Context, ref LocalRef) (map[s
 				continue
 			}
 		}
+		usedCategories[item.Type] = true
 		item.ID = sourceID
 		raw, err := portableJSON("lore.entry", item)
 		if err != nil {
@@ -110,6 +122,11 @@ func (s *Service) exportLoreCollection(ctx context.Context, ref LocalRef) (map[s
 	}
 	if len(collection.Items) == 0 {
 		return nil, fmt.Errorf("Lore collection is empty")
+	}
+	for _, category := range categories {
+		if usedCategories[category.ID] {
+			collection.Categories = append(collection.Categories, category)
+		}
 	}
 	raw, err := json.MarshalIndent(collection, "", "  ")
 	if err != nil {
@@ -142,14 +159,33 @@ func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, re
 	}
 	var collection lore.Collection
 	if len(staged[target]) > 0 {
-		if err := json.Unmarshal(staged[target], &collection); err != nil {
+		collection, err = lore.DecodeCollection(staged[target])
+		if err != nil {
 			return err
 		}
 	} else {
-		collection.Version = 2
+		collection.Version = 3
+		collection.Categories = lore.DefaultCategories()
+	}
+	for _, category := range portable.Categories {
+		if lore.HasCategory(collection.Categories, category.ID) {
+			continue
+		}
+		// Existing names belong to the user. Keep incoming identity and choose
+		// a distinct display name without changing local category definitions.
+		base := category.DisplayName()
+		for suffix := 2; lore.CategoryNameConflict(collection.Categories, category); suffix++ {
+			category.Name = fmt.Sprintf("%s (%d)", base, suffix)
+		}
+		collection.Categories = append(collection.Categories, category)
 	}
 	if binding.Members == nil {
 		binding.Members = map[string]CollectionMember{}
+	}
+	reserved := slices.Clone(collection.Items)
+	// A missing local item still owns its receipt identity for future updates.
+	for _, member := range binding.Members {
+		reserved = append(reserved, lore.Item{ID: member.ID})
 	}
 	applied := map[string]bool{}
 	// Merge by receipt identity, never by name. Missing upstream items remain local.
@@ -157,7 +193,11 @@ func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, re
 		sourceID := incoming[i].ID
 		member, found := binding.Members[sourceID]
 		if !found {
-			member.ID = uuid.NewString()
+			member.ID, err = lore.NewItemID(reserved, incoming[i].Name)
+			if err != nil {
+				return err
+			}
+			reserved = append(reserved, lore.Item{ID: member.ID})
 		}
 		var payload struct {
 			Materials *portableMaterials `json:"materials"`

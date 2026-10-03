@@ -74,13 +74,13 @@ func TestGenerateWritesCoverSourceMetaAndBackup(t *testing.T) {
 	if result.CoverPath != CoverPath {
 		t.Fatalf("展示封面路径不符合预期: %s", result.CoverPath)
 	}
-	if filepath.Dir(result.SourcePath) != "assets/covers" {
+	if filepath.ToSlash(filepath.Dir(result.SourcePath)) != "assets/covers" {
 		t.Fatalf("原图路径不符合预期: %s", result.SourcePath)
 	}
 	if result.MetaPath != "assets/covers/meta.json" {
 		t.Fatalf("元数据路径不符合预期: %s", result.MetaPath)
 	}
-	if filepath.Dir(result.BackupPath) != "assets/covers" {
+	if filepath.ToSlash(filepath.Dir(result.BackupPath)) != "assets/covers" {
 		t.Fatalf("旧封面备份路径不符合预期: %s", result.BackupPath)
 	}
 
@@ -201,13 +201,13 @@ func TestUploadWritesShallowCoverSourceAndBackup(t *testing.T) {
 	if result.CoverPath != CoverPath {
 		t.Fatalf("展示封面路径不符合预期: %s", result.CoverPath)
 	}
-	if filepath.Dir(result.SourcePath) != "assets/covers" {
+	if filepath.ToSlash(filepath.Dir(result.SourcePath)) != "assets/covers" {
 		t.Fatalf("上传原图路径不符合预期: %s", result.SourcePath)
 	}
 	if result.MetaPath != "" {
 		t.Fatalf("元数据路径不符合预期: %s", result.MetaPath)
 	}
-	if filepath.Dir(result.BackupPath) != "assets/covers" {
+	if filepath.ToSlash(filepath.Dir(result.BackupPath)) != "assets/covers" {
 		t.Fatalf("旧封面备份路径不符合预期: %s", result.BackupPath)
 	}
 	assertFileBytes(t, workspace, result.BackupPath, "old-cover")

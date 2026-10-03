@@ -526,7 +526,7 @@ func TestShallowAssetsMigrationPreservesAttributesJournalsAndVersionRestore(t *t
 	actual := item.ResolvedMaterials[0].Asset
 	expected := original
 	expected.Path, expected.Source.MetaPath = actual.Path, actual.Source.MetaPath
-	if !reflect.DeepEqual(actual, expected) || filepath.Dir(actual.Path) != "assets/lore" || actual.Source.MetaPath != "assets/lore/meta.json" || item.Content != "Keep lore" || item.Materials.CoverAssetID != original.ID {
+	if !reflect.DeepEqual(actual, expected) || filepath.ToSlash(filepath.Dir(actual.Path)) != "assets/lore" || actual.Source.MetaPath != "assets/lore/meta.json" || item.Content != "Keep lore" || item.Materials.CoverAssetID != original.ID {
 		t.Fatalf("asset properties or references changed: %+v", item)
 	}
 	raw, err := os.ReadFile(filepath.Join(workspace, lore.ItemsRelativePath))

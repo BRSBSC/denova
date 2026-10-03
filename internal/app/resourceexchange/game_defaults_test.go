@@ -40,7 +40,7 @@ func gameDefaultsFixture(t *testing.T, service *Service) (Preview, string, strin
 	preview, err := service.previewFiles(context.Background(), Source{Kind: "file", Filename: "defaults.zip"}, map[string][]byte{
 		"denova-pack.json": jsonBytes(t, manifest), "assets/background.png": picture.Bytes(),
 		"style.json": []byte(`{"name":"Package narrative","description":"Fixture","slots":[{"id":"system","name":"Narrative","target":"system","enabled":true,"content":"Tell the story."}]}`),
-		"lore.json":  []byte(`{"version":1,"items":[{"id":"scene","enabled":true,"type":"world","name":"Scene","content":"A setting","materials":{"entries":[{"asset_path":"assets/background.png","name":"Background"}]}}]}`),
+		"lore.json":  []byte(`{"version":1,"items":[{"id":"scene","enabled":true,"type":"world","name":"Moonlit Scene","content":"A setting","materials":{"entries":[{"asset_path":"assets/background.png","name":"Background"}]}}]}`),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +73,7 @@ func TestGameDefaultsImportAdoptionAndUpdateIsolation(t *testing.T) {
 		t.Fatal("ordinary import changed project settings")
 	}
 	bg := installed.GameDefaults.DefaultBackground
-	if bg == nil || bg.ItemID == "scene" || bg.AssetID == "" || *installed.GameDefaults.NarrativeStyleID == "style" {
+	if bg == nil || bg.ItemID != "moonlit_scene" || bg.AssetID == "" || *installed.GameDefaults.NarrativeStyleID == "style" {
 		t.Fatalf("source references were not mapped: %+v", installed.GameDefaults)
 	}
 	_, layout, _ := s.registry.Resolve(projectID, true)

@@ -304,7 +304,7 @@ func TestTavernWorldbookIsNormalizedWithoutLoadingEngine(t *testing.T) {
 	if strings.Join(location.Keywords, ",") != "旧港,港口,雨夜" || strings.Contains(location.Content, "UpdateVariable") {
 		t.Fatalf("关键词应合并去重且运行块应被清洗: %#v", location)
 	}
-	if rumor.Enabled || rumor.LoadMode != lore.LoadModeAuto || rumor.Type != "other" || rumor.TypeSource != lore.TypeSourceHeuristic {
+	if rumor.Enabled || rumor.LoadMode != lore.LoadModeAuto || rumor.Type != "world" || rumor.TypeSource != lore.TypeSourceHeuristic {
 		t.Fatalf("无明确类型信号的禁用条目应保留为按需 other，等待后续整理: %#v", rumor)
 	}
 	if location.Provenance == nil || location.Provenance.SourceRecordID != "7" || location.Provenance.SourceHash == "" {
@@ -338,12 +338,12 @@ func TestLoreClassificationHeuristicRecognizesCommonWorldbookNames(t *testing.T)
 		"角色档案·戒律长老":               "character",
 		"地点：旧港":                   "location",
 		"宗门：青岚宗":                  "faction",
-		"力量体系：灵脉":                 "rule",
+		"力量体系：灵脉":                 "world",
 		"法宝：照夜镜":                  "item",
 		"世界观：黄昏纪元":                "world",
 		"Character Profile: Iris": "character",
 		"Location - Old Harbor":   "location",
-		"远方传闻":                    "other",
+		"远方传闻":                    "world",
 	}
 	for name, want := range tests {
 		got := lore.ClassifyItemHeuristic(lore.ClassificationInput{Name: name})
@@ -414,7 +414,7 @@ func TestCharacterCardImportDoesNotPersistLowConfidenceSemanticSuggestion(t *tes
 		t.Fatal(err)
 	}
 	for _, item := range items {
-		if item.Name == "沈凝" && (item.Type != "other" || item.TypeSource != lore.TypeSourceHeuristic) {
+		if item.Name == "沈凝" && (item.Type != "world" || item.TypeSource != lore.TypeSourceHeuristic) {
 			t.Fatalf("low-confidence semantic suggestion must not overwrite the heuristic result: %#v", item)
 		}
 	}

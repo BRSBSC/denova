@@ -1,3 +1,4 @@
+import { useLoreCategories } from '@/features/lore/use-lore-categories'
 import { LoreDetailTabs } from './LoreDetailTabs'
 import { useMemo, useState, type ReactNode } from 'react'
 import {
@@ -45,14 +46,15 @@ import {
   loreImportanceLabel,
   loreLoadModeLabel,
   loreTypeLabel,
-  TYPE_OPTIONS,
 } from './options'
 import { LoreContentEditor } from './LoreContentEditor'
+import { LoreRenameNotice } from './LoreReferences'
 import { hasLoreProtagonistTag, splitLoreTags, toggleLoreProtagonistTag } from './tags'
 
 interface LoreWorkspaceEditorProps {
   projectId: string
   draft: LoreItem
+  items: LoreItem[]
   tagDraft: string
   autosaveStatus: AutosaveStatus
   autosaveError: string | null
@@ -67,12 +69,14 @@ interface LoreWorkspaceEditorProps {
   onOpenDirectory?: () => void
   onOpenLibrary?: () => void
   onReferenceItem?: (id: string) => void
+  autoFocusContent?: boolean
 }
 
 /** Focused lore editor for the writing workspace; bulk/library operations stay on the full page. */
 export function LoreWorkspaceEditor({
   projectId,
   draft,
+  items,
   tagDraft,
   autosaveStatus,
   autosaveError,
@@ -87,8 +91,10 @@ export function LoreWorkspaceEditor({
   onOpenDirectory,
   onOpenLibrary,
   onReferenceItem,
+  autoFocusContent,
 }: LoreWorkspaceEditorProps) {
   const { t } = useTranslation()
+  const { categories } = useLoreCategories(projectId)
   const [metadataOpen, setMetadataOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string
@@ -130,8 +136,9 @@ export function LoreWorkspaceEditor({
             aria-label={t('settingPanel.field.name')}
             className="h-7 min-w-0 border-0 bg-transparent px-1 text-sm font-medium shadow-none focus-visible:ring-0"
           />
+          <LoreRenameNotice items={items} id={draft.id} />
           <div className="flex min-w-0 items-center gap-1.5 px-1 text-[10px] text-[var(--nova-text-faint)]">
-            <span>{loreTypeLabel(draft.type, t)}</span>
+            <span>{categories.find((c) => c.id === draft.type)?.name || loreTypeLabel(draft.type, t)}</span>
             <span aria-hidden>·</span>
             <span>{loreImportanceLabel(draft.importance, t)}</span>
             <span aria-hidden>·</span>
@@ -232,9 +239,9 @@ export function LoreWorkspaceEditor({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {TYPE_OPTIONS.map(({ value }) => (
+                  {categories.map(({ id: value, name }) => (
                     <SelectItem key={value} value={value}>
-                      {loreTypeLabel(value, t)}
+                      {name || loreTypeLabel(value, t)}
                     </SelectItem>
                   ))}
                 </SelectGroup>
@@ -346,8 +353,10 @@ export function LoreWorkspaceEditor({
       </Collapsible>
 
       <LoreContentEditor
+          autoFocus={autoFocusContent}
           projectId={projectId}
           resourceKey={draft.id}
+          items={items}
           value={draft.content || ''}
           onChange={(content) => onDraftChange({ ...draft, content })}
           onSaveShortcut={() => {

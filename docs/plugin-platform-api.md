@@ -53,6 +53,7 @@ SDK 与类型在 `extensionassets/sdk/client.mjs`、`client.d.mts`，原始协�
 
 | 方法与路径 | 权限 | 输入或结果 |
 | --- | --- | --- |
+| GET /library/categories | library.read | 返回有序的 `{ id, name }[]`；写入资料使用当前分类 ID，名称不赋予角色行为 |
 | GET /library/items | library.read | `offset=0&limit=50&query=...`；返回 `{ items, total, nextOffset? }` |
 | GET /library/items/{id} | library.read | 返回一条完整资料 |
 | POST /library/items | library.write | `{ item, baseRevision?, sourceName?, sourceId?, sourceHash? }`；新增或按修订采用到原生资料库 |

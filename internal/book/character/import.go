@@ -24,6 +24,17 @@ func (s *Service) ImportTavernCard(filename string, data []byte, opts ...ImportO
 			importStats.Warnings = append(importStats.Warnings, "语义资料分类失败，已保留名称优先的本地分类结果："+err.Error())
 		}
 	}
+	categories, err := loreStore.Categories()
+	if err != nil {
+		return ImportResult{}, err
+	}
+	for i := range ops {
+		if !lore.HasCategory(categories, ops[i].Item.Type) {
+			ops[i].Item.Type = lore.DefaultCategoryID(categories)
+			ops[i].Item.TypeSource = lore.TypeSourceHeuristic
+		}
+	}
+	importStats.ClassificationCounts = tavernWorldbookTypeCounts(ops)
 	// Semantic classification can be slow and performs no local writes. Take
 	// the rollback snapshot only after it finishes so a later rollback cannot
 	// overwrite user edits made while the model request was running.

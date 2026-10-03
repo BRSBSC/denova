@@ -47,7 +47,7 @@ func TestGenerateSavesLoreImageAndMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Schema != LoreResultSchema || filepath.Dir(result.ImagePath) != "assets/lore" {
+	if result.Schema != LoreResultSchema || filepath.ToSlash(filepath.Dir(result.ImagePath)) != "assets/lore" {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 	if result.MetaPath != "assets/lore/meta.json" || result.ImagePresetID != "game-cg" {
@@ -95,7 +95,7 @@ func TestBuildLorePromptBoundsLoreContent(t *testing.T) {
 	prompt := BuildLorePrompt(LoreGenerateRequest{
 		Item: lore.Item{
 			ID:               "rule",
-			Type:             "rule",
+			Type:             "world",
 			Name:             "长规则",
 			BriefDescription: strings.Repeat("简介", 1000),
 			Content:          strings.Repeat("正文", 5000),
@@ -106,7 +106,7 @@ func TestBuildLorePromptBoundsLoreContent(t *testing.T) {
 	if len([]rune(prompt)) > maxPresetChars+maxBriefChars+maxContentChars+maxInstructionChars+600 {
 		t.Fatalf("prompt is not bounded, runes=%d", len([]rune(prompt)))
 	}
-	if !strings.Contains(prompt, "Lore type: rule") || !strings.Contains(prompt, "Lore name: 长规则") {
+	if !strings.Contains(prompt, "Lore type: world") || !strings.Contains(prompt, "Lore name: 长规则") {
 		t.Fatalf("prompt missing lore identity:\n%s", prompt)
 	}
 }

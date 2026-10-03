@@ -15,6 +15,21 @@ import (
 	"denova/internal/revisionfile"
 )
 
+func (host Resources) LibraryCategories(ctx context.Context, projectID string) ([]platform.LibraryCategory, error) {
+	result := []platform.LibraryCategory{}
+	_, err := host.host.WithLoreStore(ctx, projectID, func(store *booklore.Store) error {
+		categories, err := store.Categories()
+		if err != nil {
+			return err
+		}
+		for _, category := range categories {
+			result = append(result, platform.LibraryCategory{ID: category.ID, Name: category.DisplayName()})
+		}
+		return nil
+	})
+	return result, err
+}
+
 func (host Resources) WriteLibraryItem(ctx context.Context, projectID string, input platform.LibraryWrite) (platform.LibraryItem, error) {
 	var result platform.LibraryItem
 	operation, err := host.host.AcquireProject(ctx, projectID)
@@ -29,7 +44,10 @@ func (host Resources) WriteLibraryItem(ctx context.Context, projectID string, in
 			return readErr
 		}
 		item := input.Item
-		item.Type, item.Name = booklore.NormalizeType(item.Type), strings.TrimSpace(item.Name)
+		item.Type, item.Name = strings.TrimSpace(item.Type), strings.TrimSpace(item.Name)
+		if exists && item.Type == "" {
+			item.Type = old.Type
+		}
 		item.Content, item.BriefDescription = strings.TrimSpace(item.Content), strings.TrimSpace(item.BriefDescription)
 		if exists && old.Name == item.Name && old.Type == item.Type && old.Content == item.Content && (item.BriefDescription == "" || old.BriefDescription == item.BriefDescription) && slices.Equal(old.Tags, item.Tags) && slices.Equal(old.Keywords, item.Keywords) && old.Enabled == item.Enabled {
 			result = publicLibraryItem(old)

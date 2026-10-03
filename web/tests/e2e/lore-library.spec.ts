@@ -63,7 +63,7 @@ for (const theme of ['dark', 'light']) {
       ['friend', 'character'],
       ['city', 'location'],
       ['guild', 'faction'],
-      ['rules', 'rule'],
+      ['rules', 'world'],
     ])
       await seed(request, book.projectId, id, type)
     const longName = '很长的资料名称LongUnbrokenCharacterName'.repeat(4)

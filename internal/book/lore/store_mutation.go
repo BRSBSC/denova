@@ -63,7 +63,14 @@ func (s *Store) Revision() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data, err := json.Marshal(items)
+	categories, err := s.Categories()
+	if err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(struct {
+		Items      []Item
+		Categories []Category
+	}{items, categories})
 	if err != nil {
 		return "", err
 	}
@@ -110,7 +117,7 @@ func (s *Store) Create(input ItemInput) (Item, error) {
 	item := normalizeLoreItem(Item{
 		ID:               input.ID,
 		Enabled:          loreInputEnabled(input.Enabled, true),
-		Type:             input.Type,
+		Type:             firstNonEmptyLoreValue(input.Type, DefaultCategoryID(collection.Categories)),
 		TypeSource:       firstNonEmptyLoreValue(input.TypeSource, TypeSourceManual),
 		Name:             input.Name,
 		Importance:       input.Importance,
@@ -125,7 +132,10 @@ func (s *Store) Create(input ItemInput) (Item, error) {
 		Provenance:       input.Provenance,
 	})
 	if item.ID == "" {
-		item.ID = newUniqueLoreID(collection.Items, item.Name, item.Type)
+		item.ID, err = NewItemID(collection.Items, item.Name)
+		if err != nil {
+			return Item{}, err
+		}
 	}
 	if item.Name == "" {
 		return Item{}, errors.New("资料名称不能为空")
@@ -167,13 +177,13 @@ func (s *Store) Update(id string, input ItemInput) (Item, error) {
 		}
 		previous := collection.Items[i]
 		typeSource := previous.TypeSource
-		if NormalizeType(input.Type) != previous.Type {
+		if NormalizeType(firstNonEmptyLoreValue(input.Type, previous.Type)) != previous.Type {
 			typeSource = TypeSourceManual
 		}
 		updated := normalizeLoreItem(Item{
 			ID:               id,
 			Enabled:          loreInputEnabled(input.Enabled, collection.Items[i].Enabled),
-			Type:             input.Type,
+			Type:             firstNonEmptyLoreValue(input.Type, previous.Type),
 			TypeSource:       typeSource,
 			Name:             input.Name,
 			Importance:       input.Importance,
@@ -255,7 +265,7 @@ func (s *Store) ApplyOperations(message string, ops []Operation) (ApplyResult, e
 			item := normalizeLoreItem(Item{
 				ID:               op.Item.ID,
 				Enabled:          loreInputEnabled(op.Item.Enabled, true),
-				Type:             op.Item.Type,
+				Type:             firstNonEmptyLoreValue(op.Item.Type, DefaultCategoryID(collection.Categories)),
 				TypeSource:       firstNonEmptyLoreValue(op.Item.TypeSource, TypeSourceManual),
 				Name:             op.Item.Name,
 				Importance:       op.Item.Importance,
@@ -279,7 +289,10 @@ func (s *Store) ApplyOperations(message string, ops []Operation) (ApplyResult, e
 				return ApplyResult{}, fmt.Errorf("资料名称已存在: %s", item.Name)
 			}
 			if item.ID == "" {
-				item.ID = newUniqueLoreID(next, item.Name, item.Type)
+				item.ID, err = NewItemID(next, item.Name)
+				if err != nil {
+					return ApplyResult{}, err
+				}
 			}
 			if loreItemIndex(next, item.ID) >= 0 {
 				return ApplyResult{}, fmt.Errorf("资料 ID 已存在: %s", item.ID)

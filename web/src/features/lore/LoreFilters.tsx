@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
@@ -9,21 +9,28 @@ import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { LoreItem } from '@/lib/api'
-import { KNOWLEDGE_SECTIONS } from './knowledge-sections'
+import { useLoreCategories } from './use-lore-categories'
 import { EMPTY_LORE_FILTERS, loreTagFilterValue, type LoreFilters } from './lore-filters'
 import { IMPORTANCE_OPTIONS, LOAD_MODE_OPTIONS } from './options'
 import { LORE_PROTAGONIST_TAG } from './tags'
 
 interface LoreFilterProps {
+  projectId: string
   filters: LoreFilters
   onChange: (filters: LoreFilters) => void
 }
 
 /** Both library views edit the owner's conditions; tag choices always use the full catalog. */
 export function LoreFiltersButton({
-  items, filters, onChange, presentation = 'label',
+  projectId, items, filters, onChange, presentation = 'label',
 }: LoreFilterProps & { items: LoreItem[]; presentation?: 'icon' | 'label' }) {
   const { t } = useTranslation()
+  const { sections: categorySections, isSuccess } = useLoreCategories(projectId)
+  useEffect(() => {
+    if (isSuccess && filters.category !== 'all' && !categorySections.some((section) => section.id === filters.category)) {
+      onChange({ ...filters, category: 'all' })
+    }
+  }, [isSuccess, categorySections, filters, onChange])
   const [tagQuery, setTagQuery] = useState('')
   const active = Object.values(filters).some((value) => value !== 'all')
   const tags = useMemo(() => {
@@ -66,7 +73,7 @@ export function LoreFiltersButton({
               <SelectTrigger className="w-full min-w-0" aria-label={t('lore.library.category')}><SelectValue /></SelectTrigger>
               <SelectContent><SelectGroup>
                 <SelectItem value="all">{t('lore.library.allCategories')}</SelectItem>
-                {KNOWLEDGE_SECTIONS.map((section) => <SelectItem key={section.id} value={section.id}>{t(section.labelKey)}</SelectItem>)}
+                {categorySections.map((section) => <SelectItem key={section.id} value={section.id}>{(section.name || t(section.labelKey))}</SelectItem>)}
               </SelectGroup></SelectContent>
             </Select>
           </Field>
@@ -136,16 +143,17 @@ export function LoreFiltersButton({
 }
 
 /** Removable conditions remain visible after the popover closes, including an empty result. */
-export function LoreFilterSummary({ filters, onChange, query, onQueryChange, matched, total }: LoreFilterProps & {
+export function LoreFilterSummary({ projectId, filters, onChange, query, onQueryChange, matched, total }: LoreFilterProps & {
   query: string
   onQueryChange: (query: string) => void
   matched: number
   total: number
 }) {
   const { t } = useTranslation()
+  const { sections: categorySections } = useLoreCategories(projectId)
   const chips: Array<{ id: string; label: string; clear: () => void }> = []
   if (query.trim()) chips.push({ id: 'query', label: t('lore.filters.searchChip', { query }), clear: () => onQueryChange('') })
-  if (filters.category !== 'all') chips.push({ id: 'category', label: t(KNOWLEDGE_SECTIONS.find((section) => section.id === filters.category)!.labelKey), clear: () => onChange({ ...filters, category: 'all' }) })
+  if (filters.category !== 'all') chips.push({ id: 'category', label: categorySections.find((section) => section.id === filters.category)?.name || t(`lore.type.${filters.category}`), clear: () => onChange({ ...filters, category: 'all' }) })
   if (filters.loadMode !== 'all') chips.push({ id: 'loadMode', label: t(`lore.loadMode.${filters.loadMode}`), clear: () => onChange({ ...filters, loadMode: 'all' }) })
   if (filters.enabled !== 'all') chips.push({ id: 'enabled', label: t(`lore.filters.enabled.${filters.enabled}`), clear: () => onChange({ ...filters, enabled: 'all' }) })
   if (filters.importance !== 'all') chips.push({ id: 'importance', label: t(`lore.importance.${filters.importance}`), clear: () => onChange({ ...filters, importance: 'all' }) })

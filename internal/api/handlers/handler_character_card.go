@@ -216,7 +216,11 @@ func (h *Handlers) importCharacterCardToNewBook(ctx context.Context, filename st
 // and source records go through the same resource transaction as market imports.
 func (h *Handlers) installCharacterResources(ctx context.Context, filename string, data []byte, projectID string, fields characterCardImportFields) (character.ImportResult, error) {
 	exchange := h.app.ResourceExchange()
-	preview, err := exchange.PreviewCharacter(ctx, resourceexchange.Source{Kind: "file", Filename: filename}, data, h.characterCardImportOptions(ctx, projectID, fields))
+	categories, err := h.app.Lore().Categories(ctx, projectID)
+	if err != nil {
+		return character.ImportResult{}, err
+	}
+	preview, err := exchange.PreviewCharacter(ctx, resourceexchange.Source{Kind: "file", Filename: filename}, data, h.characterCardImportOptions(ctx, projectID, fields), categories)
 	if err != nil {
 		return character.ImportResult{}, err
 	}

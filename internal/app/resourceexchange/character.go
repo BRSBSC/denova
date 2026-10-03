@@ -14,17 +14,26 @@ import (
 // Character conversion uses the existing adapter in an isolated workspace. The
 // converted resources enter exactly the same frozen preview as native bundles.
 func (s *Service) previewCharacter(ctx context.Context, source Source, data []byte) (Preview, error) {
-	return s.PreviewCharacter(ctx, source, data, character.ImportOptions{ClassificationMode: lore.ClassificationModeHeuristic})
+	return s.PreviewCharacter(ctx, source, data, character.ImportOptions{ClassificationMode: lore.ClassificationModeHeuristic}, lore.DefaultCategories())
 }
 
 // PreviewCharacter freezes the result of optional semantic classification once.
 // Applying or reloading the plan never invokes the classifier again.
-func (s *Service) PreviewCharacter(ctx context.Context, source Source, data []byte, options character.ImportOptions) (Preview, error) {
+func (s *Service) PreviewCharacter(ctx context.Context, source Source, data []byte, options character.ImportOptions, categories []lore.Category) (Preview, error) {
 	dir, err := os.MkdirTemp("", "denova-card-")
 	if err != nil {
 		return Preview{}, err
 	}
 	defer os.RemoveAll(dir)
+	// Freeze the target catalog alongside the converted entries so semantic
+	// suggestions and installation share the same category identities.
+	seed, err := json.Marshal(lore.Collection{Version: 3, Categories: categories, Items: []lore.Item{}})
+	if err != nil {
+		return Preview{}, err
+	}
+	if err := writeFiles(dir, map[string][]byte{lore.ItemsRelativePath: seed}); err != nil {
+		return Preview{}, err
+	}
 	result, err := character.NewService(dir).ImportTavernCard(source.Filename, data, options)
 	if err != nil {
 		return Preview{}, err
@@ -35,7 +44,7 @@ func (s *Service) PreviewCharacter(ctx context.Context, source Source, data []by
 	}
 	manifest := Manifest{Format: "denova.resource-pack", SchemaVersion: 1, Package: PackageInfo{ID: "character-card", Name: result.Name}}
 	files := map[string][]byte{}
-	collection := portableCollection[json.RawMessage]{Version: 1, Items: []json.RawMessage{}}
+	collection := portableCollection[json.RawMessage]{Version: 1, Categories: categories, Items: []json.RawMessage{}}
 	loreAssets := []string{}
 	for _, item := range items {
 		raw, err := portableJSON("lore.entry", item)

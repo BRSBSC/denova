@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-const loreItemsVersion = 2
+const loreItemsVersion = 3
 
 const (
 	LoadModeResident = "resident"
@@ -110,9 +110,10 @@ type Image struct {
 }
 
 type Collection struct {
-	Version int     `json:"version"`
-	Items   []Item  `json:"items"`
-	Assets  []Asset `json:"assets,omitempty"`
+	Version    int        `json:"version"`
+	Categories []Category `json:"categories"`
+	Items      []Item     `json:"items"`
+	Assets     []Asset    `json:"assets,omitempty"`
 }
 
 type Operation struct {
@@ -155,6 +156,8 @@ type IndexOptions struct {
 }
 
 var ErrRevisionConflict = errors.New("资料已被其他操作更新，请重新加载后再保存")
+
+var ErrNameRequiredForID = errors.New("lore name must contain a letter or digit to generate an ID")
 
 var loreMutationLocks sync.Map
 

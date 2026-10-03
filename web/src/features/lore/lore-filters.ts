@@ -1,5 +1,4 @@
 import { loreImageURL, type LoreItem } from '@/lib/api'
-import { KNOWLEDGE_SECTIONS, sectionItems } from './knowledge-sections'
 import { isLoreProtagonistTag, LORE_PROTAGONIST_TAG } from './tags'
 
 /** Transient browsing conditions. A page owns one value for its directory and overview. */
@@ -32,8 +31,7 @@ export function filterLoreItems(
   query: string,
   projectId: string,
 ): LoreItem[] {
-  const category = KNOWLEDGE_SECTIONS.find((section) => section.id === filters.category)
-  const candidates = category ? sectionItems(items, category) : items
+  const candidates = filters.category === 'all' ? items : items.filter((item) => item.type === filters.category)
   const words = query.trim().toLocaleLowerCase().split(/\s+/)
   return candidates.filter((item) => {
     const tags = item.tags || []

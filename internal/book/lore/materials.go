@@ -405,7 +405,7 @@ func (s *Store) Assets() ([]Asset, error) {
 
 // MaterialFilePaths resolves version dependencies without rewriting legacy data.
 func MaterialFilePaths(data []byte) ([]string, error) {
-	c, err := decodeLoreCollectionJSON(data)
+	c, err := DecodeCollection(data)
 	if err != nil {
 		return nil, err
 	}

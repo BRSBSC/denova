@@ -23,7 +23,9 @@ func ItemsPath(workspace string) string {
 	return filepath.Join(workspace, filepath.FromSlash(ItemsRelativePath))
 }
 
-func decodeLoreCollectionJSON(data []byte) (Collection, error) {
+// DecodeCollection validates a collection and projects released categories into
+// the current schema without writing files. Import and restore use the same boundary.
+func DecodeCollection(data []byte) (Collection, error) {
 	var envelope map[string]json.RawMessage
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return Collection{}, fmt.Errorf("Lore JSON 无效 / invalid Lore JSON: %w", err)
@@ -51,6 +53,19 @@ func decodeLoreCollectionJSON(data []byte) (Collection, error) {
 		return Collection{}, err
 	}
 	collection := Collection{Version: loreItemsVersion, Items: normalizeLoreItems(items)}
+	if version < 3 {
+		collection.Categories = DefaultCategories()
+		for i := range collection.Items {
+			if !HasCategory(collection.Categories, collection.Items[i].Type) {
+				collection.Items[i].Type = "world"
+			}
+		}
+	} else if err := json.Unmarshal(envelope["categories"], &collection.Categories); err != nil {
+		return Collection{}, fmt.Errorf("invalid lore categories: %w", err)
+	}
+	if err := validateCategories(collection); err != nil {
+		return Collection{}, err
+	}
 	if raw, ok := envelope["assets"]; ok {
 		if err := json.Unmarshal(raw, &collection.Assets); err != nil {
 			return Collection{}, fmt.Errorf("invalid lore assets: %w", err)

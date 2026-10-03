@@ -3,11 +3,9 @@ import { toast } from '@/lib/toast'
 import { useTranslation } from 'react-i18next'
 import type { EditorFlushHandler } from '@/components/Editor/useEditorDraftPersistence'
 import {
-  createProjectLoreItem,
   deleteProjectLoreItem,
   getProjectLoreItems,
   type LoreItem,
-  type LoreItemInput,
 } from '@/lib/api'
 import { rebaseJSONValue } from '@/lib/three-way-rebase'
 import { rebaseJSONWithRecovery } from '@/lib/autosave/rebase-with-recovery'
@@ -290,39 +288,20 @@ export function useLoreWorkspace({
     [activeId, flush, items, projectId],
   )
 
-  const createItem = useCallback(
-    async (input: Partial<LoreItemInput>) => {
-      if (!(await flush())) return null
-      try {
-        const created = await createProjectLoreItem(projectId, input)
-        const nextBaseline = loreAutosaveDraft(created)
-        rebaseSequenceRef.current += 1
-        // Preserve any state committed by the flush above. Building a list from
-        // this callback's render-time snapshot could roll the just-saved item
-        // back in the UI while leaving the server canonical state unchanged.
-        setItems((current) => [
-          ...current.filter((item) => item.id !== created.id),
-          created,
-        ])
-        setActiveId(created.id)
-        setDraft({ ...created, tags: [...(created.tags || [])] })
-        setTagDraft((created.tags || []).join('，'))
-        setBaseline(nextBaseline)
-        persistSelectedLoreID(projectId, created.id)
-        notifyLoreUpdated({ projectId, ids: [created.id], source: eventSource })
-        return created
-      } catch (cause) {
-        console.error('[LoreWorkspaceTab] failed to create lore item', {
-          projectId,
-          cause,
-        })
-        toast.error(
-          cause instanceof Error ? cause.message : t('settingPanel.saveFailed'),
-        )
-        return null
-      }
+  const acceptCreatedItem = useCallback(
+    (created: LoreItem) => {
+      rebaseSequenceRef.current += 1
+      // Keep edits flushed before opening the naming surface, including any
+      // external changes received while the new name was being entered.
+      setItems((current) => [...current.filter((item) => item.id !== created.id), created])
+      setActiveId(created.id)
+      setDraft({ ...created, tags: [...(created.tags || [])] })
+      setTagDraft((created.tags || []).join('，'))
+      setBaseline(loreAutosaveDraft(created))
+      persistSelectedLoreID(projectId, created.id)
+      notifyLoreUpdated({ projectId, ids: [created.id], source: eventSource })
     },
-    [eventSource, flush, projectId, t],
+    [eventSource, projectId],
   )
 
   const deleteItem = useCallback(
@@ -403,7 +382,7 @@ export function useLoreWorkspace({
       setDraft,
       setTagDraft,
       selectItem,
-      createItem,
+      acceptCreatedItem,
       deleteItem,
       prepareSnapshot,
       flush,
@@ -413,7 +392,7 @@ export function useLoreWorkspace({
       activeId,
       autosave.error,
       autosave.status,
-      createItem,
+      acceptCreatedItem,
       deleteItem,
       draft,
       error,

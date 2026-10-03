@@ -4,9 +4,11 @@ import (
 	"context"
 	"denova/internal/revisionfile"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 )
 
 func (s *Store) Ensure() error {
@@ -18,8 +20,17 @@ func (s *Store) Ensure() error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(s.itemsPath()); err == nil {
-		return nil
+	if data, err := os.ReadFile(s.itemsPath()); err == nil {
+		var header struct {
+			Version int `json:"version"`
+		}
+		if err := json.Unmarshal(data, &header); err != nil {
+			return err
+		}
+		if header.Version == loreItemsVersion {
+			return nil
+		}
+		return s.save(collection)
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -37,9 +48,9 @@ func (s *Store) loadOrCreate() (Collection, error) {
 	snapshot, err := revisionfile.Read(context.Background(), path)
 	if err == nil && snapshot.Exists {
 		data := snapshot.Content
-		// Version 1 remains readable regardless of where a user copied it; every
-		// subsequent typed save upgrades the same collection to version 2.
-		collection, decodeErr := decodeLoreCollectionJSON(data)
+		// Reads project old categories without mutation. Ensure or the next typed
+		// write persists the new format after preserving the source snapshot.
+		collection, decodeErr := DecodeCollection(data)
 		if decodeErr != nil {
 			return Collection{}, fmt.Errorf("解析 Lore items 失败 path=%s: %w", path, decodeErr)
 		}
@@ -48,11 +59,14 @@ func (s *Store) loadOrCreate() (Collection, error) {
 	if err != nil {
 		return Collection{}, err
 	}
-	return Collection{Version: loreItemsVersion, Items: []Item{}}, nil
+	return Collection{Version: loreItemsVersion, Categories: DefaultCategories(), Items: []Item{}}, nil
 }
 
 func (s *Store) save(collection Collection) error {
 	collection.Version = loreItemsVersion
+	if err := validateCategories(collection); err != nil {
+		return err
+	}
 	normalized := make([]Item, 0, len(collection.Items))
 	for _, item := range collection.Items {
 		item.ResolvedMaterials = nil
@@ -66,11 +80,48 @@ func (s *Store) save(collection Collection) error {
 		return err
 	}
 	path := s.itemsPath()
+	if err := s.backupLegacyCategories(path); err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(collection, "", "  ")
 	if err != nil {
 		return err
 	}
 	_, err = revisionfile.ReplaceIfRevision(context.Background(), path, "", append(data, '\n'), revisionfile.Options{})
+	return err
+}
+
+// Preserve each legacy snapshot before its first replacement, including a
+// restored historical version. Backups are recovery copies, never dual writes.
+func (s *Store) backupLegacyCategories(path string) error {
+	snapshot, err := revisionfile.Read(context.Background(), path)
+	if err != nil || !snapshot.Exists {
+		return err
+	}
+	var header struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(snapshot.Content, &header); err != nil {
+		return err
+	}
+	if header.Version >= loreItemsVersion {
+		return nil
+	}
+	return s.backupCategorySnapshot("migration", snapshot)
+}
+
+func (s *Store) backupCategorySnapshot(reason string, snapshot revisionfile.Snapshot) error {
+	if !snapshot.Exists {
+		return nil
+	}
+	backup := filepath.Join(s.workspace, "setting", "lore", "backups", "categories-"+reason+"-"+snapshot.Revision[7:]+".json")
+	_, err := revisionfile.ReplaceIfRevision(context.Background(), backup, revisionfile.MissingRevision, snapshot.Content, revisionfile.Options{})
+	if errors.Is(err, revisionfile.ErrRevisionConflict) {
+		return nil
+	}
+	if err == nil {
+		slog.Info("[lore] saved category backup", "path", backup, "reason", reason)
+	}
 	return err
 }
 

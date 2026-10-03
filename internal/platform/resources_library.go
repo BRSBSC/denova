@@ -26,6 +26,13 @@ type LibraryWriter interface {
 	WriteLibraryItem(context.Context, string, LibraryWrite) (LibraryItem, error)
 }
 
+// LibraryCategory exposes a project-owned category ID and its display name.
+// Extensions discover these before writing instead of assuming a fixed enum.
+type LibraryCategory struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 func (s *ResourceService) serveLibraryWrite(w http.ResponseWriter, request *http.Request, caller *activation, route string) {
 	if request.Method != http.MethodPost || route != "/library/items" {
 		writeError(w, failure("NOT_FOUND", "Unknown library mutation route"))

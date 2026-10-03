@@ -20,7 +20,7 @@ type readLoreItemsInput struct {
 type listLoreItemsInput struct {
 	Keywords  []string `json:"keywords,omitempty" jsonschema_description:"Optional search terms. Each item independently matches ID, name, aliases, tags, description, and body. Do not combine several keywords into one string."`
 	Match     string   `json:"match,omitempty" jsonschema:"enum=any,enum=all" jsonschema_description:"Relationship among keywords: any matches any keyword (OR, default); all requires every keyword (AND)."`
-	Types     []string `json:"types,omitempty" jsonschema_description:"Optional lore types: character, world, location, faction, rule, item, or other."`
+	Types     []string `json:"types,omitempty" jsonschema_description:"Optional exact category IDs from the project catalog returned by list_lore_items."`
 	LoadModes []string `json:"load_modes,omitempty" jsonschema_description:"Optional load modes: resident, auto, or manual. Prefer resident for state-schema review."`
 	Detail    string   `json:"detail,omitempty" jsonschema:"enum=index,enum=full" jsonschema_description:"Result detail: index (default) returns catalog entries and descriptions; full returns complete bodies when filters are present, avoiding a separate read_lore_items call."`
 	Limit     int      `json:"limit,omitempty" jsonschema_description:"Number of filtered results on this page, default 10. Unfiltered catalogs paginate automatically by index byte budget."`
@@ -36,14 +36,14 @@ type writeLoreItemsInput struct {
 type writeLoreItemInput struct {
 	ID               string   `json:"id,omitempty" jsonschema:"description=Lore ID. An update requires the exact existing ID; creation may omit it for automatic generation."`
 	Enabled          *bool    `json:"enabled,omitempty" jsonschema:"description=Whether the lore item is enabled. A disabled item remains stored but is excluded from the lore index, read tools, and model context. Omit when uncertain."`
-	Type             string   `json:"type,omitempty" jsonschema:"description=Lore type: character, world, location, faction, rule, item, or other. Creation defaults to other; omission during update retains the current value."`
+	Type             string   `json:"type,omitempty" jsonschema:"description=Exact category ID from the project catalog. Creation defaults to world, or the first non-character category if world was removed; omission during update retains the current value."`
 	Name             string   `json:"name,omitempty" jsonschema:"description=Lore name. Required for creation; omission during update retains the current value."`
 	Importance       string   `json:"importance,omitempty" jsonschema:"description=Importance: major, important, or minor. Creation defaults to important; omission during update retains the current value."`
 	Tags             []string `json:"tags,omitempty" jsonschema:"description=Tags. Omission during update retains the current value; an empty array clears it."`
 	BriefDescription string   `json:"brief_description,omitempty" jsonschema:"description=Index description. Start with type and name, then use 3-5 sentences for identity, aliases, key facts, use cases, and trigger terms. Omission on creation generates it from the body; omission on update retains the current value."`
 	Keywords         []string `json:"keywords,omitempty" jsonschema:"description=Aliases, keywords, or trigger terms. Omission during update retains the current value; an empty array clears it."`
 	LoadMode         string   `json:"load_mode,omitempty" jsonschema:"description=Load mode: resident, auto, or manual. Creation infers it automatically; omission during update retains the current value."`
-	Content          string   `json:"content,omitempty" jsonschema:"description=Markdown body for this entity or coherent topic only, in the author's language. Include its stable canon and relevant relationships; put other independently retrievable entities in separate items. On update this replaces the entire body: read the existing item first and preserve still-valid facts. Omission retains the current value. Put per-chapter current location, injuries, psychology, and goals in setting/character-states.md instead of lore."`
+	Content          string   `json:"content,omitempty" jsonschema:"description=Markdown body for this entity or coherent topic only, in the author's language. Include its stable canon and relevant relationships; put other independently retrievable entities in separate items. Reference other entries with [[Exact Lore Name]] using their unique project-local names. References do not load target bodies automatically; read them by name when needed. Renaming an entry does not rewrite references, so update referring bodies when asked to rename consistently. On update this replaces the entire body: read the existing item first and preserve still-valid facts. Omission retains the current value. Put per-chapter current location, injuries, psychology, and goals in setting/character-states.md instead of lore."`
 }
 
 type loreToolsOptions struct {
@@ -128,7 +128,7 @@ func newLoreTools(workspace string, allowWrite bool, options ...loreToolsOptions
 	if err != nil {
 		return nil, err
 	}
-	listTool, err := agent.InferTool("list_lore_items", "Browse or search enabled lore. An empty filter returns a name catalog of at most 256 KiB. With filters, detail=index returns descriptions and detail=full can return complete bodies in the same call. Use read_lore_items directly for a known unique name.", func(ctx context.Context, input listLoreItemsInput) (string, error) {
+	listTool, err := agent.InferTool("list_lore_items", "Browse or search enabled lore. An empty filter returns project category definitions and a name catalog of at most 64 KiB. With filters, detail=index returns descriptions and detail=full can return complete bodies in the same call. Use read_lore_items directly for a known unique name.", func(ctx context.Context, input listLoreItemsInput) (string, error) {
 		_ = ctx
 		if workspace == "" {
 			return "", fmt.Errorf("cannot list lore because the current workspace is unavailable")
@@ -137,6 +137,15 @@ func newLoreTools(workspace string, allowWrite bool, options ...loreToolsOptions
 			return "", err
 		}
 		store := lore.NewStore(workspace)
+		categories, err := store.Categories()
+		if err != nil {
+			return "", err
+		}
+		for _, id := range input.Types {
+			if !lore.HasCategory(categories, id) {
+				return "", fmt.Errorf("unknown category %q; call list_lore_items without filters to read the catalog", id)
+			}
+		}
 		if !hasLoreListFilters(input) {
 			catalog, err := store.NameCatalogMarkdown(lore.NameCatalogOptions{
 				Offset:   input.Offset,
@@ -233,12 +242,6 @@ func validateListLoreItemsInput(input listLoreItemsInput) error {
 	match := strings.TrimSpace(input.Match)
 	if match != "" && match != lore.IndexMatchAny && match != lore.IndexMatchAll {
 		return fmt.Errorf("match must be any or all")
-	}
-	validTypes := map[string]bool{"character": true, "world": true, "location": true, "faction": true, "rule": true, "item": true, "other": true}
-	for _, itemType := range input.Types {
-		if !validTypes[strings.TrimSpace(itemType)] {
-			return fmt.Errorf("invalid lore type: %s", strings.TrimSpace(itemType))
-		}
 	}
 	validLoadModes := map[string]bool{lore.LoadModeResident: true, lore.LoadModeAuto: true, lore.LoadModeManual: true}
 	for _, loadMode := range input.LoadModes {

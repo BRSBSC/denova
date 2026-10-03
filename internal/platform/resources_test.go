@@ -27,6 +27,13 @@ type resourceTestHost struct {
 	requests chan ImageRequest
 }
 
+func (h *resourceTestHost) LibraryCategories(ctx context.Context, project string) ([]LibraryCategory, error) {
+	if project != h.project {
+		return nil, failure("PERMISSION_DENIED", "Wrong Project")
+	}
+	return []LibraryCategory{{ID: "character", Name: "Character"}, {ID: "custom", Name: "Abilities"}}, ctx.Err()
+}
+
 func (h *resourceTestHost) LibraryItems(ctx context.Context, project string) ([]LibraryItem, error) {
 	if project != h.project {
 		return nil, failure("PERMISSION_DENIED", "Unexpected Project")
@@ -133,6 +140,11 @@ func TestResourceCapabilitiesScopePaginationAndRasterReads(t *testing.T) {
 	m.ConfigureResources(host)
 	release := testResourceGame(t, m, project)
 	_, opened := openResourceGame(t, m, project, release)
+	categoryStatus, categoryData := testRequest(t, opened.Connection, "GET", "/library/categories", "", nil)
+	var categories []LibraryCategory
+	if err := json.Unmarshal(categoryData, &categories); err != nil || categoryStatus != 200 || !reflect.DeepEqual(categories, []LibraryCategory{{ID: "character", Name: "Character"}, {ID: "custom", Name: "Abilities"}}) {
+		t.Fatalf("category discovery: %d %s %v", categoryStatus, categoryData, err)
+	}
 	status, data := testRequest(t, opened.Connection, "GET", "/library/items?query=cast&limit=1", "", nil)
 	var page struct {
 		Items      []LibraryItem `json:"items"`

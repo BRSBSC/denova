@@ -28,9 +28,21 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 	if _, err := store.Create(lore.ItemInput{ID: "personal", Name: "Personal", Content: "My notes"}); err != nil {
 		t.Fatal(err)
 	}
-	collection := portableCollection[json.RawMessage]{Version: 1}
+	if _, err := store.Create(lore.ItemInput{ID: "item_0", Name: "Reserved", Content: "Keep this identity"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.MutateCategory(lore.CategoryMutation{Op: "create", Name: "Abilities"}); err != nil {
+		t.Fatal(err)
+	}
+	collection := portableCollection[json.RawMessage]{Version: 1, Categories: append(lore.DefaultCategories(), lore.Category{ID: "ability-category", Name: "Abilities"})}
 	for i := 0; i < 300; i++ {
-		collection.Items = append(collection.Items, jsonBytes(t, map[string]any{"id": fmt.Sprintf("item-%d", i), "name": fmt.Sprintf("Item %d", i), "type": "world", "content": fmt.Sprintf("Setting %d", i)}))
+		name := fmt.Sprintf("Item %d", i)
+		if i == 1 {
+			name = "Item+0" // Different display names can share the same ID base.
+		} else if i == 2 {
+			name = "沈凝"
+		}
+		collection.Items = append(collection.Items, jsonBytes(t, map[string]any{"id": fmt.Sprintf("item-%d", i), "name": name, "type": "ability-category", "content": fmt.Sprintf("Setting %d", i)}))
 	}
 	manifest := Manifest{Format: "denova.resource-pack", SchemaVersion: 1, Package: PackageInfo{ID: "world", Name: "World"}, Resources: []Resource{{ID: "lore", Kind: "lore.collection", Path: "lore.json"}, {ID: "opening", Kind: "game.openings", Path: "opening.json", Requires: []string{"lore"}}}}
 	preview := func() Preview {
@@ -73,8 +85,11 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 	if len(binding.Members) != 300 {
 		t.Fatal("lost member identities")
 	}
+	if binding.Members["item-0"].ID != "item_0-2" || binding.Members["item-1"].ID != "item_0-3" || binding.Members["item-2"].ID != "沈凝" {
+		t.Fatalf("imported IDs must use names and avoid existing identities: %s, %s", binding.Members["item-0"].ID, binding.Members["item-1"].ID)
+	}
 	items, err := store.ListAll()
-	if err != nil || len(items) != 301 {
+	if err != nil || len(items) != 302 {
 		t.Fatal(len(items), err)
 	}
 	// Simulate a user edit captured by staging after an earlier live state read.
@@ -112,9 +127,19 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 	if err := json.Unmarshal(files["denova-pack.json"], &roundtrip); err != nil {
 		t.Fatal(err)
 	}
-	_, portableItems, err := readLoreCollection(files[roundtrip.Resources[0].Path])
+	portable, portableItems, err := readLoreCollection(files[roundtrip.Resources[0].Path])
 	if err != nil || len(portableItems) != 300 || portableItems[0].ID != "item-0" {
 		t.Fatal("roundtrip identities", len(portableItems), err)
+	}
+	category, err := store.Categories()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(category) != 7 || category[6].ID != "ability-category" || category[6].Name != "Abilities (2)" {
+		t.Fatalf("category collision lost identity: %+v", category)
+	}
+	if len(portable.Categories) != 2 || portable.Categories[1] != category[6] || portableItems[0].Type != category[6].ID {
+		t.Fatalf("category roundtrip lost definition: %+v", portable.Categories)
 	}
 	if _, err := s.Export(ctx, ExportRequest{Package: installed.Package, Resources: []LocalRef{binding.Local, {Kind: "lore.collection", Scope: "project", ProjectID: record.ID, ID: "all"}}}); err == nil {
 		t.Fatal("export accepted overlapping Lore collections")
@@ -149,7 +174,7 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	collection.Items = collection.Items[:299]
-	collection.Items[0] = jsonBytes(t, map[string]any{"id": "item-0", "name": "Item 0", "type": "world", "content": "Updated setting"})
+	collection.Items[0] = jsonBytes(t, map[string]any{"id": "item-0", "name": "Renamed Item Zero", "type": "world", "content": "Updated setting"})
 	p = preview()
 	request := PlanRequest{PreviewID: p.ID, CandidateID: p.Candidates[0].ID, Resources: []string{"lore"}, InstallationID: installed.ID}
 	updated, err := s.Plan(ctx, request)
@@ -160,7 +185,7 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	item, err := store.ReadAny(binding.Members["item-0"].ID)
-	if err != nil || item.Content != "Updated setting" {
+	if err != nil || item.Content != "Updated setting" || item.Name != "Renamed Item Zero" || item.ID != "item_0-2" {
 		t.Fatal(item, err)
 	}
 	if _, err := store.ReadAny(binding.Members["item-299"].ID); err != nil {

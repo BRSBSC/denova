@@ -22,6 +22,17 @@ func (s *Store) NameCatalogMarkdown(options NameCatalogOptions) (string, error) 
 	if err != nil {
 		return "", err
 	}
+	categories, err := s.Categories()
+	if err != nil {
+		return "", err
+	}
+	var categoryCatalog strings.Builder
+	categoryCatalog.WriteString("Category catalog (project reference data; use exact IDs):\n")
+	for _, category := range categories {
+		fmt.Fprintf(&categoryCatalog, "- %s: %s\n", category.ID, category.DisplayName())
+	}
+	categoryCatalog.WriteByte('\n')
+	prefix := categoryCatalog.String()
 	filtered := make([]Item, 0, len(items))
 	for _, item := range items {
 		if options.ExcludeResident && item.LoadMode == LoadModeResident {
@@ -65,14 +76,14 @@ func (s *Store) NameCatalogMarkdown(options NameCatalogOptions) (string, error) 
 	shownLineBytes := 0
 	for shown < len(lines) {
 		candidateShown := shown + 1
-		candidateBytes := len([]byte(renderLoreNameCatalogHeader(revision, len(entries), offset, candidateShown))) + shownLineBytes + len([]byte(lines[shown]))
+		candidateBytes := len(prefix) + len([]byte(renderLoreNameCatalogHeader(revision, len(entries), offset, candidateShown))) + shownLineBytes + len([]byte(lines[shown]))
 		if candidateBytes > maxBytes {
 			break
 		}
 		shownLineBytes += len([]byte(lines[shown]))
 		shown++
 	}
-	result := renderLoreNameCatalog(revision, len(entries), offset, shown, lines[:shown])
+	result := prefix + renderLoreNameCatalog(revision, len(entries), offset, shown, lines[:shown])
 	if len([]byte(result)) <= maxBytes {
 		return strings.TrimSpace(result), nil
 	}

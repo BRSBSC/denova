@@ -1,3 +1,4 @@
+import { useLoreCategories } from '@/features/lore/use-lore-categories'
 import { LoreDetailTabs } from '@/features/lore/LoreDetailTabs'
 import { useId } from 'react'
 import { Star } from 'lucide-react'
@@ -14,16 +15,18 @@ import { presetIconActionClassName as iconActionClassName, presetInputClassName 
 import { PresetEmptyState as EmptyState } from '../preset-config/PresetEmptyState'
 import { PresetField as Field } from '../preset-config/PresetField'
 import { BooleanSwitchField } from './BooleanSwitchField'
-import { IMPORTANCE_OPTIONS, LOAD_MODE_OPTIONS, loadModeDescription, LORE_RESIDENT_TOTAL_WARNING_BYTES, loreImportanceLabel, loreLoadModeLabel, loreTypeLabel, TYPE_OPTIONS } from '@/features/lore/options'
+import { IMPORTANCE_OPTIONS, LOAD_MODE_OPTIONS, loadModeDescription, LORE_RESIDENT_TOTAL_WARNING_BYTES, loreImportanceLabel, loreLoadModeLabel, loreTypeLabel } from '@/features/lore/options'
 import type { DocumentReviewController, DocumentReviewNavigationIntent } from '@/features/document-review/controller'
 import type { DocumentReviewSnapshot } from '@/components/Editor/documentReviewAnchors'
 import { LoreContentEditor } from '@/features/lore/LoreContentEditor'
+import { LoreRenameNotice } from '@/features/lore/LoreReferences'
 import { hasLoreProtagonistTag, splitLoreTags, toggleLoreProtagonistTag } from '@/features/lore/tags'
 
 export function LoreEditor({
   projectId,
   onInspectMaterial,
   draft,
+  items,
   tagDraft,
   residentTotalBytes,
   searchQuery,
@@ -33,10 +36,13 @@ export function LoreEditor({
   documentReview,
   documentReviewNavigationIntent,
   onPrepareReviewSnapshot,
+  autoFocusContent,
 }: {
   projectId: string
+  autoFocusContent?: boolean
   onInspectMaterial?: (material: LoreMaterial) => void
   draft: LoreItem | null
+  items: LoreItem[]
   tagDraft: string
   residentTotalBytes: number
   searchQuery?: string
@@ -48,6 +54,7 @@ export function LoreEditor({
   onPrepareReviewSnapshot?: () => Promise<DocumentReviewSnapshot>
 }) {
   const { t } = useTranslation()
+  const { categories } = useLoreCategories(projectId)
   const tagInputId = useId()
   if (!draft) {
     return <EmptyState title={t('settingPanel.editor.noLoreSelected')} description={t('settingPanel.editor.noLoreSelectedDesc')} />
@@ -105,7 +112,8 @@ export function LoreEditor({
                 )}
               >
                 <Field label={t('settingPanel.field.name')} className="col-span-2 @3xl/lore-fields:col-span-1">
-                  <Input className={inputClassName} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+                  <Input aria-label={t('settingPanel.field.name')} className={inputClassName} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+                  <LoreRenameNotice items={items} id={draft.id} />
                 </Field>
                 <BooleanSwitchField label={t('settingPanel.field.enabled')} checked={draft.enabled ?? true} onCheckedChange={(enabled) => setDraft({ ...draft, enabled })} />
                 <Field label={t('settingPanel.field.type')}>
@@ -115,8 +123,8 @@ export function LoreEditor({
                     </SelectTrigger>
                     <SelectContent className="nova-panel border text-[var(--nova-text)]">
                       <SelectGroup>
-                        {TYPE_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>{loreTypeLabel(option.value, t)}</SelectItem>
+                        {categories.map((option) => (
+                          <SelectItem key={option.id} value={option.id}>{option.name || loreTypeLabel(option.id, t)}</SelectItem>
                         ))}
                       </SelectGroup>
                     </SelectContent>
@@ -196,8 +204,10 @@ export function LoreEditor({
           </div>
           <div className="flex min-h-[420px] min-w-0 flex-1 flex-col bg-[var(--nova-bg)]">
             <LoreContentEditor
+                autoFocus={autoFocusContent}
                 projectId={projectId}
                 resourceKey={draft.id}
+                items={items}
                 value={draft.content || ''}
                 onChange={(content) => setDraft({ ...draft, content })}
                 highlightQuery={searchQuery}

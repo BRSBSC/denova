@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"denova/internal/app/resourceexchange"
+	"denova/internal/book/lore"
 	"denova/internal/platform"
 	"github.com/cloudwego/hertz/pkg/app"
 )
@@ -18,6 +19,8 @@ func exchangeError(ctx context.Context, c *app.RequestContext, err error) {
 	key, status := "market.errors.operationFailed", 400
 	var conflict *revisionfile.ConflictError
 	switch {
+	case errors.Is(err, lore.ErrNameRequiredForID):
+		key = "api.lore.nameRequiredForID"
 	case errors.As(err, &conflict):
 		key, status = "api.resource.revisionConflict", 409
 	case errors.Is(err, resourceexchange.ErrCreatorInvalid):

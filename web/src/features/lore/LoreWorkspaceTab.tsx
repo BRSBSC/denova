@@ -1,5 +1,6 @@
+import { useLoreCategories } from '@/features/lore/use-lore-categories'
 import { BookMarked, Database, LibraryBig } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AdaptiveSurface } from '@/components/layout/adaptive-surface'
 import { ResourceDirectory } from '@/components/resource-directory/ResourceDirectory'
@@ -17,7 +18,9 @@ import type {
   DocumentReviewNavigationIntent,
 } from '@/features/document-review/controller'
 import { loreImageURL, type LoreItem } from '@/lib/api'
-import { KNOWLEDGE_SECTIONS, sectionItems } from './knowledge-sections'
+import { sectionItems, type KnowledgeSection } from './knowledge-sections'
+import { LoreCreateEditor } from './LoreCreateEditor'
+import { closeMobilePanes } from '@/components/layout/mobile-pane-events'
 import { loreLoadModeLabel } from './options'
 import { LoreWorkspaceEditor } from './LoreWorkspaceEditor'
 import { useLoreWorkspace } from './use-lore-workspace'
@@ -50,9 +53,12 @@ export function LoreWorkspaceTab({
   onReferenceItem,
 }: LoreWorkspaceTabProps) {
   const { t } = useTranslation()
+  const { sections: categorySections } = useLoreCategories(projectId, refreshSignal)
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<LoreFilters>(EMPTY_LORE_FILTERS)
-  useEffect(() => { setFilters(EMPTY_LORE_FILTERS); setSearchQuery('') }, [projectId])
+  const [creating, setCreating] = useState<KnowledgeSection | null>(null)
+  const [createdId, setCreatedId] = useState('')
+  useEffect(() => { setFilters(EMPTY_LORE_FILTERS); setSearchQuery(''); setCreating(null); setCreatedId('') }, [projectId])
   const lore = useLoreWorkspace({
     projectId,
     refreshSignal,
@@ -63,6 +69,12 @@ export function LoreWorkspaceTab({
         (comment) => comment.id === navigationIntent.commentID,
       )?.target.id || ''
     : ''
+  const startCreating = useCallback(async (section: KnowledgeSection) => {
+    if (!(await lore.flush())) return
+    setCreating(section)
+    setCreatedId('')
+    closeMobilePanes()
+  }, [lore.flush])
   useEffect(() => {
     if (!navigationTargetID || navigationTargetID === lore.activeId) return
     void lore.selectItem(navigationTargetID)
@@ -77,31 +89,19 @@ export function LoreWorkspaceTab({
   const filteredItems = useMemo(() => filterLoreItems(lore.items, filters, searchQuery, projectId), [lore.items, filters, searchQuery, projectId])
   const sections = useMemo<ResourceDirectorySection[]>(
     () =>
-      KNOWLEDGE_SECTIONS.filter((section) => filters.category === 'all' || section.id === filters.category).map((section) => ({
+      categorySections.filter((section) => filters.category === 'all' || section.id === filters.category).map((section) => ({
         id: section.id,
-        label: t(section.labelKey),
+        label: (section.name || t(section.labelKey)),
         icon: section.icon,
         items: sectionItems(filteredItems, section).map((item) =>
           loreDirectoryItem(item, projectId, t),
         ),
-        onCreate: () => {
-          void lore.createItem({
-            enabled: true,
-            type: section.createType,
-            name: t(section.createNameKey),
-            importance: 'important',
-            load_mode: 'auto',
-            tags: section.tag ? [section.tag] : [],
-            brief_description: '',
-            keywords: [],
-            content: '',
-          })
-        },
+        onCreate: () => { void startCreating(section) },
         createLabel: t('loreWorkspace.createInSection', {
-          section: t(section.labelKey),
+          section: (section.name || t(section.labelKey)),
         }),
       })),
-    [lore.createItem, filteredItems, filters.category, projectId, t],
+    [startCreating, filteredItems, filters.category, projectId, t, categorySections],
   )
 
   const directory = (
@@ -124,8 +124,10 @@ export function LoreWorkspaceTab({
       ) : (
         <ResourceDirectory
           sections={sections}
-          activeId={lore.activeId || null}
+          activeId={creating ? null : lore.activeId || null}
           onSelect={(id) => {
+            setCreating(null)
+            setCreatedId('')
             void lore.selectItem(id)
           }}
           saving={lore.autosaveStatus === 'saving'}
@@ -133,9 +135,8 @@ export function LoreWorkspaceTab({
           query={searchQuery}
           onQueryChange={setSearchQuery}
           filterItem={() => true}
-          headerActions={<LoreFiltersButton presentation="icon" items={lore.items} filters={filters} onChange={setFilters} />}
-          searchDetails={<LoreFilterSummary filters={filters} onChange={setFilters} query={searchQuery} onQueryChange={setSearchQuery} matched={filteredItems.length} total={lore.items.length} />}
-          emptySectionsLast
+          headerActions={<LoreFiltersButton projectId={projectId} presentation="icon" items={lore.items} filters={filters} onChange={setFilters} />}
+          searchDetails={<LoreFilterSummary projectId={projectId} filters={filters} onChange={setFilters} query={searchQuery} onQueryChange={setSearchQuery} matched={filteredItems.length} total={lore.items.length} />}
           headerContent={
             <div className="grid gap-2">
               <div className="flex items-start gap-2 px-1 pb-1">
@@ -199,7 +200,23 @@ export function LoreWorkspaceTab({
         mobilePaneScope="surface"
       >
         {({ isMobile, openLeft }) =>
-          lore.loading && !lore.draft ? (
+          creating ? (
+            <LoreCreateEditor
+              key={`${projectId}:${creating.id}`}
+              projectId={projectId}
+              category={creating.createType}
+              categoryLabel={creating.name || t(creating.labelKey)}
+              importance="important"
+              loadMode="auto"
+              items={lore.items}
+              onCancel={() => setCreating(null)}
+              onCreated={(item) => {
+                setCreatedId(item.id)
+                setCreating(null)
+                lore.acceptCreatedItem(item)
+              }}
+            />
+          ) : lore.loading && !lore.draft ? (
             <LoadingState label={t('common.loading')} className="h-full min-h-0" />
           ) : lore.error && lore.items.length === 0 ? (
             <div className="grid h-full place-content-center gap-3 px-6">
@@ -210,8 +227,10 @@ export function LoreWorkspaceTab({
             </div>
           ) : lore.draft ? (
             <LoreWorkspaceEditor
+              autoFocusContent={createdId === lore.draft.id}
               projectId={projectId}
               draft={lore.draft}
+              items={lore.items}
               tagDraft={lore.tagDraft}
               autosaveStatus={lore.autosaveStatus}
               autosaveError={lore.autosaveError}
@@ -250,14 +269,7 @@ export function LoreWorkspaceTab({
                 action={{
                   label: t('loreWorkspace.emptyAction'),
                   onClick: () => {
-                    void lore.createItem({
-                      enabled: true,
-                      type: 'character',
-                      name: t('settingPanel.lore.newCharacter'),
-                      importance: 'important',
-                      load_mode: 'auto',
-                      content: '',
-                    })
+                    void startCreating(categorySections[0])
                   },
                 }}
                 variant="page"

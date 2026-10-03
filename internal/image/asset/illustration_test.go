@@ -53,7 +53,7 @@ func TestGenerateWritesShallowIllustrationWithJournalProvenance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	if filepath.Dir(result.ImagePath) != "assets/writing" {
+	if filepath.ToSlash(filepath.Dir(result.ImagePath)) != "assets/writing" {
 		t.Fatalf("image path = %q", result.ImagePath)
 	}
 	if result.MetaPath != "" {

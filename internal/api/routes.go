@@ -65,6 +65,8 @@ func (s *Server) registerRoutes(h *hertzserver.Hertz) {
 		projects.PATCH("/book/chapter-status", apiHandlers.HandleProjectBookChapterStatus)
 		projects.POST("/book/import-character-card", apiHandlers.HandleProjectCharacterCardImport)
 		projects.GET("/book/lore/items", apiHandlers.HandleProjectLoreItems)
+		projects.GET("/book/lore/categories", apiHandlers.HandleLoreCategories)
+		projects.POST("/book/lore/categories", apiHandlers.HandleLoreCategoryMutation)
 		projects.POST("/book/lore/items", apiHandlers.HandleProjectLoreItemCreate)
 		projects.PUT("/book/lore/items/:id", apiHandlers.HandleProjectLoreItemUpdate)
 		projects.DELETE("/book/lore/items/:id", apiHandlers.HandleProjectLoreItemDelete)

@@ -39,7 +39,7 @@ func OpenAPI() map[string]any {
 		"ConfigurationForm": ConfigurationForm{}, "ConfigurationDocument": ConfigurationDocument{},
 		"ConfigurationInput": ConfigurationInput{}, "StoryInstanceInput": createStoryInput{},
 		"StoryInstance": Instance{}, "AssetRef": AssetRef{}, "LibraryItem": LibraryItem{},
-		"LibraryPage": LibraryPage{}, "LibraryWrite": LibraryWrite{}, "ContentSource": ContentSource{},
+		"LibraryPage": LibraryPage{}, "LibraryWrite": LibraryWrite{}, "LibraryCategory": LibraryCategory{}, "ContentSource": ContentSource{},
 		"ImageRequest": ImageRequest{}, "GeneratedImage": GeneratedImage{}, "ImageResult": ImageResult{},
 		"StoryStateField": StoryStateField{}, "StoryStateTemplate": StoryStateTemplate{},
 		"StoryStateSchema": StoryStateSchema{}, "StoryStateChange": StoryStateChange{},
@@ -112,6 +112,7 @@ func OpenAPI() map[string]any {
 	add("post", "/agents/runs/{runId}/interactions/{interactionId}/responses", "Answer an ordinary question; permission approval is forbidden", jsonObject, nil, "204", nil)
 	add("post", "/tools/{providerId}/{toolId}/invoke", "Invoke a selected tool with its validated input", object(map[string]any{"input": map[string]any{}}, "input"), ref("ToolResult"), "200", nil)
 	add("get", "/library/items", "Read a page from the bound Project library", nil, ref("LibraryPage"), "200", []string{"query", "offset", "limit"})
+	add("get", "/library/categories", "Read valid category IDs and names for the bound Project; only character has dedicated behavior", nil, array(ref("LibraryCategory")), "200", nil)
 	add("get", "/library/items/{id}", "Read one library item including its full content", nil, ref("LibraryItem"), "200", nil)
 	add("post", "/library/items", "Save an explicitly adopted item through the native library; requires library.write", ref("LibraryWrite"), ref("LibraryItem"), "200", nil)
 	paths["/library/items"].(map[string]any)["post"].(map[string]any)["description"] = "Create uses an exact stable native ID (letters, digits, hyphen or underscore); identical input is replayed. Updating requires baseRevision from updatedAt. Existing content is backed up before native revision-checked replacement. Image binding is preserved, never replaced by this route. Project identity comes only from the runtime credential."

@@ -62,7 +62,7 @@ func TestMaterialImageUploadsPreserveFormatBytesAndCover(t *testing.T) {
 			if material.MIMEType != "image/"+format || filepath.Ext(material.Path) != "."+format || material.SizeBytes != len(data) {
 				t.Fatalf("incorrect stored image format: %+v", material)
 			}
-			if filepath.Dir(material.Path) != "assets/lore" || material.Source.MetaPath != "" {
+			if filepath.ToSlash(filepath.Dir(material.Path)) != "assets/lore" || material.Source.MetaPath != "" {
 				t.Fatalf("upload location or authority changed: %+v", material)
 			}
 			if _, err := os.Stat(filepath.Join(s.workspace, "assets/lore/meta.json")); !os.IsNotExist(err) {
@@ -76,7 +76,7 @@ func TestMaterialImageUploadsPreserveFormatBytesAndCover(t *testing.T) {
 			if err := json.Unmarshal(raw, &collection); err != nil {
 				t.Fatal(err)
 			}
-			if collection.Version != 2 || len(collection.Assets) != 1 || !reflect.DeepEqual(collection.Assets[0], material.Asset) {
+			if collection.Version != loreItemsVersion || len(collection.Assets) != 1 || !reflect.DeepEqual(collection.Assets[0], material.Asset) {
 				t.Fatalf("items.json lost canonical attributes: %+v", collection)
 			}
 			stored, err := os.ReadFile(filepath.Join(s.workspace, filepath.FromSlash(material.Path)))
@@ -178,7 +178,7 @@ func TestMaterialUploadsPreserveTextRejectInvalidAndRecoverCanceled(t *testing.T
 func TestInvalidNewMaterialsNeverFallBackToLegacy(t *testing.T) {
 	for _, material := range []string{`null`, `{}`, `{"entries":[{"asset_id":"missing"}]}`, `{"entries":[],"cover_asset_id":"missing"}`} {
 		raw := []byte(`{"version":2,"items":[{"id":"hero","name":"Hero","image":{"image_path":"old.png"},"materials":` + material + `}]}`)
-		if _, err := decodeLoreCollectionJSON(raw); err == nil {
+		if _, err := DecodeCollection(raw); err == nil {
 			t.Fatalf("invalid materials accepted: %s", raw)
 		}
 	}

@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useLoreCategories } from '@/features/lore/use-lore-categories'
+import { LoreCategoryManager } from './LoreCategoryManager'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CheckCheck, ImagePlus, ListChecks, MoreHorizontal, Plus, Search, Sparkles, Tags, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -25,7 +27,7 @@ import {
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useImageModelConfigured } from '@/features/settings/use-image-model-configured'
-import { KNOWLEDGE_SECTIONS, sectionItems, type KnowledgeSection } from './knowledge-sections'
+import { sectionItems, type KnowledgeSection } from './knowledge-sections'
 import { LoreCard, type LoreCardSize, type LoreCoverAction } from './LoreCard'
 import { LoreCoverDialog } from './LoreCoverDialog'
 import { LoreMaterialGenerateDialog } from './LoreMaterialGenerateDialog'
@@ -91,6 +93,8 @@ export function LoreLibrary({
   ) => Promise<boolean>
 }) {
   const { t } = useTranslation()
+  const pendingCreation = useRef<KnowledgeSection | null>(null)
+  const { sections: categorySections } = useLoreCategories(projectId)
   const imageConfigured = useImageModelConfigured(projectId)
   // Density is a browser preference shared by writing and game libraries.
   const [cardSize, setCardSize] = useState(readCardSize)
@@ -109,11 +113,11 @@ export function LoreLibrary({
   )
   const sections = useMemo(
     () =>
-      KNOWLEDGE_SECTIONS.map((section) => ({
+      categorySections.map((section) => ({
         ...section,
         items: sectionItems(filteredItems, section),
       })),
-    [filteredItems],
+    [filteredItems, categorySections],
   )
   const visible = sections.flatMap((section) => section.items)
   const coverItem = items.find((item) => item.id === coverTarget?.id)
@@ -165,6 +169,7 @@ export function LoreLibrary({
             <h1 className="text-xl font-semibold tracking-tight">{t('lore.library.title')}</h1>
           </div>
           <div className="flex flex-wrap gap-2">
+            <LoreCategoryManager projectId={projectId} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm">
@@ -172,12 +177,20 @@ export function LoreLibrary({
                   {t('lore.library.create')}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" onCloseAutoFocus={(event) => {
+                // Mount the title only after the menu releases its focus trap.
+                const section = pendingCreation.current
+                pendingCreation.current = null
+                if (section) {
+                  event.preventDefault()
+                  onCreate(section)
+                }
+              }}>
                 <DropdownMenuGroup>
-                  {KNOWLEDGE_SECTIONS.map((section) => (
-                    <DropdownMenuItem key={section.id} onSelect={() => onCreate(section)}>
+                  {categorySections.map((section) => (
+                    <DropdownMenuItem key={section.id} onSelect={() => { pendingCreation.current = section }}>
                       <section.icon />
-                      {t(section.labelKey)}
+                      {(section.name || t(section.labelKey))}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuGroup>
@@ -223,7 +236,7 @@ export function LoreLibrary({
               aria-label={t('lore.library.search')}
             />
           </InputGroup>
-          <LoreFiltersButton items={items} filters={filters} onChange={onFiltersChange} />
+          <LoreFiltersButton projectId={projectId} items={items} filters={filters} onChange={onFiltersChange} />
           <ToggleGroup
             type="single"
             value={cardSize}
@@ -249,7 +262,7 @@ export function LoreLibrary({
             ))}
           </ToggleGroup>
         </div>
-        <LoreFilterSummary filters={filters} onChange={onFiltersChange} query={query} onQueryChange={onQueryChange} matched={visible.length} total={items.length} />
+        <LoreFilterSummary projectId={projectId} filters={filters} onChange={onFiltersChange} query={query} onQueryChange={onQueryChange} matched={visible.length} total={items.length} />
         {selecting && (
           <div
             className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border bg-background p-3"
@@ -295,12 +308,12 @@ export function LoreLibrary({
           .map((section) => (
             <section
               key={section.id}
-              aria-label={t(section.labelKey)}
+              aria-label={(section.name || t(section.labelKey))}
               className="flex min-w-0 flex-col gap-4"
             >
               <div className="flex items-center gap-2">
-                <section.icon className="size-4 text-muted-foreground" />
-                <h2 className="text-sm font-medium">{t(section.labelKey)}</h2>
+                <section.icon className="size-4 shrink-0 text-muted-foreground" />
+                <h2 className="min-w-0 break-all text-sm font-medium">{(section.name || t(section.labelKey))}</h2>
                 <span className="text-xs text-muted-foreground">{section.items.length}</span>
                 <Separator className="ml-2 flex-1" />
               </div>

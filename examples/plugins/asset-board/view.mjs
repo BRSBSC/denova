@@ -113,7 +113,7 @@ $('#assistant').onclick = () => run(async () => {
 $('#keep').onclick = () => run(() => saveCard({ id: crypto.randomUUID(), text: result }));
 $('#library').onclick = () => run(async () => {
   // Keep the ID stable across a retry of an uncertain library write.
-  libraryDraft ??= { id: crypto.randomUUID(), name: $('#prompt').value.slice(0, 120) || labels.title, type: 'other', tags: [], briefDescription: '', enabled: true, content: result };
+  libraryDraft ??= { id: crypto.randomUUID(), name: $('#prompt').value.slice(0, 120) || labels.title, tags: [], briefDescription: '', enabled: true, content: result };
   await post('/library/items', { item: libraryDraft });
 });
 $('#upload').onchange = () => run(async () => {

@@ -46,7 +46,7 @@ func TestServiceGenerateSavesShallowInteractiveImageWithJournalProvenance(t *tes
 	if generator.request.Prompt != "画出当前回合" {
 		t.Fatalf("prompt = %q", generator.request.Prompt)
 	}
-	if result.Schema != InteractiveResultSchema || filepath.Dir(result.ImagePath) != "assets/game/story-one" {
+	if result.Schema != InteractiveResultSchema || filepath.ToSlash(filepath.Dir(result.ImagePath)) != "assets/game/story-one" {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 	imageBytes, err := os.ReadFile(filepath.Join(workspace, filepath.FromSlash(result.ImagePath)))
@@ -69,7 +69,7 @@ func TestServiceGenerateSavesShallowInteractiveImageWithJournalProvenance(t *tes
 	second, err := service.GenerateInteractive(context.Background(), &config.Config{}, book.NewService(workspace), InteractiveGenerateRequest{
 		StoryID: "story-two", BranchID: "main", TurnID: "turn-1", Prompt: "Another scene",
 	})
-	if err != nil || filepath.Dir(second.ImagePath) != "assets/game/story-two" {
+	if err != nil || filepath.ToSlash(filepath.Dir(second.ImagePath)) != "assets/game/story-two" {
 		t.Fatalf("different stories must own separate directories: %+v %v", second, err)
 	}
 	if _, err := service.GenerateInteractive(context.Background(), &config.Config{}, book.NewService(workspace), InteractiveGenerateRequest{

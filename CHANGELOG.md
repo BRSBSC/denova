@@ -14,6 +14,12 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Added / 新增
 
+- 资料正文支持通过 @ 搜索插入名称引用、点击查看资料与反向引用；缺失引用和改名影响有明确提示，写作与游戏共用。
+- Lore bodies support @ search for name references, linked previews and backlinks, with missing-reference and rename notices shared across Writing and Game.
+
+- 资料库默认分类统一为角色、地点、组织、物品和世界设定；支持作品内自定义分类、改名、排序和移入后删除。旧分类自动映射并先备份，正文、标签和素材关联保留。
+- Lore defaults to Characters, Locations, Organizations, Items and Worldbuilding, with project-local custom categories, renaming, ordering and deletion after moving entries. Upgrades back up and map old categories while preserving content, tags and media associations.
+
 - 资料库新增分类卡片总览，支持封面上传、生成与选择、批量补齐封面或追加图片，以及带版本恢复点的批量删除。
 - Lore adds a categorized card overview with cover upload, generation and selection, batch cover completion or image creation, and batch deletion protected by a recovery version.
 

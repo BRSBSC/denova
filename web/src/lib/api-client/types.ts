@@ -782,10 +782,15 @@ export interface VersionFileDiff {
 
 export type VersionDiffComparison = 'workspace' | 'parent'
 
+export interface LoreCategory {
+  id: string
+  name?: string
+}
+
 export interface LoreItem {
   id: string
   enabled: boolean
-  type: 'character' | 'world' | 'location' | 'faction' | 'rule' | 'item' | 'other'
+  type: string
   type_source: 'heuristic' | 'semantic' | 'manual' | 'legacy'
   name: string
   importance: 'major' | 'important' | 'minor'
