@@ -1,3 +1,5 @@
+import v8 from 'node:v8'
+import { runInNewContext } from 'node:vm'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -113,6 +115,30 @@ describe('useAgentChat', () => {
       throttle: STREAMING_RENDER_INTERVAL_MS,
       transport: expect.any(AgentChatTransport),
     })
+  })
+
+  it('releases superseded parent callbacks so streamed message snapshots cannot chain', async () => {
+    v8.setFlagsFromString('--expose-gc')
+    const gc = runInNewContext('gc') as () => void
+    // Parent callbacks close over the parent's render scope, which holds this hook's previous
+    // result and messages. Long-lived handlers must not keep an older render's callback alive.
+    let options: Parameters<typeof useAgentChat>[0] = {}
+    const first = (() => {
+      const callback = () => undefined
+      options = { onAgentFileChange: callback }
+      return new WeakRef(callback)
+    })()
+    // renderHook initialProps would share a closure scope with rerender and pin the first callback.
+    const { rerender } = renderHook(() => useAgentChat(options))
+    const latest = vi.fn()
+    options = { onAgentFileChange: latest }
+    for (let render = 0; render < 3; render += 1) rerender()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    gc()
+
+    expect(first.deref()).toBeUndefined()
+    await act(async () => chatMock.options?.onFinish?.({}))
+    expect(latest).toHaveBeenCalledOnce()
   })
 
   it('shows manual compaction immediately and prevents overlapping sends until it settles', async () => {
