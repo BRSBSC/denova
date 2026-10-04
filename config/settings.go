@@ -85,6 +85,7 @@ type Settings struct {
 	Language               string `toml:"language,omitempty" json:"language,omitempty"`
 	Theme                  string `toml:"theme,omitempty" json:"theme,omitempty"`
 	MotionIntensity        string `toml:"motion_intensity,omitempty" json:"motion_intensity,omitempty"`
+	AutoExpandThinking     *bool  `toml:"auto_expand_thinking,omitempty" json:"auto_expand_thinking,omitempty"`
 	UpdateCheckEnabled     *bool  `toml:"update_check_enabled,omitempty" json:"update_check_enabled,omitempty"`
 
 	// Agent
@@ -198,6 +199,7 @@ func DefaultSettings() Settings {
 		Language:                    "auto",
 		Theme:                       "dark",
 		MotionIntensity:             "system",
+		AutoExpandThinking:          boolPtr(false),
 		UpdateCheckEnabled:          boolPtr(true),
 		ModelMaxRetries:             intPtr(5),
 		AgentIdleTimeoutSeconds:     intPtr(DefaultAgentIdleTimeoutSeconds),
@@ -362,6 +364,9 @@ func Merge(parent, child Settings) Settings {
 	}
 	if child.MotionIntensity != "" {
 		out.MotionIntensity = child.MotionIntensity
+	}
+	if child.AutoExpandThinking != nil {
+		out.AutoExpandThinking = child.AutoExpandThinking
 	}
 	if child.UpdateCheckEnabled != nil {
 		out.UpdateCheckEnabled = child.UpdateCheckEnabled

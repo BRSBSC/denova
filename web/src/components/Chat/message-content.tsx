@@ -1,4 +1,4 @@
-import { Children, Fragment, cloneElement, isValidElement, memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Children, Fragment, cloneElement, isValidElement, memo, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { math } from '@streamdown/math'
@@ -18,9 +18,13 @@ import { useBottomScrollLock } from '@/hooks/useBottomScrollLock'
 import { isWorkspaceImagePath } from '@/lib/workspace-file-kind'
 import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/ai-elements/reasoning'
 import { agentContentPreview } from './agent-content-preview'
+import { ThinkingExpansionPreference } from './thinking-expansion-preference'
 import { AgentSourceBadge } from './message-source-badge'
 import { StreamingContentStage } from './StreamingContentStage'
 
+// Word animations create individual DOM nodes even for previously streamed text.
+// Bound that visual overhead while preserving the complete Markdown content.
+const MAX_ANIMATED_CONTENT_CHARACTERS = 8 * 1024
 const chatMarkdownPlugins = { cjk, math }
 const chatMarkdownControls = {
   code: { copy: true, download: false },
@@ -102,7 +106,7 @@ export const MarkdownContent = memo(function MarkdownContent({
   // retain Streamdown's horizontal overflow behavior.
   return (
     <Streamdown
-      animated
+      animated={content.length <= MAX_ANIMATED_CONTENT_CHARACTERS}
       className="nova-streamdown min-w-0 space-y-2"
       components={components}
       controls={chatMarkdownControls}
@@ -225,7 +229,8 @@ function highlightDialogueText(text: string, enabled: boolean, keyPrefix: string
 export function ThinkingBlock({ projectId, message, content, streaming, showAgentSource = true }: { projectId: string; message: ThinkingChatMessage; content: string; streaming: boolean; showAgentSource?: boolean }) {
   const { t } = useTranslation()
   const preview = agentContentPreview(content)
-  const [expanded, setExpanded] = useState(streaming)
+  const autoExpandThinking = useContext(ThinkingExpansionPreference)
+  const [expanded, setExpanded] = useState(streaming && autoExpandThinking)
   const userToggledRef = useRef(false)
   const wasStreamingRef = useRef(streaming)
   const contentScrollLock = useBottomScrollLock<HTMLDivElement>({
@@ -239,11 +244,13 @@ export function ThinkingBlock({ projectId, message, content, streaming, showAgen
     wasStreamingRef.current = streaming
     if (!wasStreaming && streaming) {
       userToggledRef.current = false
-      setExpanded(true)
+      setExpanded(autoExpandThinking)
+    } else if (streaming && !userToggledRef.current) {
+      setExpanded(autoExpandThinking)
     } else if (wasStreaming && !streaming && !userToggledRef.current) {
       setExpanded(false)
     }
-  }, [streaming])
+  }, [autoExpandThinking, streaming])
 
   const handleOpenChange = (open: boolean) => {
     userToggledRef.current = true
@@ -275,7 +282,7 @@ export function ThinkingBlock({ projectId, message, content, streaming, showAgen
             {expanded ? <ChevronDown aria-hidden="true" className="size-3 shrink-0" /> : <ChevronRight aria-hidden="true" className="size-3 shrink-0" />}
           </ReasoningTrigger>
           <ReasoningContent className="mt-0 text-xs">
-            <div data-thinking-scroll-frame className="overflow-hidden rounded-md border border-border/60">
+            {expanded ? <div data-thinking-scroll-frame className="overflow-hidden rounded-md border border-border/60">
               <div
                 ref={contentScrollLock.ref}
                 role="region"
@@ -298,7 +305,7 @@ export function ThinkingBlock({ projectId, message, content, streaming, showAgen
                   )}
                 </StreamingContentStage>
               </div>
-            </div>
+            </div> : null}
           </ReasoningContent>
         </Reasoning>
       </div>

@@ -90,6 +90,8 @@ const settings = {
   'settings.appearance.uiFontSize': '界面文字大小',
   'settings.appearance.uiFontSizeDescription': '统一调整导航、按钮、表单、弹窗与面板的字号层级。',
   'settings.appearance.sourceEditorFont': '源编辑器字体',
+  'settings.appearance.autoExpandThinking': '自动展开思考内容',
+  'settings.appearance.autoExpandThinkingHelp': '默认关闭，仅显示状态和摘要；可随时手动展开全文。适用于写作、通用对话和游戏。',
   'settings.appearance.motionIntensity': '动效强度',
   'settings.textSize.smallest': '最小',
   'settings.textSize.smaller': '较小',

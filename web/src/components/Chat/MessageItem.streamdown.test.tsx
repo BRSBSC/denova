@@ -1,8 +1,40 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { MessageItem } from './MessageItem'
+import { ThinkingExpansionPreference } from './thinking-expansion-preference'
 
 describe('MessageItem streaming Markdown', () => {
+  it('keeps live thinking collapsed by default and allows manual inspection', () => {
+    const { rerender } = render(<MessageItem message={{ id: 'thinking-default', role: 'thinking', content: 'First observation', streaming: true }} />)
+    expect(screen.queryByRole('region', { name: '思考内容' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '展开思考' }))
+    expect(screen.getByRole('region', { name: '思考内容' })).toHaveTextContent('First observation')
+    rerender(<MessageItem message={{ id: 'thinking-default', role: 'thinking', content: 'First observation. Next observation.', streaming: true }} />)
+    expect(screen.getByRole('region', { name: '思考内容' })).toHaveTextContent('Next observation.')
+    fireEvent.click(screen.getByRole('button', { name: '收起思考' }))
+    rerender(<MessageItem message={{ id: 'thinking-default', role: 'thinking', content: 'Hidden observation', streaming: true }} />)
+    expect(screen.queryByRole('region', { name: '思考内容' })).not.toBeInTheDocument()
+  })
+  it('honors automatic expansion changes while preserving an explicit manual choice', () => {
+    const content = 'Reasoning observation'
+    const renderMessage = (enabled: boolean, streaming = true) => (
+      <ThinkingExpansionPreference value={enabled}>
+        <MessageItem message={{ id: 'thinking-preference', role: 'thinking', content, streaming }} />
+      </ThinkingExpansionPreference>
+    )
+    const { rerender } = render(renderMessage(true))
+    expect(screen.getByRole('region', { name: '思考内容' })).toHaveTextContent(content)
+    rerender(renderMessage(false))
+    expect(screen.queryByRole('region', { name: '思考内容' })).not.toBeInTheDocument()
+    rerender(renderMessage(true))
+    expect(screen.getByRole('region', { name: '思考内容' })).toHaveTextContent(content)
+    fireEvent.click(screen.getByRole('button', { name: '收起思考' }))
+    rerender(renderMessage(true))
+    expect(screen.queryByRole('region', { name: '思考内容' })).not.toBeInTheDocument()
+    rerender(renderMessage(true, false))
+    rerender(renderMessage(true))
+    expect(screen.getByRole('region', { name: '思考内容' })).toHaveTextContent(content)
+  })
   it('renders animated Markdown, math, CJK emphasis, links, and project images', () => {
     const content = [
       '# 实时标题',
@@ -95,7 +127,7 @@ describe('MessageItem streaming Markdown', () => {
       '![分析图](assets/image/generated/analysis.png)',
     ].join('\n')
     const { container, rerender } = render(
-      <MessageItem projectId="project-thinking" message={{ role: 'thinking', content, streaming: true }} />,
+      <ThinkingExpansionPreference value={true}><MessageItem projectId="project-thinking" message={{ role: 'thinking', content, streaming: true }} /></ThinkingExpansionPreference>,
     )
 
     expect(container.querySelector('[data-streamdown="strong"]')).toHaveTextContent('正在分析。')
@@ -107,7 +139,7 @@ describe('MessageItem streaming Markdown', () => {
     )
 
     rerender(
-      <MessageItem projectId="project-thinking" message={{ role: 'thinking', content, streaming: false }} />,
+      <ThinkingExpansionPreference value={true}><MessageItem projectId="project-thinking" message={{ role: 'thinking', content, streaming: false }} /></ThinkingExpansionPreference>,
     )
     fireEvent.click(screen.getByRole('button', { name: '展开思考' }))
 

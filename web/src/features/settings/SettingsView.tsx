@@ -220,6 +220,10 @@ export function SettingsView({ visible = true }: { visible?: boolean }) {
           <MotionIntensitySelect label={t('settings.appearance.motionIntensity')} value={draft.motion_intensity}
                                  inherited={inherited.motion_intensity}
                                  onChange={(v) => setField('motion_intensity', v)} />
+          <BoolTri label={t('settings.appearance.autoExpandThinking')} value={draft.auto_expand_thinking ?? null}
+                   inherited={inherited.auto_expand_thinking}
+                   onChange={(value) => setField('auto_expand_thinking', value)} />
+          <p className="text-xs text-[var(--nova-text-muted)]">{t('settings.appearance.autoExpandThinkingHelp')}</p>
           <FieldRow label={t('settings.appearance.uiFont')}>
             <FontPicker value={draft.ui_font_family}
                         inherited={inherited.ui_font_family}
@@ -1039,7 +1043,7 @@ function BoolTri({ label, value, inherited, onChange }: {
   return (
     <FieldRow label={label}>
       <Select value={selectValue} onValueChange={(v) => onChange(v === FIELD_INHERIT_VALUE ? null : v === 'true')}>
-        <SelectTrigger size="sm" className="w-full">
+        <SelectTrigger size="sm" className="w-full" aria-label={label}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent className="nova-panel border text-[var(--nova-text)]">

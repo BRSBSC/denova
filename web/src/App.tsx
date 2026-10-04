@@ -18,6 +18,7 @@ import type { ChapterSummary } from '@/lib/api'
 import { toast } from '@/lib/toast'
 import { setConfiguredLocale } from '@/i18n'
 import { NovaMotionProvider, normalizeMotionIntensity } from '@/features/motion/motion-preferences'
+import { ThinkingExpansionPreference } from '@/components/Chat/thinking-expansion-preference'
 import {
   dedupeTabs,
   enforceTabLimit,
@@ -90,6 +91,7 @@ function App() {
   const [updateCheckEnabled, setUpdateCheckEnabled] = useState<boolean | null>(null)
   const [developerMode, setDeveloperMode] = useState<boolean | null>(null)
   const [motionIntensity, setMotionIntensity] = useState('system')
+  const [autoExpandThinking, setAutoExpandThinking] = useState(false)
   const [novaDir, setNovaDir] = useState('')
   const [sidebarView, setSidebarView] = useState<SidebarView>('outline')
   const [editorSearchIntent, setEditorSearchIntent] = useState<{ path: string; query: string; line: number; nonce: number } | null>(null)
@@ -313,6 +315,7 @@ function App() {
       setConfiguredLocale(effective?.language)
       setTheme(normalizeAppTheme(effective?.theme))
       setMotionIntensity(normalizeMotionIntensity(effective?.motion_intensity))
+      setAutoExpandThinking(effective?.auto_expand_thinking === true)
       applyFontSettings(fontSettingsFromEffective(effective))
     }
     const reload = (fresh = false) => {
@@ -875,177 +878,179 @@ function App() {
   })
 
   return (
-    <NovaMotionProvider intensity={motionIntensity}>
-      <ModeRouter
-        mode={mode}
-        lastCreationRoute={lastCreationRoute}
-        currentBookName={currentBookName}
-        workspace={workspace}
-        projectId={projectId}
-        summary={summary}
-        currentChapter={currentChapter}
-        isStreaming={writingAgentConversation.isStreaming}
-        sessionTransitionPending={sessionTransitionPending}
-        isExecutionActive={isExecutionActive}
-        runtimeProjection={runtimeProjection}
-        abortPending={abortPending}
-        commandSubmitting={commandSubmitting}
-        queueActionPendingCommandID={queueActionPendingCommandID}
-        projectVisible={projectVisible}
-        activityBarExpanded={activityBarExpanded}
-        rightPanel={rightPanel}
-        settingsOpen={settingsOpen}
-        developerMode={developerMode === true}
-        interactiveRightVisible={interactiveRightVisible}
-        novaDir={novaDir}
-        books={books}
-        bookSortMode={bookSortMode}
-        tree={tree}
-        loading={loading}
-        selectedFile={selectedFile}
-        fileDocument={fileDocument}
-        fileContent={fileContent}
-        fileRevision={fileRevision}
-        openTabs={openTabs}
-        activeTabKey={activeTabKey}
-        sidebarView={sidebarView}
-        editorSearchIntent={editorSearchIntent}
-        saveSignal={saveSignal}
-        editorAutoSaveEnabled={editorAutoSaveEnabled}
-        editorAutoSaveDelayMs={editorAutoSaveDelayMs}
-        projectExplorerRefreshSignal={projectExplorerRefreshSignal}
-        versionRefreshSignal={versionRefreshSignal}
-        messages={messages}
-        sessions={sessions}
-        activeSessionId={activeSessionId}
-        activityContent={activityContent}
-        references={references}
-        loreReferences={loreReferences}
-        loreItems={loreItems}
-        styleScenes={styleScenes}
-        textSelections={textSelections}
-        writingAgentConversation={writingAgentConversation}
-        onWritingAgentConversationStateChange={setWritingAgentConversation}
-        onOpenWritingSubAgentSession={handleOpenWritingSubAgentSession}
-        chatPlanMode={planMode}
-        hasEarlierMessages={hasEarlierMessages}
-        isLoadingEarlierHistory={isLoadingEarlierHistory}
-        onSetMode={handleSetMode}
-        onToggleActivityBarExpanded={toggleActivityBarExpanded}
-        onToggleProjectVisible={toggleProjectVisible}
-        onSetRightPanel={handleSetRightPanel}
-        onToggleSettings={toggleSettings}
-        onCloseSettings={closeSettings}
-        notice={notice}
-        onDismissNotice={dismissNotice}
-        onToggleInteractiveRightPanel={toggleInteractiveRightPanel}
-        onSwitchBook={handleWorkspaceSwitch}
-        onQuickSwitchBook={handleQuickWorkspaceSwitch}
-        onBeforeWorkspaceSwitch={flushEditorDraft}
-        onBooksChange={refreshBooks}
-        onAgentChatBookCreated={handleAgentChatBookCreated}
-        onOpenCharacterCardImport={handleOpenCharacterCardImportFromBooks}
-        onSetSidebarView={setSidebarView}
-        onSelectSearchResult={handleSelectSearchResult}
-        onSelectFile={handleSelectFile}
-        onSetChapterConfirmed={handleSetChapterConfirmed}
-        onReferenceFile={addReference}
-        onCreateItem={handleCreateItem}
-        onDeleteItem={handleDeleteItem}
-        onRenameItem={handleRenameItem}
-        onCopyItem={handleCopyItem}
-        onMoveItem={handleMoveItem}
-        onRefreshWorkspace={refresh}
-        onActivateTab={handleActivateTab}
-        onCloseTab={handleCloseTab}
-        onToggleTabPin={handleToggleTabPin}
-        onMoveTab={handleMoveTab}
-        onOpenLoreTab={handleOpenLoreTab}
-        onSaveCurrentFile={handleSaveCurrentFile}
-        onEditorFlushHandlerChange={handleEditorFlushHandlerChange}
-        onWorkspaceChanged={handleReviewedWorkspaceChange}
-        onQuoteSelection={addTextSelection}
-        onCreateChatSession={createChatSession}
-        onSwitchChatSession={switchChatSession}
-        onRenameChatSession={renameChatSession}
-        onDeleteChatSession={deleteChatSession}
-        onLoadEarlierHistory={loadEarlierHistory}
-        onRefreshChatHistory={loadHistory}
-        onSend={send}
-        onAnalyzeContext={analyzeContext}
-        onStop={stop}
-        onSuspend={suspend}
-        onResumeTask={resumeTask}
-        onSteerQueuedCommand={steerQueuedCommand}
-        onDeleteQueuedCommand={deleteQueuedCommand}
-        onEditQueuedCommand={editQueuedCommand}
-        onReferenceRemove={removeReference}
-        onLoreReferenceAdd={addLoreReference}
-        onLoreReferenceRemove={removeLoreReference}
-        onStyleSceneAdd={addStyleScene}
-        onStyleSceneRemove={removeStyleScene}
-        onTextSelectionRemove={removeTextSelection}
-        onChatPlanModeChange={handleChatPlanModeChange}
-        onChatPlanModeToggle={handleChatPlanModeToggle}
-        onApproveProposedPlan={approveProposedPlan}
-        onExitChatPlanMode={exitPlanMode}
-      />
-      <CommandPalette
-        open={commandOpen}
-        isStreaming={writingAgentConversation.isStreaming}
-        onOpenChange={setCommandOpen}
-        onSave={triggerSave}
-        onOpenAgent={() => {
-          setMode('ide')
-          handleSetRightPanel('ai')
-        }}
-        onOpenVersions={handleOpenVersions}
-        onOpenSearch={handleOpenGlobalSearch}
-        onContinueWriting={continueWriting}
-        onToggleRightPanel={() => {
-          if (mode === 'interactive') {
-            setInteractiveRightVisible((value) => !value)
-            return
-          }
-          if (mode === 'ide') handleSetRightPanel(rightPanel ? null : 'ai')
-        }}
-      />
-      <CharacterCardImportDialog
-        open={characterCardDialogOpen}
-        workspace={workspace}
-        currentBookName={currentBookName}
-        novaDir={novaDir}
-        file={characterCardFile}
-        preview={characterCardPreview}
-        targetMode={characterCardTargetMode}
-        bookTitle={characterCardBookTitle}
-        userCharacterName={characterCardUserName}
-        semanticClassification={characterCardSemanticClassification}
-        previewing={characterCardPreviewing}
-        importing={characterCardImporting}
-        error={characterCardError}
-        fileInputRef={characterCardInputRef}
-        onOpenChange={handleCharacterCardDialogOpenChange}
-        onFileSelected={handleCharacterCardSelected}
-        onTargetModeChange={setCharacterCardTargetMode}
-        onBookTitleChange={setCharacterCardBookTitle}
-        onUserCharacterNameChange={setCharacterCardUserName}
-        onSemanticClassificationChange={setCharacterCardSemanticClassification}
-        onImport={handleCharacterCardImport}
-      />
-      <OnboardingGuide
-        workspaceReady={workspaceLoaded && booksLoaded}
-        mode={mode}
-        rightPanel={rightPanel}
-        settingsOpen={settingsOpen}
-        workspace={workspace}
-        booksCount={books.length}
-        currentBookName={currentBookName}
-        messages={writingAgentConversation.messages}
-        isStreaming={writingAgentConversation.isStreaming}
-        onNavigate={handleOnboardingNavigate}
-      />
-    </NovaMotionProvider>
+    <ThinkingExpansionPreference value={autoExpandThinking}>
+      <NovaMotionProvider intensity={motionIntensity}>
+        <ModeRouter
+          mode={mode}
+          lastCreationRoute={lastCreationRoute}
+          currentBookName={currentBookName}
+          workspace={workspace}
+          projectId={projectId}
+          summary={summary}
+          currentChapter={currentChapter}
+          isStreaming={writingAgentConversation.isStreaming}
+          sessionTransitionPending={sessionTransitionPending}
+          isExecutionActive={isExecutionActive}
+          runtimeProjection={runtimeProjection}
+          abortPending={abortPending}
+          commandSubmitting={commandSubmitting}
+          queueActionPendingCommandID={queueActionPendingCommandID}
+          projectVisible={projectVisible}
+          activityBarExpanded={activityBarExpanded}
+          rightPanel={rightPanel}
+          settingsOpen={settingsOpen}
+          developerMode={developerMode === true}
+          interactiveRightVisible={interactiveRightVisible}
+          novaDir={novaDir}
+          books={books}
+          bookSortMode={bookSortMode}
+          tree={tree}
+          loading={loading}
+          selectedFile={selectedFile}
+          fileDocument={fileDocument}
+          fileContent={fileContent}
+          fileRevision={fileRevision}
+          openTabs={openTabs}
+          activeTabKey={activeTabKey}
+          sidebarView={sidebarView}
+          editorSearchIntent={editorSearchIntent}
+          saveSignal={saveSignal}
+          editorAutoSaveEnabled={editorAutoSaveEnabled}
+          editorAutoSaveDelayMs={editorAutoSaveDelayMs}
+          projectExplorerRefreshSignal={projectExplorerRefreshSignal}
+          versionRefreshSignal={versionRefreshSignal}
+          messages={messages}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          activityContent={activityContent}
+          references={references}
+          loreReferences={loreReferences}
+          loreItems={loreItems}
+          styleScenes={styleScenes}
+          textSelections={textSelections}
+          writingAgentConversation={writingAgentConversation}
+          onWritingAgentConversationStateChange={setWritingAgentConversation}
+          onOpenWritingSubAgentSession={handleOpenWritingSubAgentSession}
+          chatPlanMode={planMode}
+          hasEarlierMessages={hasEarlierMessages}
+          isLoadingEarlierHistory={isLoadingEarlierHistory}
+          onSetMode={handleSetMode}
+          onToggleActivityBarExpanded={toggleActivityBarExpanded}
+          onToggleProjectVisible={toggleProjectVisible}
+          onSetRightPanel={handleSetRightPanel}
+          onToggleSettings={toggleSettings}
+          onCloseSettings={closeSettings}
+          notice={notice}
+          onDismissNotice={dismissNotice}
+          onToggleInteractiveRightPanel={toggleInteractiveRightPanel}
+          onSwitchBook={handleWorkspaceSwitch}
+          onQuickSwitchBook={handleQuickWorkspaceSwitch}
+          onBeforeWorkspaceSwitch={flushEditorDraft}
+          onBooksChange={refreshBooks}
+          onAgentChatBookCreated={handleAgentChatBookCreated}
+          onOpenCharacterCardImport={handleOpenCharacterCardImportFromBooks}
+          onSetSidebarView={setSidebarView}
+          onSelectSearchResult={handleSelectSearchResult}
+          onSelectFile={handleSelectFile}
+          onSetChapterConfirmed={handleSetChapterConfirmed}
+          onReferenceFile={addReference}
+          onCreateItem={handleCreateItem}
+          onDeleteItem={handleDeleteItem}
+          onRenameItem={handleRenameItem}
+          onCopyItem={handleCopyItem}
+          onMoveItem={handleMoveItem}
+          onRefreshWorkspace={refresh}
+          onActivateTab={handleActivateTab}
+          onCloseTab={handleCloseTab}
+          onToggleTabPin={handleToggleTabPin}
+          onMoveTab={handleMoveTab}
+          onOpenLoreTab={handleOpenLoreTab}
+          onSaveCurrentFile={handleSaveCurrentFile}
+          onEditorFlushHandlerChange={handleEditorFlushHandlerChange}
+          onWorkspaceChanged={handleReviewedWorkspaceChange}
+          onQuoteSelection={addTextSelection}
+          onCreateChatSession={createChatSession}
+          onSwitchChatSession={switchChatSession}
+          onRenameChatSession={renameChatSession}
+          onDeleteChatSession={deleteChatSession}
+          onLoadEarlierHistory={loadEarlierHistory}
+          onRefreshChatHistory={loadHistory}
+          onSend={send}
+          onAnalyzeContext={analyzeContext}
+          onStop={stop}
+          onSuspend={suspend}
+          onResumeTask={resumeTask}
+          onSteerQueuedCommand={steerQueuedCommand}
+          onDeleteQueuedCommand={deleteQueuedCommand}
+          onEditQueuedCommand={editQueuedCommand}
+          onReferenceRemove={removeReference}
+          onLoreReferenceAdd={addLoreReference}
+          onLoreReferenceRemove={removeLoreReference}
+          onStyleSceneAdd={addStyleScene}
+          onStyleSceneRemove={removeStyleScene}
+          onTextSelectionRemove={removeTextSelection}
+          onChatPlanModeChange={handleChatPlanModeChange}
+          onChatPlanModeToggle={handleChatPlanModeToggle}
+          onApproveProposedPlan={approveProposedPlan}
+          onExitChatPlanMode={exitPlanMode}
+        />
+        <CommandPalette
+          open={commandOpen}
+          isStreaming={writingAgentConversation.isStreaming}
+          onOpenChange={setCommandOpen}
+          onSave={triggerSave}
+          onOpenAgent={() => {
+            setMode('ide')
+            handleSetRightPanel('ai')
+          }}
+          onOpenVersions={handleOpenVersions}
+          onOpenSearch={handleOpenGlobalSearch}
+          onContinueWriting={continueWriting}
+          onToggleRightPanel={() => {
+            if (mode === 'interactive') {
+              setInteractiveRightVisible((value) => !value)
+              return
+            }
+            if (mode === 'ide') handleSetRightPanel(rightPanel ? null : 'ai')
+          }}
+        />
+        <CharacterCardImportDialog
+          open={characterCardDialogOpen}
+          workspace={workspace}
+          currentBookName={currentBookName}
+          novaDir={novaDir}
+          file={characterCardFile}
+          preview={characterCardPreview}
+          targetMode={characterCardTargetMode}
+          bookTitle={characterCardBookTitle}
+          userCharacterName={characterCardUserName}
+          semanticClassification={characterCardSemanticClassification}
+          previewing={characterCardPreviewing}
+          importing={characterCardImporting}
+          error={characterCardError}
+          fileInputRef={characterCardInputRef}
+          onOpenChange={handleCharacterCardDialogOpenChange}
+          onFileSelected={handleCharacterCardSelected}
+          onTargetModeChange={setCharacterCardTargetMode}
+          onBookTitleChange={setCharacterCardBookTitle}
+          onUserCharacterNameChange={setCharacterCardUserName}
+          onSemanticClassificationChange={setCharacterCardSemanticClassification}
+          onImport={handleCharacterCardImport}
+        />
+        <OnboardingGuide
+          workspaceReady={workspaceLoaded && booksLoaded}
+          mode={mode}
+          rightPanel={rightPanel}
+          settingsOpen={settingsOpen}
+          workspace={workspace}
+          booksCount={books.length}
+          currentBookName={currentBookName}
+          messages={writingAgentConversation.messages}
+          isStreaming={writingAgentConversation.isStreaming}
+          onNavigate={handleOnboardingNavigate}
+        />
+      </NovaMotionProvider>
+    </ThinkingExpansionPreference>
   )
 }
 

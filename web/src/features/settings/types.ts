@@ -58,6 +58,7 @@ export interface Settings {
   language?: string
   theme?: string
   motion_intensity?: string
+  auto_expand_thinking?: boolean | null
   update_check_enabled?: boolean | null
   max_iteration?: number | null
   model_max_retries?: number | null

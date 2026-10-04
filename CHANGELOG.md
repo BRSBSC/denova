@@ -12,6 +12,16 @@ Denova records only major user-visible features, important compatibility or data
 
 ## [Unreleased]
 
+### Changed / 调整
+
+- 思考内容默认收起，可在外观设置中开启自动展开；手动展开和收起仍可使用。
+- Keep thinking content collapsed by default and allow automatic expansion in appearance settings, while preserving manual controls.
+
+### Fixed / 修复
+
+- 长文本停用逐词动画，收起思考时立即卸载正文并限制摘要长度，降低长时间流式生成的浏览器渲染内存开销。
+- Disable word animations for long text and unmount collapsed thinking content immediately with bounded previews to reduce browser rendering memory during long streams.
+
 ## [v0.5.1fix3] - 2026-10-04
 
 ### Brief / 简要说明
