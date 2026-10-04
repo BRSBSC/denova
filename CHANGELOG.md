@@ -4,16 +4,34 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
 ## [Unreleased]
 
+## [v0.5.1fix] - 2026-10-04
+
+### Brief / 简要说明
+
+#### 中文
+
+- 修复长时间流式输出中重复拆分正文与思考段，导致浏览器消息状态膨胀、内容显示不完整的问题。
+- 减少长会话读取与外部运行时控制开销，并修复子 Agent 命令重试和外部运行时流兼容问题。
+- 本 fork 从已验证源码构建安装包和 Docker 双架构镜像，镜像版本为 `v0.5.1fix`。
+
+#### English
+
+- Fix repeated text and reasoning segments during long streams that inflate browser message state and leave displayed content incomplete.
+- Reduce long-session loading and external runtime control overhead, and fix child Agent retries and external stream compatibility.
+- This fork builds verified source packages and dual-architecture Docker images tagged `v0.5.1fix`.
+
 ### Fixed / 修复
 
+- 修复长时间流式输出中，事件缺口通知反复拆分同一正文或思考段，导致浏览器消息状态膨胀、内容显示不完整的问题。
+- Fix event gap notifications repeatedly splitting the same text or reasoning segment during long streams, inflating browser message state and leaving displayed content incomplete.
 - 修复子 Agent 刚启动时，相同命令重试可能被误判为输入冲突的问题。
 - Fix identical command retries being rejected as input conflicts while a child Agent is starting.
 - 修复外部运行时压缩上下文期间，状态查询可能连带阻塞其他会话控制操作的问题。

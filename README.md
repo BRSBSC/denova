@@ -12,14 +12,14 @@
 
 <p align="center">
   <a href="https://discord.gg/BM6dRmyvvZ"><img src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white" alt="加入 Denova Discord" /></a>
-  <a href="https://github.com/alfredxw/denova/releases"><img alt="Release" src="https://img.shields.io/github/v/release/alfredxw/denova?style=flat-square"></a>
+  <a href="https://github.com/BRSBSC/denova/releases"><img alt="Release" src="https://img.shields.io/github/v/release/BRSBSC/denova?style=flat-square"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/alfredxw/denova?style=flat-square"></a>
   <img alt="Go" src="https://img.shields.io/badge/Go-1.26.6%2B-00ADD8?style=flat-square&logo=go&logoColor=white">
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-22.13%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white">
 </p>
 
 <p align="center">
-  当前版本：<strong>v0.5.1</strong>（2026-09-28） · Beta · <a href="https://github.com/alfredxw/denova/releases">下载最新版本</a>
+  当前版本：<strong>v0.5.1fix</strong>（2026-10-04） · Beta · <a href="https://github.com/BRSBSC/denova/releases">下载最新版本</a>
 </p>
 
 ![Denova 写作](./img/ide.png)
@@ -83,10 +83,10 @@ Denova 把小说写作、互动故事、结构化资料库、AI Agent、图像�
 macOS / Linux 可以使用一键安装脚本：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/alfredxw/denova/master/scripts/install.sh | sh
+curl -fsSL https://github.com/BRSBSC/denova/releases/download/v0.5.1fix/install.sh | sh
 ```
 
-安装完成后运行 `denova`。Windows 用户以及希望手动安装的用户，可以从 [GitHub Releases](https://github.com/alfredxw/denova/releases) 下载对应平台的压缩包；Windows 运行 `denova.exe`。
+安装完成后运行 `denova`。Windows 用户以及希望手动安装的用户，可以从 [GitHub Releases](https://github.com/BRSBSC/denova/releases) 下载对应平台的压缩包；Windows 运行 `denova.exe`。
 
 本 fork 另提供上游安装包自动同步与 GHCR 双架构容器构建流程，启用方法和 Docker Compose 部署见 [容器发布说明](docs/container-publishing.md)。
 

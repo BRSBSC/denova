@@ -16,6 +16,7 @@ Images are published as `ghcr.io/brsbsc/denova:v0.4.5` (example) and `ghcr.io/br
 
 - Download all upstream Release assets and verify every Denova archive against `checksums.txt`. Missing Linux architectures, checksum failures, or unsafe archive paths stop publication.
 - Package the released Linux bundles without recompiling the application. Preserve the frontend, Skills, updater, and license. Add Bash, Git, curl, Python, and ripgrep. Additional language toolchains or external Agent CLIs require an extended image.
+- Application source fixes must first be included in the Linux bundle used by the image. Pushing an application patch to this fork or forcing a rebuild of the original version does not compile that patch into the image. Sync an upstream release containing the fix, or separately build and verify a patched bundle and image.
 - Build and test both architectures: version, HTTP frontend, rejection of unauthenticated access, login, settings access, and configuration/session persistence after restart. Push the version image only after these tests pass.
 - Keep the upstream version as the Release title, using an `upstream-vMAJOR.MINOR.PATCH` tag on this workflow's commit. Image tags remain `vMAJOR.MINOR.PATCH`. This avoids additional permissions for importing upstream workflows and does not trigger the existing `v*` source-release workflow. GitHub-generated Source code archives contain the fork's packaging configuration; use the linked upstream release for application source. Existing Releases without this workflow's ownership marker are never overwritten.
 - Promote the tested version image to `latest` only if it is still the latest upstream stable release. Publish the mirrored Release with a completion marker last. Failures leave no success marker and can be retried; a draft Release or version image may remain.
@@ -55,6 +56,14 @@ docker compose --env-file docker/.env -f docker/compose.yml up -d
 ```
 
 To roll back, select an earlier `DENOVA_IMAGE_TAG` and recreate the container. Back up the data volume before upgrades: rolling back an image does not reverse data migrations.
+
+## Source fixes published by this fork
+
+The `Release` workflow builds source from each `v*` tag rather than using upstream bundles. It verifies full CI for the same commit, then packages all five platforms. After publishing the archives, it builds and smoke-tests `linux/amd64` and `linux/arm64` images from those Linux packages, then pushes the version tag and `latest`. The image revision label records the actual source commit.
+
+The `v0.5.1fix` image is `ghcr.io/brsbsc/denova:v0.5.1fix`. Set `DENOVA_IMAGE_TAG=v0.5.1fix` in `docker/.env` and run the update commands above. Pinning the version avoids switching when a later upstream synchronization moves `latest`.
+
+Source image publication shares the mirroring concurrency group to serialize `latest` promotion. Mirroring continues to process upstream stable releases and can publish a newer upstream version later. Installers attached to source releases install packages from this fork.
 
 ## Validation
 

@@ -12,14 +12,14 @@
 
 <p align="center">
   <a href="https://discord.gg/BM6dRmyvvZ"><img src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white" alt="Join the Denova Discord" /></a>
-  <a href="https://github.com/alfredxw/denova/releases"><img alt="Release" src="https://img.shields.io/github/v/release/alfredxw/denova?style=flat-square"></a>
+  <a href="https://github.com/BRSBSC/denova/releases"><img alt="Release" src="https://img.shields.io/github/v/release/BRSBSC/denova?style=flat-square"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/alfredxw/denova?style=flat-square"></a>
   <img alt="Go" src="https://img.shields.io/badge/Go-1.26.6%2B-00ADD8?style=flat-square&logo=go&logoColor=white">
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-22.13%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white">
 </p>
 
 <p align="center">
-  Current version: <strong>v0.5.1</strong> (2026-09-28) · Beta · <a href="https://github.com/alfredxw/denova/releases">Download the latest release</a>
+  Current version: <strong>v0.5.1fix</strong> (2026-10-04) · Beta · <a href="https://github.com/BRSBSC/denova/releases">Download the latest release</a>
 </p>
 
 ![Denova Writing](./img/ide.png)
@@ -83,10 +83,10 @@ Lore, presets, Skills, and version management are shared between the two workflo
 macOS / Linux users can run the installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/alfredxw/denova/master/scripts/install.sh | sh
+curl -fsSL https://github.com/BRSBSC/denova/releases/download/v0.5.1fix/install.sh | sh
 ```
 
-Run `denova` after installation. Windows users and anyone who prefers manual installation can download the archive for their platform from [GitHub Releases](https://github.com/alfredxw/denova/releases); on Windows, run `denova.exe`.
+Run `denova` after installation. Windows users and anyone who prefers manual installation can download the archive for their platform from [GitHub Releases](https://github.com/BRSBSC/denova/releases); on Windows, run `denova.exe`.
 
 This fork also provides upstream release mirroring and dual-architecture GHCR image builds. See [container publishing](docs/container-publishing.en.md) for setup and Docker Compose deployment.
 

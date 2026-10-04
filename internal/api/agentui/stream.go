@@ -165,6 +165,12 @@ func (e *StreamEncoder) WriteEvent(ev appsvc.AgentEvent) error {
 		return e.Finish("stop")
 	case "done":
 		return e.Finish("stop")
+	case "agent_event_stream_gap":
+		// Observer loss is a transport diagnostic, not a content boundary.
+		// Reopening the same segment makes AI SDK append duplicate parts and
+		// copy an increasingly large message on every subsequent delta.
+		data["event"] = ev.Type
+		return e.writeData(DataTypeActivity, eventID(data, ev.Type), data)
 	default:
 		if err := e.closeOpenContentFor(contentSource); err != nil {
 			return err

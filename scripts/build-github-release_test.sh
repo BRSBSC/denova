@@ -93,4 +93,14 @@ if bash "${TEST_ROOT}/scripts/build-github-release.sh" v9.9.9 > /dev/null 2>&1; 
 rm "${DENOVA_RELEASE_FRONTEND_DIR}/index.html"
 if bash "${TEST_ROOT}/scripts/build-github-release.sh" v1.2.3 linux-x64 > /dev/null 2>&1; then exit 1; fi
 test -s "${assets}/denova-v1.2.3-linux-x64.tar.gz"
+# Fork hotfix tags need not be semver prereleases; preserve their exact version.
+printf '{"version":"0.5.1fix"}\n' > "${TEST_ROOT}/web/package.json"
+printf '## [v0.5.1fix]\n### Brief / 简要说明\nHotfix fixture.\n' > "${TEST_ROOT}/CHANGELOG.md"
+printf '<strong>v0.5.1fix</strong>\n' > "${TEST_ROOT}/README.md"
+cp "${TEST_ROOT}/README.md" "${TEST_ROOT}/README.en.md"
+printf 'tested frontend\n' > "${DENOVA_RELEASE_FRONTEND_DIR}/index.html"
+bash "${TEST_ROOT}/scripts/build-github-release.sh" v0.5.1fix linux-x64 > "${TEST_ROOT}/hotfix.log"
+test -s "${assets}/denova-v0.5.1fix-linux-x64.tar.gz"
+grep -q '^# Denova v0.5.1fix$' "${assets}/RELEASE_NOTES.md"
+
 printf 'Release packaging tests passed.\n'

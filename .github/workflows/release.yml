@@ -137,9 +137,82 @@ jobs:
             test -s "denova-$RELEASE_TAG-$target.$extension"
           done
           sha256sum denova-* > checksums.txt
+          # Fork releases must install their own verified packages.
+          sed -i "s|REPOSITORY=\"alfredxw/denova\"|REPOSITORY=\"$GITHUB_REPOSITORY\"|" install.sh
+          sed -i "s|https://github.com/alfredxw/denova/releases/latest/download/install.sh|https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/install.sh|" RELEASE_NOTES.md
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file RELEASE_NOTES.md
             gh release upload "$RELEASE_TAG" denova-* checksums.txt install.sh --clobber
           else
             gh release create "$RELEASE_TAG" denova-* checksums.txt install.sh --title "$RELEASE_TAG" --notes-file RELEASE_NOTES.md
           fi
+
+  container:
+    name: Publish verified source Docker images
+    needs: [ci, package, publish]
+    if: github.repository == 'BRSBSC/denova'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    # Serialize latest promotion with the upstream mirroring workflow.
+    concurrency:
+      group: upstream-release-${{ github.repository }}-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.ci.outputs.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-linux-*
+          merge-multiple: true
+          path: dist/github-release
+      - name: Prepare verified source bundles for Docker
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            target=linux-x64
+            if [[ "$arch" == arm64 ]]; then target=linux-arm64; fi
+            mkdir -p "dist/upstream/$arch"
+            tar -xzf "dist/github-release/denova-$RELEASE_TAG-$target.tar.gz" -C "dist/upstream/$arch"
+            test -x "dist/upstream/$arch/denova/denova"
+            test -x "dist/upstream/$arch/denova/denova-updater"
+          done
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build and smoke-test both source architectures
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            docker buildx build --load --platform "linux/$arch" \
+              --file docker/Dockerfile --tag "denova-source-smoke:$arch" \
+              --build-arg "VERSION=$RELEASE_TAG" \
+              --build-arg "SOURCE_REPOSITORY=$GITHUB_REPOSITORY" .
+            bash docker/smoke-test.sh "denova-source-smoke:$arch" "linux/$arch" "$RELEASE_TAG"
+          done
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Publish tested source version and latest
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/brsbsc/denova:${{ env.RELEASE_TAG }}
+            ghcr.io/brsbsc/denova:latest
+          build-args: |
+            VERSION=${{ env.RELEASE_TAG }}
+            SOURCE_REPOSITORY=${{ github.repository }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.ci.outputs.sha }}
+      - name: Report source publication
+        run: |
+          echo 'Published ghcr.io/brsbsc/denova:${{ env.RELEASE_TAG }} and latest from verified source.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Source: ${{ needs.ci.outputs.sha }}; platforms: linux/amd64, linux/arm64.' >> "$GITHUB_STEP_SUMMARY"
