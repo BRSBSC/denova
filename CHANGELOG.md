@@ -4,13 +4,25 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix3）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix4）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix3) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix4) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
 ## [Unreleased]
+
+## [v0.5.1fix4] - 2026-10-05
+
+### Brief / 简要说明
+
+#### 中文
+
+- 降低长时间流式正文与思考的渲染内存开销；思考默认收起，并提供自动展开设置。
+
+#### English
+
+- Reduce rendering memory during long text and reasoning streams; keep thinking collapsed by default and add an automatic expansion preference.
 
 ### Changed / 调整
 
