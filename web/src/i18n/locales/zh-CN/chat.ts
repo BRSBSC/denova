@@ -484,6 +484,7 @@ const chat = {
   'chat.contextCompaction.sourceMessages': '来源 {{count}} 条',
   'chat.contextCompaction.threshold': '阈值 {{percent}}%',
   'chat.contextCompaction.attempt': '第 {{count}} 次',
+  'chat.contextCompaction.manualRunning': '正在压缩会话上下文，完成后可继续发送消息。',
   'chat.contextCompaction.waiting': '正在等待 checkpoint 输出…',
   'chat.contextCompaction.revision': '第 {{revision}} 版',
   'chat.contextCompaction.empty': '没有压缩摘要内容',

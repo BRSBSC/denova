@@ -484,6 +484,7 @@ const chat = {
   'chat.contextCompaction.sourceMessages': '{{count}} source messages',
   'chat.contextCompaction.threshold': '{{percent}}% threshold',
   'chat.contextCompaction.attempt': 'Attempt {{count}}',
+  'chat.contextCompaction.manualRunning': 'Compacting conversation context. You can send messages when this finishes.',
   'chat.contextCompaction.waiting': 'Waiting for checkpoint output...',
   'chat.contextCompaction.revision': 'Revision {{revision}}',
   'chat.contextCompaction.empty': 'No compaction summary content',

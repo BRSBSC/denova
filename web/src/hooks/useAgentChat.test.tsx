@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createAgentCommandID,
+  executeCommand,
   getActiveChatTask,
   getMessagesPage,
   getSessions,
@@ -81,6 +82,7 @@ vi.mock('@/features/settings/api', () => ({
 describe('useAgentChat', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(executeCommand).mockReset()
     vi.mocked(createAgentCommandID).mockReset().mockReturnValue('command-test')
     vi.mocked(getActiveChatTask).mockReset().mockResolvedValue({ active: false })
     vi.mocked(getMessagesPage).mockReset().mockResolvedValue({
@@ -113,6 +115,88 @@ describe('useAgentChat', () => {
     })
   })
 
+  it('shows manual compaction immediately and prevents overlapping sends until it settles', async () => {
+    let finish!: (result: string) => void
+    vi.mocked(executeCommand).mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    const { result } = renderHook(() => useAgentChat())
+    let pending!: Promise<boolean>
+    act(() => { pending = result.current.send('/compact') })
+
+    expect(result.current.commandSubmitting).toBe(true)
+    expect(result.current.messages.at(-1)?.parts).toEqual([
+      expect.objectContaining({ type: 'data-agent-context-compaction', data: expect.objectContaining({ status: 'running', phase: 'agent' }) }),
+    ])
+    expect(result.current.activityContent).toBe('压缩中')
+    await act(async () => {
+      expect(await result.current.send('/compact')).toBe(false)
+      expect(await result.current.send('Continue the chapter')).toBe(false)
+      await result.current.switchChatSession('another-session')
+    })
+    expect(executeCommand).toHaveBeenCalledTimes(1)
+    expect(switchSession).not.toHaveBeenCalled()
+    expect(chatMock.sendMessage).not.toHaveBeenCalled()
+
+    await act(async () => {
+      finish('Compacted 12000 tokens to 2000 tokens')
+      expect(await pending).toBe(true)
+    })
+    expect(result.current.commandSubmitting).toBe(false)
+    expect(result.current.activityContent).toBe('')
+    expect(result.current.messages).toEqual([])
+    const settled = chatMock.setMessages.mock.calls.reduce<any[]>(
+      (messages, [update]) => typeof update === 'function' ? update(messages) : update, [],
+    )
+    expect(settled.at(-1)?.parts).toEqual([
+      expect.objectContaining({ type: 'data-agent-system', data: expect.objectContaining({ content: 'Compacted 12000 tokens to 2000 tokens' }) }),
+    ])
+  })
+
+  it('shows a failed compaction, releases submission state and allows a fresh retry', async () => {
+    const failure = new APIError('Provider unavailable', { status: 400, code: 'agent_runtime.command_failed', requestID: 'compact-error' })
+    vi.mocked(executeCommand).mockRejectedValueOnce(failure).mockResolvedValueOnce('Compaction complete')
+    const onSubmissionError = vi.fn()
+    const { result } = renderHook(() => useAgentChat())
+    await act(async () => {
+      expect(await result.current.send('/compact', { onSubmissionError })).toBe(false)
+    })
+    expect(result.current.commandSubmitting).toBe(false)
+    expect(result.current.messages).toEqual([])
+    expect(onSubmissionError).toHaveBeenCalledTimes(1)
+    expect(toastMock.error).not.toHaveBeenCalled()
+    const failed = chatMock.setMessages.mock.calls.reduce<any[]>(
+      (messages, [update]) => typeof update === 'function' ? update(messages) : update, [],
+    )
+    expect(failed.at(-1)?.parts).toEqual([
+      expect.objectContaining({ type: 'data-agent-context-compaction', data: expect.objectContaining({ status: 'error', phase: 'agent' }) }),
+    ])
+    await act(async () => { expect(await result.current.send('/compact')).toBe(true) })
+    expect(executeCommand).toHaveBeenCalledTimes(2)
+    expect(result.current.commandSubmitting).toBe(false)
+  })
+  it('prevents duplicate compaction after concurrent submissions resolve an initially unknown session', async () => {
+    writingAgentChatClient.fixedSessionId = ''
+    let resolveSessions!: (sessions: SessionSummary[]) => void
+    vi.mocked(getSessions).mockReturnValue(new Promise((resolve) => { resolveSessions = resolve }))
+    let finish!: (result: string) => void
+    vi.mocked(executeCommand).mockReturnValue(new Promise((resolve) => { finish = resolve }))
+    const { result } = renderHook(() => useAgentChat())
+    let first!: Promise<boolean>
+    let second!: Promise<boolean>
+    act(() => {
+      first = result.current.send('/compact')
+      second = result.current.send('/compact')
+    })
+    await act(async () => {
+      resolveSessions([{ id: 'resolved-session', active: true, title: '', created_at: '', updated_at: '', message_count: 0 }])
+      expect(await second).toBe(false)
+    })
+    expect(executeCommand).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      finish('Compaction complete')
+      expect(await first).toBe(true)
+    })
+    expect(result.current.commandSubmitting).toBe(false)
+  })
   it('restores every pending external question from the active projection', async () => {
     const questions = ['tone', 'length'].map((id) => ({
       schema: 'ask.pending.v1', id, tool_call_id: `original-${id}`, agent_kind: 'ide', status: 'pending' as const,

@@ -4,13 +4,30 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix2）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix3）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix2) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix3) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
 ## [Unreleased]
+
+## [v0.5.1fix3] - 2026-10-04
+
+### Brief / 简要说明
+
+#### 中文
+
+- 手动压缩立即显示执行状态，失败时显示具体原因并恢复重试，防止重复提交和压缩期间误切换会话。
+
+#### English
+
+- Show manual compaction progress immediately, expose failures and restore retries, and prevent overlapping submissions or session switches during compaction.
+
+### Fixed / 修复
+
+- 修复 `/compact` 请求等待期间没有反馈、失败被静默处理的问题；错误在会话内显示，不遮挡窄屏发送按钮。
+- Fix missing feedback while `/compact` is pending and silently handled failures; show errors in the conversation without obscuring the send button on narrow screens.
 
 ## [v0.5.1fix2] - 2026-10-04
 

@@ -436,7 +436,7 @@ export function InputArea({
   /** 发送消息 */
   const handleSend = () => {
     const trimmed = value.trim()
-    if ((!trimmed && !hasReviewFeedback && attachments.files.length === 0 && !canResume) || disabled || sendBlocked || !approvalReady || submittingRef.current) return
+    if ((!trimmed && !hasReviewFeedback && attachments.files.length === 0 && !canResume) || disabled || sendBlocked || !approvalReady || commandSubmitting || submittingRef.current) return
     const submittedValue = value
     const submittedAttachments = attachments.files
     submittingRef.current = true
@@ -779,7 +779,7 @@ export function InputArea({
               resumeAvailable={canResume}
               onStop={onStop}
               onSend={handleSend}
-              sendDisabled={sendBlocked || !approvalReady || submitting || (!value.trim() && !hasReviewFeedback && attachments.files.length === 0 && !canResume)}
+              sendDisabled={sendBlocked || !approvalReady || commandSubmitting || submitting || (!value.trim() && !hasReviewFeedback && attachments.files.length === 0 && !canResume)}
               disabled={disabled}
               abortPending={abortPending}
               actionPending={commandSubmitting}
