@@ -30,6 +30,7 @@ const (
 )
 
 type engineTranscript struct {
+	HistoryHead             CanonicalHistoryHead   `json:"history_head,omitempty"`
 	Version                 uint16                 `json:"version"`
 	DefinitionKey           string                 `json:"definition_key"`
 	BehaviorKey             string                 `json:"behavior_key"`
@@ -39,6 +40,8 @@ type engineTranscript struct {
 	DefinitionCommandID     string                 `json:"definition_command_id,omitempty"`
 	DefinitionCycle         int                    `json:"definition_cycle,omitempty"`
 	PreparationStage        enginePreparationStage `json:"preparation_stage,omitempty"`
+	PreparedContext         *preparedContext       `json:"prepared_context,omitempty"`
+	Archive                 *historyArchive        `json:"archive,omitempty"`
 	Messages                []*Message             `json:"messages,omitempty"`
 	ContextState            contextStateSnapshot   `json:"context_state,omitempty"`
 	// ContextSequence is the next idempotency slot for this active cycle. It is
@@ -102,7 +105,11 @@ func (engine *definitionEngine) Run(
 		controls.close()
 		if !loopBound {
 			if controlled, controlledErr, handled := controls.controlledPreparationResult(resultErr); handled {
-				if preparationCheckpoint != nil {
+				// Suspension resumes this exact cycle from its last accepted
+				// checkpoint. Rebuilding a partial preparation transcript here can
+				// lose the active input boundary or overwrite committed context.
+				// Abort and preemption instead retain the abandoned raw input.
+				if controlled.Status != runstate.EngineSuspended && preparationCheckpoint != nil {
 					if checkpointErr := preparationCheckpoint(); checkpointErr != nil {
 						result, resultErr = runstate.EngineResult{}, checkpointErr
 						return
@@ -184,11 +191,17 @@ func (engine *definitionEngine) Run(
 	prepared.hostData = cloneHostData(input.HostData)
 	prepared.clearRevision = state.ClearRevision
 	prepared.contextState = cloneContextStateSnapshot(state.ContextState)
+	prepared.archive = state.Archive
+	prepared.historyHead = state.HistoryHead
+	prepared.elision, err = elisionStateFrom(request.Snapshot.Capabilities)
+	if err != nil {
+		return runstate.EngineResult{}, err
+	}
 	prepared.definitionOperationID = string(request.Snapshot.OperationID)
 	prepared.definitionCommandID = string(request.Snapshot.CommandID)
 	prepared.definitionCycle = request.Snapshot.Cycle
 	prepared.preparationStage = enginePreparationBase
-	controlPrepared = &prepared
+	resumeMaterialized := sameCycle && state.PreparationStage == enginePreparationMaterialized
 	if sameCycle && state.DefinitionKey != "" && state.DefinitionKey != prepared.definitionKey {
 		return runstate.EngineResult{}, fmt.Errorf("%w: definition_key have=%q want=%q", ErrDefinitionMismatch, prepared.definitionKey, state.DefinitionKey)
 	}
@@ -198,12 +211,15 @@ func (engine *definitionEngine) Run(
 	// Persist the exact base Definition before materializing dynamic capability
 	// state. The Run has already committed canonical accepted input; the
 	// prepared Definition must prove it resolves the same canonical boundary.
-	preparedCheckpoint, err := encodeEngineTranscriptState(prepared, state.Messages, prepared.activeModelUser, prepared.activeUserIndex)
-	if err != nil {
-		return runstate.EngineResult{}, fmt.Errorf("encode pre-commit Agent transcript: %w", err)
-	}
-	if err := emit(runstate.EngineTranscriptUpdated{State: preparedCheckpoint}); err != nil {
-		return runstate.EngineResult{}, err
+	if !resumeMaterialized {
+		controlPrepared = &prepared
+		preparedCheckpoint, err := encodeEngineTranscriptState(prepared, state.Messages, prepared.activeModelUser, prepared.activeUserIndex)
+		if err != nil {
+			return runstate.EngineResult{}, fmt.Errorf("encode pre-commit Agent transcript: %w", err)
+		}
+		if err := emit(runstate.EngineTranscriptUpdated{State: preparedCheckpoint}); err != nil {
+			return runstate.EngineResult{}, err
+		}
 	}
 	if err := engine.verifyCanonicalInputCommit(request.Snapshot, input, prepared.definition.Canonical); err != nil {
 		return runstate.EngineResult{}, err
@@ -211,10 +227,11 @@ func (engine *definitionEngine) Run(
 	if request.Snapshot.OutputCommit != nil {
 		return engine.resumeCommittedOutput(ctx, request, input, prepared, state, emit)
 	}
-	if err := materializeDefinitionCapabilities(ctx, prepareRequest, &prepared); err != nil {
-		return runstate.EngineResult{}, err
+	var savedContext *preparedContext
+	if resumeMaterialized {
+		savedContext = state.PreparedContext
 	}
-	if err := engine.applyGoalPreparation(ctx, request, &prepared); err != nil {
+	if err := engine.materializeCycleCapabilities(ctx, prepareRequest, request.Snapshot, savedContext, &prepared); err != nil {
 		return runstate.EngineResult{}, err
 	}
 	materializedFingerprint, err := materializedDefinitionFingerprint(prepared)
@@ -227,6 +244,7 @@ func (engine *definitionEngine) Run(
 	}
 	prepared.materializedFingerprint = materializedFingerprint
 	prepared.preparationStage = enginePreparationMaterialized
+	controlPrepared = &prepared
 	materializedCheckpoint, err := encodeEngineTranscriptState(prepared, state.Messages, prepared.activeModelUser, prepared.activeUserIndex)
 	if err != nil {
 		return runstate.EngineResult{}, fmt.Errorf("encode materialized Agent transcript: %w", err)
@@ -250,7 +268,7 @@ func (engine *definitionEngine) Run(
 				if err := admitRunWork(ctx); err != nil {
 					return runstate.EngineResult{}, err
 				}
-				committed, err := engine.commitCanonicalOutput(ctx, request, final, prepared.definition.Canonical)
+				committed, err := engine.commitCanonicalOutput(ctx, request, final, append(cloneMessages(state.Messages), final), prepared.archive.local(state.ActiveUserIndex), prepared.definition.Canonical)
 				if err != nil {
 					return runstate.EngineResult{}, err
 				}
@@ -262,8 +280,11 @@ func (engine *definitionEngine) Run(
 			}
 		}
 	}
+	// Closures below retain the request throughout the loop. The decoded
+	// active window owns recovery now; do not pin its original serialized body.
+	request.Snapshot.State = nil
 	compaction, compactionPresent := currentCompaction, currentCompactionPresent
-	stateMessages, nextContextState, err := advanceContextState(
+	stateMessages, nextContextState, err := prepared.archive.advanceContextState(
 		state.Messages, prepared.fragments, prepared.contextState, compaction, compactionPresent,
 	)
 	if err != nil {
@@ -279,7 +300,7 @@ func (engine *definitionEngine) Run(
 			return runstate.EngineResult{}, err
 		}
 		if err := engine.commitCanonicalContext(
-			ctx, request, prepared.definition.Canonical, sequence, stateMessages, checkpoint,
+			ctx, request, prepared.definition.Canonical, sequence, stateMessages, runstate.EngineTranscriptUpdated{State: checkpoint},
 		); err != nil {
 			return runstate.EngineResult{}, err
 		}
@@ -289,15 +310,15 @@ func (engine *definitionEngine) Run(
 	if prepared.definition.Compaction != nil {
 		summaryLimit = prepared.definition.Compaction.SummaryLimitBytes()
 	}
-	effectiveTranscript, err := effectiveCompactionMessages(cycleStateTranscript, compaction, compactionPresent, summaryLimit)
+	effectiveTranscript, err := prepared.archive.effectiveHistoryMessages(cycleStateTranscript, prepared.elision, compaction, compactionPresent, summaryLimit)
 	if err != nil {
 		return runstate.EngineResult{}, err
 	}
-	activeUserIndex := len(cycleStateTranscript)
+	activeUserIndex := prepared.archive.count(cycleStateTranscript)
 	var resumedTail []*Message
 	if continuingInput {
 		activeUserIndex = state.ActiveUserIndex
-		modelUserIndex := compactionMessageIndex(cycleStateTranscript, compaction, compactionPresent, activeUserIndex)
+		modelUserIndex := prepared.archive.compactionMessageIndex(cycleStateTranscript, compaction, compactionPresent, activeUserIndex)
 		if modelUserIndex < 0 || modelUserIndex >= len(effectiveTranscript) {
 			return runstate.EngineResult{}, errors.New("active Agent input was removed from the recoverable context")
 		}
@@ -346,7 +367,7 @@ func (engine *definitionEngine) Run(
 		return cloneMessages(transcript)
 	}
 	maintenanceGate := modelCallGate(nil)
-	if len(prepared.definition.Middlewares) != 0 || prepared.definition.Compaction != nil {
+	if len(prepared.definition.Middlewares) != 0 || prepared.definition.Compaction != nil || prepared.definition.Elision != nil {
 		maintenanceGate = func(
 			gateCtx context.Context,
 			call *ModelCall,
@@ -359,17 +380,9 @@ func (engine *definitionEngine) Run(
 					return nil, err
 				}
 			}
-			if prepared.definition.Compaction == nil {
-				return nil, nil
-			}
 			if call == nil {
-				return nil, errors.New("Agent Compaction gate received a nil model call")
+				return nil, errors.New("Agent maintenance gate received a nil model call")
 			}
-			compactionContext := controlledTranscript()
-			// The active raw journal input is rendered once for this invocation.
-			// Summarize exactly the provider-visible instruction, including host
-			// context, if the first covered group begins in this same user Run.
-			compactionContext[activeUserIndex] = activeModelUser.Clone()
 			// Freeze the actual provider projection before taking the side fork.
 			// Portable loop/journal messages remain separate from runtime paths.
 			providerMessages, projectionErr := projectToolArtifactPaths(gateCtx, prepared.definition.Artifacts, call.Messages)
@@ -377,6 +390,41 @@ func (engine *definitionEngine) Run(
 				return nil, projectionErr
 			}
 			call.providerMessages = providerMessages
+			nextElision, elided, elisionErr := prepareElision(gateCtx, prepared, controlledTranscript(), compaction, compactionPresent, call.Snapshot(),
+				func(next elisionRecord) (*preparedModelCall, error) {
+					nextPrepared := prepared
+					nextPrepared.elision = next
+					candidate, _, err := prepareHistoryModelCall(nextPrepared, transcript, compaction, compactionPresent, input, activeUserIndex, modelContext)
+					return candidate, err
+				})
+			if gateCtx.Err() != nil {
+				return nil, gateCtx.Err()
+			}
+			if elisionErr != nil {
+				slog.WarnContext(gateCtx, "Agent Elision preparation failed; retaining tool bodies", "session", engine.key, "error", elisionErr)
+			} else if elided != nil {
+				encoded, err := json.Marshal(nextElision)
+				if err != nil {
+					return nil, err
+				}
+				if err := emit(runstate.EngineCapabilityState{Capability: elisionCapability, State: encoded}); err != nil {
+					return nil, err
+				}
+				prepared.elision = nextElision
+				call = elided.call
+				slog.InfoContext(gateCtx, "Agent Elision committed", "session", engine.key, "revision", nextElision.Revision,
+					"results_elided", nextElision.Metrics.ResultsElided, "tokens_before", nextElision.Metrics.TokensBefore,
+					"tokens_after", nextElision.Metrics.TokensAfter, "cache_prefix_tokens", nextElision.Metrics.CacheExpectedPrefixTokens)
+			}
+			if prepared.definition.Compaction == nil {
+				return elided, nil
+			}
+			compactionContext, projectionErr := elisionForHistory(prepared.elision, compaction, compactionPresent).projectArchive(controlledTranscript(), prepared.archive)
+			if projectionErr != nil {
+				return nil, projectionErr
+			}
+			// Preserve the exact rendered active instruction in the summary source.
+			compactionContext[prepared.archive.local(activeUserIndex)] = activeModelUser.Clone()
 			compactionContext, projectionErr = projectToolArtifactPaths(gateCtx, prepared.definition.Artifacts, compactionContext)
 			if projectionErr != nil {
 				return nil, projectionErr
@@ -402,7 +450,7 @@ func (engine *definitionEngine) Run(
 				}); err != nil {
 					return nil, err
 				}
-				return nil, nil
+				return elided, nil
 			}
 			var candidate *preparedModelCall
 			var candidatePrepared preparedDefinition
@@ -415,7 +463,7 @@ func (engine *definitionEngine) Run(
 				if err := rematerializeDefinitionContext(gateCtx, nextRequest, &nextPrepared); err != nil {
 					return nil, err
 				}
-				stateMessages, contextState, err := advanceContextState(
+				stateMessages, contextState, err := prepared.archive.advanceContextState(
 					transcript, nextPrepared.fragments, nextPrepared.contextState, next, true,
 				)
 				if err != nil {
@@ -426,30 +474,15 @@ func (engine *definitionEngine) Run(
 				// all settled assistant/tool/task messages stay in their raw order,
 				// including a tail restored from an interrupted invocation.
 				candidateRaw := append(cloneMessages(transcript), cloneMessages(stateMessages)...)
-				effective, err := effectiveCompactionMessages(candidateRaw, next, true, nextPrepared.definition.Compaction.SummaryLimitBytes())
-				if err != nil {
-					return nil, err
-				}
-				userIndex := compactionMessageIndex(candidateRaw, next, true, activeUserIndex)
-				if userIndex < 0 || userIndex >= len(effective) {
-					return nil, errors.New("Compaction removed the active Agent input")
-				}
-				messages, modelUser, err := assembleCycleMessages(effective[:userIndex], input.Text, input.Attachments, nextPrepared.fragments, nextPrepared.definition.AttachmentRoot)
-				if err != nil {
-					return nil, err
-				}
-				messages = append(messages, cloneMessages(effective[userIndex+1:])...)
-				if modelContext.prepareCompaction == nil {
-					return nil, errors.New("Compaction requires the active model preparation seam")
-				}
-				candidate, err = modelContext.prepareCompaction(messages, stableContextPrefixMessages(nextPrepared.fragments, next, true))
+				var modelUser *Message
+				candidate, modelUser, err = prepareHistoryModelCall(nextPrepared, candidateRaw, next, true, input, activeUserIndex, modelContext)
 				if err != nil {
 					return nil, err
 				}
 				candidatePrepared, candidateStateMessages, candidateModelUser = nextPrepared, stateMessages, modelUser
 				return candidate.call.Snapshot(), nil
 			}
-			next, nextPresent, changed, compactMetrics, compactErr := engine.applyAutomaticCompaction(
+			next, nextPresent, changed, compactMetrics, compactErr := engine.prepareAutomaticCompaction(
 				gateCtx, request, prepared, controlledTranscript(), compactionContext, modelSnapshot,
 				compaction, compactionPresent,
 				currentCompactionStorage,
@@ -484,7 +517,7 @@ func (engine *definitionEngine) Run(
 				// Automatic maintenance is a recoverable side fork. The unchanged
 				// request still passes through the provider input guard, which owns
 				// the non-negotiable hard limit.
-				return nil, nil
+				return elided, nil
 			}
 			if err := clearCompactionHealth(emit, healthPresent); err != nil {
 				return nil, err
@@ -492,29 +525,37 @@ func (engine *definitionEngine) Run(
 			delete(request.Snapshot.Capabilities, compactionHealthCapability)
 			next, nextPresent = clearCompaction(next, nextPresent, clearState, clearPresent)
 			if !changed {
-				return nil, nil
+				return elided, nil
+			}
+			candidateTranscript := append(cloneMessages(transcript), cloneMessages(candidateStateMessages)...)
+			sequence := candidatePrepared.contextSequence
+			if len(candidateStateMessages) > 0 {
+				candidatePrepared.contextSequence++
+			}
+			candidatePrepared.activeModelUser, candidatePrepared.activeUserIndex = candidateModelUser, activeUserIndex
+			checkpoint, err := encodeActiveEngineTranscript(candidatePrepared, candidateTranscript, candidateModelUser, activeUserIndex)
+			if err != nil {
+				return nil, err
+			}
+			compactionState, err := json.Marshal(next)
+			if err != nil {
+				return nil, err
+			}
+			transition := runstate.EngineTranscriptUpdated{State: checkpoint, CapabilityStates: map[string]json.RawMessage{compactionCapability: compactionState}}
+			if err := engine.commitCanonicalContext(gateCtx, request, prepared.definition.Canonical, sequence, candidateStateMessages, transition); err != nil {
+				return nil, err
+			}
+			if err := emit(transition); err != nil {
+				return nil, err
 			}
 			compaction, compactionPresent = next, nextPresent
 			prepareRequest.Compaction = compactionStatePointer(compaction, compactionPresent)
-			prepared = candidatePrepared
-			transcript = append(transcript, cloneMessages(candidateStateMessages)...)
-			currentCompactionStorage = compaction
-			activeModelUser = candidateModelUser
-			prepared.activeModelUser, prepared.activeUserIndex = activeModelUser, activeUserIndex
-			if len(candidateStateMessages) > 0 {
-				sequence := prepared.contextSequence
-				prepared.contextSequence++
-				checkpoint, err := encodeActiveEngineTranscript(prepared, transcript, activeModelUser, activeUserIndex)
-				if err != nil {
-					return nil, err
-				}
-				if err := engine.commitCanonicalContext(gateCtx, request, prepared.definition.Canonical, sequence, candidateStateMessages, checkpoint); err != nil {
-					return nil, err
-				}
-				if err := emit(runstate.EngineTranscriptUpdated{State: checkpoint}); err != nil {
-					return nil, err
-				}
+			prepared, transcript, activeModelUser = candidatePrepared, candidateTranscript, candidateModelUser
+			if prepared.historyHead.Identity != "" {
+				transcript, prepared.archive = archiveHistory(transcript, prepared.archive, compaction, prepared.contextState)
+				baseTranscript = transcript[:prepared.archive.local(activeUserIndex)+1]
 			}
+			currentCompactionStorage = compaction
 			return candidate, nil
 		}
 	}
@@ -556,6 +597,7 @@ func (engine *definitionEngine) Run(
 	interactions := newEngineInteractionClient(effectiveInteractionPolicy(prepared.definition.Interaction), emit)
 	acceptedControl := controls.bindLoop(cancelLoop, interactions)
 	loopBound = true
+	state.Messages, controlTranscript, cycleStateTranscript, effectiveTranscript = nil, nil, nil, nil
 	if acceptedControl == runstate.EngineControlPreempt {
 		return engine.controlledResult(runstate.EnginePreempted, prepared, baseTranscript, emit)
 	}
@@ -657,7 +699,7 @@ func (engine *definitionEngine) Run(
 				prepared, transcript, activeModelUser, activeUserIndex,
 			)
 			if checkpointErr == nil {
-				checkpointErr = engine.commitCanonicalContext(ctx, request, prepared.definition.Canonical, sequence, messages, checkpoint)
+				checkpointErr = engine.commitCanonicalContext(ctx, request, prepared.definition.Canonical, sequence, messages, runstate.EngineTranscriptUpdated{State: checkpoint})
 			}
 			if checkpointErr == nil {
 				checkpointErr = emit(runstate.EngineTranscriptUpdated{
@@ -707,7 +749,7 @@ func (engine *definitionEngine) Run(
 						var checkpoint json.RawMessage
 						checkpoint, boundaryErr = encodeActiveEngineTranscript(prepared, transcript, activeModelUser, activeUserIndex)
 						if boundaryErr == nil {
-							boundaryErr = engine.commitCanonicalContext(ctx, request, prepared.definition.Canonical, sequence, completed, checkpoint)
+							boundaryErr = engine.commitCanonicalContext(ctx, request, prepared.definition.Canonical, sequence, completed, runstate.EngineTranscriptUpdated{State: checkpoint})
 						}
 					}
 				default:
@@ -815,6 +857,9 @@ func (engine *definitionEngine) Run(
 					return runstate.EngineResult{}, err
 				}
 			}
+			if variant.discarded {
+				continue
+			}
 			if message.Role == ToolRole {
 				if pendingToolTranscriptIndex < 0 {
 					controls.stop()
@@ -875,7 +920,7 @@ loopControlsStopped:
 	emitTrace(ctx, engine.trace, TraceEvent{
 		Kind: TraceModelFinished, Session: engine.key, RunID: string(request.Snapshot.OperationID), Cycle: request.Snapshot.Cycle,
 	})
-	committed, err := engine.commitCanonicalOutput(ctx, request, final, prepared.definition.Canonical)
+	committed, err := engine.commitCanonicalOutput(ctx, request, final, transcript, prepared.archive.local(activeUserIndex), prepared.definition.Canonical)
 	if err != nil {
 		return runstate.EngineResult{}, err
 	}
@@ -1113,8 +1158,8 @@ func encodeActiveEngineTranscript(
 	if activeModelUser == nil || activeModelUser.Role != User {
 		return nil, errors.New("encode active Agent transcript requires a model user projection")
 	}
-	if activeUserIndex < 0 || activeUserIndex >= len(messages) ||
-		messages[activeUserIndex] == nil || messages[activeUserIndex].Role != User || IsContextStateMessage(messages[activeUserIndex]) {
+	if activeUserIndex < 0 || activeUserIndex >= prepared.archive.count(messages) || !prepared.archive.contains(activeUserIndex) ||
+		messages[prepared.archive.local(activeUserIndex)] == nil || messages[prepared.archive.local(activeUserIndex)].Role != User || IsContextStateMessage(messages[prepared.archive.local(activeUserIndex)]) {
 		return nil, errors.New("encode active Agent transcript requires an exact raw user boundary")
 	}
 	return encodeEngineTranscriptState(prepared, messages, activeModelUser, activeUserIndex)
@@ -1127,13 +1172,14 @@ func encodeEngineTranscriptState(
 	activeUserIndex int,
 ) (json.RawMessage, error) {
 	encoded, err := json.Marshal(engineTranscript{
-		Version: engineTranscriptVersion, DefinitionKey: prepared.definitionKey,
+		Version: transcriptVersion(prepared.archive), HistoryHead: prepared.historyHead, DefinitionKey: prepared.definitionKey,
 		BehaviorKey: prepared.behaviorKey, PrefixFingerprint: prepared.prefixFingerprint,
 		MaterializedFingerprint: prepared.materializedFingerprint,
 		DefinitionOperationID:   prepared.definitionOperationID,
 		DefinitionCommandID:     prepared.definitionCommandID,
 		DefinitionCycle:         prepared.definitionCycle, PreparationStage: prepared.preparationStage,
-		Messages: cloneMessages(messages), ContextState: cloneContextStateSnapshot(prepared.contextState),
+		PreparedContext: snapshotPreparedContext(prepared),
+		Archive:         prepared.archive, Messages: cloneMessages(messages), ContextState: cloneContextStateSnapshot(prepared.contextState),
 		ContextSequence:     prepared.contextSequence,
 		LastResponseOrdinal: prepared.lastResponseOrdinal,
 		ActiveModelUser:     CloneMessage(activeModelUser), ActiveUserIndex: activeUserIndex,
@@ -1176,7 +1222,7 @@ func decodeEngineTranscript(encoded json.RawMessage) (engineTranscript, error) {
 	if err := json.Unmarshal(encoded, &header); err != nil {
 		return engineTranscript{}, fmt.Errorf("decode Agent transcript header: %w", err)
 	}
-	if header.Version != engineTranscriptVersion {
+	if header.Version != engineTranscriptVersion && header.Version != 2 {
 		return engineTranscript{}, &unsupportedEngineTranscriptVersionError{version: header.Version}
 	}
 	var state engineTranscript
@@ -1186,18 +1232,29 @@ func decodeEngineTranscript(encoded json.RawMessage) (engineTranscript, error) {
 	if state.ContextSequence < 0 {
 		return engineTranscript{}, errors.New("decode Agent transcript: context sequence cannot be negative")
 	}
+	if state.PreparedContext != nil {
+		if state.PreparationStage != enginePreparationMaterialized {
+			return engineTranscript{}, errors.New("prepared Agent context has no materialized cycle")
+		}
+		if err := state.PreparedContext.validate(); err != nil {
+			return engineTranscript{}, err
+		}
+	}
+	if err := state.Archive.validate(state.Messages); err != nil {
+		return engineTranscript{}, err
+	}
 	state.Messages = cloneMessages(state.Messages)
 	state.ContextState = cloneContextStateSnapshot(state.ContextState)
 	state.ActiveModelUser = CloneMessage(state.ActiveModelUser)
 	state.HostData = cloneHostData(state.HostData)
 	if state.ActiveModelUser != nil {
 		if state.ActiveModelUser.Role != User || state.ActiveUserIndex < 0 ||
-			state.ActiveUserIndex >= len(state.Messages) || state.Messages[state.ActiveUserIndex] == nil ||
-			state.Messages[state.ActiveUserIndex].Role != User || IsContextStateMessage(state.Messages[state.ActiveUserIndex]) {
+			state.ActiveUserIndex >= state.Archive.count(state.Messages) || !state.Archive.contains(state.ActiveUserIndex) || state.Messages[state.Archive.local(state.ActiveUserIndex)] == nil ||
+			state.Messages[state.Archive.local(state.ActiveUserIndex)].Role != User || IsContextStateMessage(state.Messages[state.Archive.local(state.ActiveUserIndex)]) {
 			return engineTranscript{}, errors.New("Agent transcript has an invalid active model user projection")
 		}
 	}
-	if err := validateContextStateSnapshot(state.ContextState, state.Messages); err != nil {
+	if err := validateContextStateSnapshotInArchive(state.ContextState, state.Messages, state.Archive); err != nil {
 		return engineTranscript{}, err
 	}
 	return state, nil

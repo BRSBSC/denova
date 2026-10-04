@@ -72,6 +72,11 @@ func (engine *definitionEngine) RunStructural(
 		return runstate.EngineResult{}, ErrCapabilityUnsupported
 	}
 	prepared.contextState = cloneContextStateSnapshot(transcript.ContextState)
+	prepared.archive = transcript.Archive
+	prepared.elision, err = elisionStateFrom(request.Capabilities)
+	if err != nil {
+		return runstate.EngineResult{}, err
+	}
 	materialized, materializedErr := materializedDefinitionFingerprint(prepared)
 	if materializedErr != nil {
 		return runstate.EngineResult{}, materializedErr
@@ -126,7 +131,11 @@ func (engine *definitionEngine) RunStructural(
 				transcript.Messages, next, true,
 			)
 		}
-		contextMessages, contextErr := projectToolArtifactPaths(forkCtx, prepared.definition.Artifacts, transcript.Messages)
+		contextMessages, contextErr := elisionForHistory(prepared.elision, current, present).projectArchive(transcript.Messages, prepared.archive)
+		if contextErr != nil {
+			return runstate.EngineResult{}, contextErr
+		}
+		contextMessages, contextErr = projectToolArtifactPaths(forkCtx, prepared.definition.Artifacts, contextMessages)
 		if contextErr != nil {
 			return runstate.EngineResult{}, contextErr
 		}
@@ -204,7 +213,7 @@ func prepareStructuralCompactionSnapshot(
 	compaction compactionRecord,
 	compactionPresent bool,
 ) (*ModelRequestSnapshot, error) {
-	stateMessages, nextContextState, err := advanceContextState(
+	stateMessages, nextContextState, err := prepared.archive.advanceContextState(
 		raw, prepared.fragments, prepared.contextState, compaction, compactionPresent,
 	)
 	if err != nil {
@@ -212,15 +221,18 @@ func prepareStructuralCompactionSnapshot(
 	}
 	prepared.contextState = nextContextState
 	raw = append(cloneMessages(raw), cloneMessages(stateMessages)...)
-	effective, err := effectiveCompactionMessages(
-		raw, compaction, compactionPresent, prepared.definition.Compaction.SummaryLimitBytes(),
+	effective, err := prepared.archive.effectiveHistoryMessages(
+		raw, prepared.elision, compaction, compactionPresent, prepared.definition.Compaction.SummaryLimitBytes(),
 	)
 	checkpointVisible := err == nil
 	if err != nil {
 		if !errors.Is(err, ErrContextLimit) {
 			return nil, err
 		}
-		effective = cloneMessages(raw)
+		effective, err = elisionForHistory(prepared.elision, compaction, compactionPresent).projectArchive(raw, prepared.archive)
+		if err != nil {
+			return nil, err
+		}
 	}
 	messages := make([]*Message, 0, len(effective)+len(prepared.fragments))
 	messages = append(messages, leadingContextMessages(prepared.fragments)...)
@@ -270,14 +282,14 @@ func executeCompaction(
 		return compactionRecord{}, false, CompactionMetrics{}, ErrDefinitionMismatch
 	}
 	summaryLimit := prepared.definition.Compaction.SummaryLimitBytes()
-	if len(contextMessages) != len(messages) || present && current.ReplacementTo > len(messages) {
+	if len(contextMessages) != len(messages) || present && current.ReplacementTo > prepared.archive.count(messages) {
 		return compactionRecord{}, false, CompactionMetrics{}, errors.New("Compaction runtime source does not match journal coverage")
 	}
 	contextMessages, err := resolveMessageAttachmentPaths(prepared.definition.AttachmentRoot, contextMessages)
 	if err != nil {
 		return compactionRecord{}, false, CompactionMetrics{}, err
 	}
-	groups, ends, retainedBytes := compactionGroups(messages, contextMessages, current, present)
+	groups, ends, retainedBytes := prepared.archive.compactionGroups(messages, contextMessages, current, present)
 	base := compactionRecord{
 		Version: 2, ID: checkpointID, Revision: max(uint64(1), revisionBase+1), CreatedAt: time.Now().UTC(),
 	}
@@ -303,7 +315,7 @@ func executeCompaction(
 				return InputSize{}, errors.New("Compaction estimate requires an eligible group prefix and request projection")
 			}
 			next := recordThrough(ends[count-1])
-			next.Summary = mergeProtectedReceiptContext("", current.Summary, compactionReceiptMessages(contextMessages[next.ReplacementFrom:next.ReplacementTo], modelSnapshot), summaryLimit)
+			next.Summary = mergeProtectedReceiptContext("", current.Summary, compactionReceiptMessages(contextMessages[prepared.archive.local(next.ReplacementFrom):prepared.archive.local(next.ReplacementTo)], modelSnapshot), summaryLimit)
 			after, err := buildAfter(next)
 			if err != nil {
 				return InputSize{}, err
@@ -332,10 +344,10 @@ func executeCompaction(
 		}
 		return current, false, plan.Metrics, nil
 	}
-	if plan.Action != CompactionCreate || plan.SourceFrom < 0 || plan.SourceTo <= plan.SourceFrom || plan.SourceTo > len(messages) {
+	if plan.Action != CompactionCreate || plan.SourceFrom < 0 || plan.SourceTo <= plan.SourceFrom || plan.SourceTo > prepared.archive.count(messages) {
 		return compactionRecord{}, false, plan.Metrics, errors.New("Compaction Manager returned an invalid source range")
 	}
-	wantHash, err := hashCanonical(messages[plan.SourceFrom:plan.SourceTo])
+	wantHash, err := hashCanonical(messages[prepared.archive.local(plan.SourceFrom):prepared.archive.local(plan.SourceTo)])
 	if err != nil {
 		return compactionRecord{}, false, plan.Metrics, err
 	}
@@ -346,7 +358,7 @@ func executeCompaction(
 	}
 	checkpoint, err := prepared.definition.Compaction.Compact(ctx, CompactionCompactRequest{
 		Session: session, Run: run,
-		Messages:      compactionIncrementalSource(contextMessages, plan, current, present, summaryLimit),
+		Messages:      prepared.archive.compactionIncrementalSource(contextMessages, plan, current, present, summaryLimit),
 		ModelSnapshot: modelSnapshot, Current: compactionStatePointer(current, present),
 	})
 	if err != nil {
@@ -355,7 +367,7 @@ func executeCompaction(
 	if err := ctx.Err(); err != nil {
 		return compactionRecord{}, false, plan.Metrics, err
 	}
-	checkpoint.Summary = mergeProtectedReceiptContext(checkpoint.Summary, current.Summary, compactionReceiptMessages(contextMessages[plan.SourceFrom:plan.SourceTo], modelSnapshot), summaryLimit)
+	checkpoint.Summary = mergeProtectedReceiptContext(checkpoint.Summary, current.Summary, compactionReceiptMessages(contextMessages[prepared.archive.local(plan.SourceFrom):prepared.archive.local(plan.SourceTo)], modelSnapshot), summaryLimit)
 	checkpoint.Summary = strings.TrimSpace(checkpoint.Summary)
 	if checkpoint.Summary == "" {
 		return compactionRecord{}, false, plan.Metrics, errors.New("Compaction Manager returned an invalid checkpoint")
@@ -524,7 +536,7 @@ func compactionID(operationID runstate.OperationID) string {
 	return "compaction-" + string(operationID)
 }
 
-func (engine *definitionEngine) applyAutomaticCompaction(
+func (engine *definitionEngine) prepareAutomaticCompaction(
 	ctx context.Context,
 	request runstate.EngineRequest,
 	prepared preparedDefinition,
@@ -565,15 +577,6 @@ func (engine *definitionEngine) applyAutomaticCompaction(
 	}
 	if !changed {
 		return current, present, false, metrics, nil
-	}
-	encoded, err := json.Marshal(next)
-	if err != nil {
-		return compactionRecord{}, false, false, metrics, err
-	}
-	if err := emit(runstate.EngineCapabilityState{
-		Capability: compactionCapability, State: encoded,
-	}); err != nil {
-		return compactionRecord{}, false, false, metrics, err
 	}
 	return next, true, true, metrics, nil
 }

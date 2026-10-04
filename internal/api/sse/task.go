@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -41,6 +42,10 @@ func StreamTask(ctx context.Context, c *app.RequestContext, task *apptask.Task) 
 	c.Response.ImmediateHeaderFlush = true
 
 	pr, pw := io.Pipe()
+	// A newly submitted POST may finish before subscription attaches; its
+	// buffered output is still new to this user action. GET attaches/reconnects
+	// must restore existing output without starting audio again.
+	isReplayAttachment := string(c.Method()) == "GET"
 
 	go func() {
 		defer func() {
@@ -66,6 +71,9 @@ func StreamTask(ctx context.Context, c *app.RequestContext, task *apptask.Task) 
 		}
 
 		for _, item := range coalesceTaskEvents(replay.Events) {
+			if isReplayAttachment {
+				item.Event = markReplayedGameTurn(item.Event)
+			}
 			if err := writeSSE(item); err != nil {
 				slog.InfoContext(ctx, fmt.Sprintf("[agent-sse] stream interrupted task_id=%s phase=replay cursor=%d event=%s err=%v", task.ID(), item.Cursor, item.Event.Type, err))
 				return
@@ -256,6 +264,26 @@ func newSSEWriteHandler(ctx context.Context, w io.Writer) func(apptask.Event) er
 	}
 }
 
+// Reading historical events must restore the UI without triggering playback.
+// Copy the transport payload so later live subscribers keep the original fact.
+func markReplayedGameTurn(event novaApp.AgentEvent) novaApp.AgentEvent {
+	if event.Type != "interactive_turn_persisted" {
+		return event
+	}
+	switch data := event.Data.(type) {
+	case novaApp.InteractiveTurnPersistedEvent:
+		event.Data = struct {
+			novaApp.InteractiveTurnPersistedEvent
+			Replayed bool `json:"replayed"`
+		}{data, true}
+	case map[string]any:
+		payload := maps.Clone(data)
+		payload["replayed"] = true
+		event.Data = payload
+	}
+	return event
+}
+
 type uiWriteHandler struct {
 	encoder *agentui.StreamEncoder
 }
@@ -265,23 +293,7 @@ func newUIWriteHandler(ctx context.Context, w io.Writer) *uiWriteHandler {
 }
 
 func correlateErrorEvent(event novaApp.AgentEvent, requestID string) novaApp.AgentEvent {
-	requestID = strings.TrimSpace(requestID)
-	if event.Type != "error" || requestID == "" {
-		return event
-	}
-	payload := map[string]any{}
-	if raw, err := json.Marshal(event.Data); err == nil {
-		_ = json.Unmarshal(raw, &payload)
-	}
-	payload[observability.RequestIDField] = requestID
-	for _, key := range []string{"message", "error"} {
-		if message, ok := payload[key].(string); ok && strings.TrimSpace(message) != "" {
-			payload[key] = agentui.CorrelatedErrorMessage(message, requestID)
-			break
-		}
-	}
-	event.Data = payload
-	return event
+	return event.WithErrorDiagnostics(requestID, "")
 }
 
 func (h *uiWriteHandler) Handle(item apptask.Event) error {

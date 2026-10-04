@@ -11,7 +11,7 @@ import (
 	"denova/config"
 	"denova/internal/agents/conversationconfig"
 	"denova/internal/agents/conversationjournal"
-	externaljournal "denova/internal/agents/external/journal"
+	externaljournal "denova/internal/agents/runtime/external/journal"
 	agent "github.com/alfredxw/denova/agent"
 )
 
@@ -19,14 +19,16 @@ import (
 // Session lock. Mutations also use the journal's optimistic commit fence.
 // Read resolves content from this same journal, never a sidecar.
 type ExternalState struct {
-	Incarnation string
-	Cursor      conversationjournal.Cursor
-	Config      conversationconfig.Snapshot
-	Projection  externaljournal.Projection
-	Read        func(externaljournal.Locator) (externaljournal.Record, error)
-	// ScanContext visits the complete active canonical source interval in bounded
-	// physical pages. Invoke only inside the read/prepare callback; never retain it.
-	ScanContext func(func(ExternalContextRecord) error) error
+	Incarnation     string
+	Cursor          conversationjournal.Cursor
+	ContextRevision uint64
+	Config          conversationconfig.Snapshot
+	Projection      externaljournal.Projection
+	ContextSource   ExternalContextSource
+	Read            func(externaljournal.Locator) (externaljournal.Record, error)
+	// ScanContext visits a captured source interval in bounded physical pages.
+	// Invoke only inside the read/prepare callback; retain only ContextSource.
+	ScanContext func(ExternalContextSource, func(ExternalContextRecord) error) error
 }
 
 // ExternalTransaction contains one product message and its execution facts.
@@ -115,6 +117,14 @@ func (s *Session) UpdateExternal(ctx context.Context, expectedRevision uint64, p
 
 func validateExternalMessagePair(change ExternalTransaction, record externaljournal.Record) error {
 	switch record.Kind {
+	case externaljournal.GuidanceDelivered:
+		var delivered externaljournal.DeliveredGuidance
+		if err := json.Unmarshal(record.Data, &delivered); err != nil {
+			return err
+		}
+		if change.Message == nil || change.Message.Role != agent.User || delivered.MessageID != change.Metadata.MessageID {
+			return errors.New("external guidance must atomically publish its exact user message")
+		}
 	case externaljournal.OperationAccepted:
 		var accepted externaljournal.Accepted
 		if err := json.Unmarshal(record.Data, &accepted); err != nil {
@@ -169,24 +179,28 @@ func (s *Session) externalStateLocked(ctx context.Context) (ExternalState, error
 		return ExternalState{}, err
 	}
 	selection, _ := s.runtimeConfigLocked()
-	return ExternalState{Incarnation: s.journalIncarnation, Cursor: s.materializedCursor, Config: selection, Projection: projection, ScanContext: func(visit func(ExternalContextRecord) error) error { return s.scanExternalContextLocked(ctx, visit) }, Read: func(locator externaljournal.Locator) (externaljournal.Record, error) {
-		if locator.Cursor == 0 || locator.Index < 0 {
-			return externaljournal.Record{}, errors.New("invalid external journal locator")
-		}
-		records, err := s.journal.ReadRange(ctx, conversationjournal.Range{After: locator.Cursor - 1, Through: locator.Cursor})
-		if err != nil {
-			return externaljournal.Record{}, err
-		}
-		for _, source := range records {
-			if source.Location.Cursor != locator.Cursor || source.Location.RecordIndex != locator.Index {
-				continue
+	source := ExternalContextSource{incarnation: s.journalIncarnation, after: s.projection.ClearCursor, through: s.materializedCursor}
+	return ExternalState{Incarnation: s.journalIncarnation, Cursor: s.materializedCursor, ContextRevision: s.contextRevision, Config: selection, Projection: projection, ContextSource: source,
+		ScanContext: func(source ExternalContextSource, visit func(ExternalContextRecord) error) error {
+			return s.scanExternalContextLocked(ctx, source, visit)
+		}, Read: func(locator externaljournal.Locator) (externaljournal.Record, error) {
+			if locator.Cursor == 0 || locator.Index < 0 {
+				return externaljournal.Record{}, errors.New("invalid external journal locator")
 			}
-			var record externaljournal.Record
-			if err := json.Unmarshal(source.Payload, &record); err != nil {
+			records, err := s.journal.ReadRange(ctx, conversationjournal.Range{After: locator.Cursor - 1, Through: locator.Cursor})
+			if err != nil {
 				return externaljournal.Record{}, err
 			}
-			return record, record.Validate()
-		}
-		return externaljournal.Record{}, errors.New("external journal record is missing")
-	}}, nil
+			for _, source := range records {
+				if source.Location.Cursor != locator.Cursor || source.Location.RecordIndex != locator.Index {
+					continue
+				}
+				var record externaljournal.Record
+				if err := json.Unmarshal(source.Payload, &record); err != nil {
+					return externaljournal.Record{}, err
+				}
+				return record, record.Validate()
+			}
+			return externaljournal.Record{}, errors.New("external journal record is missing")
+		}}, nil
 }

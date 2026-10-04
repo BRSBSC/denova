@@ -21,7 +21,7 @@ type StreamEncoder struct {
 	started  bool
 	finished bool
 
-	// Root and SubAgent content can interleave while task_wait is active. Each
+	// Root and SubAgent content can interleave during child execution. Each
 	// source therefore owns its open AI SDK content segments independently.
 	textIDs       map[string]string
 	textSeq       int
@@ -105,6 +105,16 @@ func (e *StreamEncoder) WriteEvent(ev appsvc.AgentEvent) error {
 			return err
 		}
 		return e.writeData(DataTypeContextCompaction, eventID(data, "context-compaction"), data)
+	case "todo_updated":
+		// Native already supplies an inspectable Todo tool card. Provider plans
+		// have no host tool call, so only those need a separate display snapshot.
+		if data["runtime_managed"] != true {
+			return nil
+		}
+		if err := e.closeOpenContentFor(contentSource); err != nil {
+			return err
+		}
+		return e.writeData(DataTypeTodo, eventID(data, "todo"), data)
 	case "interactive_image":
 		if err := e.closeOpenContentFor(contentSource); err != nil {
 			return err
@@ -131,8 +141,14 @@ func (e *StreamEncoder) WriteEvent(ev appsvc.AgentEvent) error {
 		if err := e.closeOpenContent(); err != nil {
 			return err
 		}
+		diagnostic := ev.WithErrorDiagnostics(e.requestID, "")
+		data = diagnostic.Data.(map[string]any)
+		data["terminal"] = true
+		if err := e.writeData(DataTypeError, eventID(data, "error"), data); err != nil {
+			return err
+		}
 		message := firstNonEmpty(readString(data, "message"), readString(data, "error"), "Agent request failed")
-		return e.writeChunk(map[string]any{"type": "error", "errorText": CorrelatedErrorMessage(message, e.requestID)})
+		return e.writeChunk(map[string]any{"type": "error", "errorText": message})
 	case "aborted":
 		if err := e.closeOpenContent(); err != nil {
 			return err
@@ -157,17 +173,6 @@ func (e *StreamEncoder) WriteEvent(ev appsvc.AgentEvent) error {
 		payload["event"] = ev.Type
 		return e.writeData(DataTypeActivity, eventID(data, ev.Type), payload)
 	}
-}
-
-// CorrelatedErrorMessage appends the server-issued request ID to a user-visible
-// streaming error. The bilingual label keeps the transport usable before the
-// client-side locale is available.
-func CorrelatedErrorMessage(message, requestID string) string {
-	requestID = strings.TrimSpace(requestID)
-	if requestID == "" {
-		return message
-	}
-	return message + " · 日志 ID / Log ID: " + requestID
 }
 
 func (e *StreamEncoder) Finish(reason string) error {

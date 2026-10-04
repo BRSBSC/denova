@@ -1,6 +1,8 @@
+import { useStorySpeech } from '../use-story-speech'
+import { useImageModelConfigured } from '@/features/settings/use-image-model-configured'
+import { SpeechPlayback } from '@/features/speech/SpeechPlayback'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { LoadingState } from '@/components/common/LoadingState'
 import { Button } from '@/components/ui/button'
@@ -16,7 +18,7 @@ import { agentSubAgentSessionKey, agentViewContent, agentViewAskID, agentViewAsk
 import { useSkillCommands } from '@/hooks/useSkillCommands'
 import { useConversationConfig } from '@/features/conversation-config/use-conversation-config'
 import type { ConversationConfigBinding, ConversationConfigChanges } from '@/features/conversation-config/types'
-import { useConversationGoal } from '@/features/agent-goal/use-conversation-goal'
+import { supportsRuntimeOperation } from '@/features/conversation-config/types'
 import { analyzeInteractiveContext, getActiveInteractiveChat, getInteractiveHistoryPage, removeInteractiveContextCompaction, resolveInteractiveAsk, switchInteractiveTurnVersion, updateInteractiveTurnNarrative } from '../api'
 import { sanitizeStoredNarrative } from '../stream-parser'
 import { emptyStoryStageRun, useInteractiveStore } from '../stores/interactive-store'
@@ -29,7 +31,6 @@ import { TurnNavigator } from './TurnNavigator'
 import { DEFAULT_STORY_STATE_DISPLAY, type StoryStateDisplayPreference } from './story-state/display-preference'
 import { StoryStateLedger } from './story-state/StoryStateLedger'
 import { buildStoryStateModel } from './story-state/model'
-import { storyRuleVisibilityMode } from './story-stage/rule-roll'
 import { useStagePreferences } from './story-stage/use-stage-preferences'
 import { parseInlineStyleScenes, storyStageSnapshotKey } from './story-stage/utils'
 import { useLiveMessageAccumulator } from './story-stage/use-live-message-accumulator'
@@ -43,13 +44,13 @@ import { buildStoryStageCommandMenu } from './story-stage/story-stage-commands'
 import { branchCreationSourceFromMessage, branchCreationSourceFromTurn } from './branching/model'
 import type { StoryStageProps } from './story-stage/story-stage-props'
 import { useIsMobile } from '@/hooks/useIsMobile'
-import type { InputAreaSendOptions } from '@/components/Chat/InputArea'
 
 const DEFAULT_READING_FONT_SIZE = 18
 const EMPTY_STAGE_RUN = emptyStoryStageRun()
 
-export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], stories = [], story, tellers = [], planningTemplates = [], imagePresets = [], recentNarrativeStyleID = DEFAULT_NARRATIVE_STYLE_ID, narrativeStyleLoading = false, storyId, branchId, snapshot, snapshotLoading = false, loreItems = [], bookOpeningPresets = [], directorPanelVisible = true, stateDisplayPreference = DEFAULT_STORY_STATE_DISPLAY, onStorySelect = noop, onStoryCreate = noop, onStorySetupUpdate = noop, onNarrativeStyleChange, onStoryDelete = noop, onStoryRename, onRequestLoreInit, onOpenDirectorConfig, onToggleDirectorPanel, onOpenDirectorState, onRequestCreateBranch, onStateDisplayPreferenceChange = noopStateDisplayPreferenceChange, onTurnPersisted = noopTurnPersisted, onDone }: StoryStageProps) {
+export function StoryStage({ active = true, projectId, workspace, styleSceneSuggestions = [], stories = [], story, tellers = [], planningTemplates = [], imagePresets = [], recentNarrativeStyleID = DEFAULT_NARRATIVE_STYLE_ID, narrativeStyleLoading = false, storyId, branchId, snapshot, snapshotLoading = false, loreItems = [], bookOpeningPresets = [], directorPanelVisible = true, stateDisplayPreference = DEFAULT_STORY_STATE_DISPLAY, onStorySelect = noop, onStoryCreate = noop, onStorySetupUpdate = noop, onNarrativeStyleChange, onStoryDelete = noop, onStoryRename, onRequestLoreInit, onOpenDirectorConfig, onToggleDirectorPanel, onOpenDirectorState, onRequestCreateBranch, onStateDisplayPreferenceChange = noopStateDisplayPreferenceChange, onTurnPersisted = noopTurnPersisted, onDone }: StoryStageProps) {
   const { t } = useTranslation()
+  const imageConfigured = useImageModelConfigured(projectId)
   const [creatingStory, setCreatingStory] = useState(false)
   const conversationBinding = useMemo<ConversationConfigBinding | undefined>(() => storyId ? {
     mode: 'interactive', project_id: projectId, story_id: storyId,
@@ -63,7 +64,6 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
   const isMobile = useIsMobile()
   const storyStateModel = useMemo(() => buildStoryStateModel(snapshot), [snapshot])
   const [input, setInput] = useState('')
-  const [goalMode, setGoalMode] = useState(false)
   const [styleScenes, setStyleScenes] = useState<string[]>([])
   const [styleSceneQuery, setStyleSceneQuery] = useState<string | null>(null)
   const [showSkillCommands, setShowSkillCommands] = useState(false)
@@ -79,20 +79,16 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
   const snapshotKey = storyStageSnapshotKey(storyId, branchId, snapshot)
   const stageKey = `${workspace || 'current'}:${storyId || 'none'}:${branchId || snapshot?.branch_id || 'main'}`
   const { displaySnapshot, historyWindow, prependPage: prependHistoryPage, resetToLatest: resetHistoryToLatest } = useStoryHistoryWindow(stageKey, snapshot)
+  const speech = useStorySpeech({ owner: stageKey, story, snapshot: displaySnapshot, active })
   const [historyLoading, setHistoryLoading] = useState(false)
   const stageRun = useInteractiveStore((state) => state.storyStageRuns[stageKey] || EMPTY_STAGE_RUN)
   const setStoryStageRun = useInteractiveStore((state) => state.setStoryStageRun)
   const clearStoryStageRun = useInteractiveStore((state) => state.clearStoryStageRun)
   const streaming = stageRun.streaming
-  const conversationGoal = useConversationGoal(conversationBinding, streaming)
   const activityContent = stageRun.activityContent
   const liveMessages = stageRun.liveMessages
   const rewindTurnId = stageRun.rewindTurnId
   const branchTerminal = snapshot?.current_turn?.terminal_outcome?.terminal === true
-  const publicRuleRollVisible = useMemo(
-	() => storyRuleVisibilityMode(story) === 'public_roll',
-	[story],
-  )
   const [replyEditTarget, setReplyEditTarget] = useState<{
     turnId: string
     branchId: string
@@ -117,7 +113,6 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
 
   useEffect(() => {
     setReplyEditTarget(null)
-    setGoalMode(false)
   }, [stageKey])
   useEffect(() => {
     if (streaming && !historyWindow.followLatest) resetHistoryToLatest()
@@ -190,7 +185,6 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
   )
 
   const liveAccumulator = useLiveMessageAccumulator({
-    publicRuleRollVisible,
     setMessages: setStageLiveMessages,
   })
   const storyImages = useStoryImages({
@@ -216,7 +210,6 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
     streaming,
     stageKey,
     liveTurnNavigationAnchorId,
-    publicRuleRollVisible,
     optimisticInteractiveImages: storyImages.optimisticImages,
     belongsToStage: liveAccumulator.belongsToStage,
     renderKeyFor: liveAccumulator.renderKeyFor,
@@ -228,8 +221,6 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
   } = useMemo(() => buildStoryStageCommandMenu(skillCommandQuery, skillCommands, {
     compactDescription: t('chat.command.compact.desc'),
     compactHint: t('chat.command.compact.hint'),
-    goalDescription: t('chat.command.goal.desc'),
-    goalHint: t('chat.command.goal.hint'),
     skillHint: t('chat.command.skill.hint'),
   }), [skillCommandQuery, skillCommands, t])
 
@@ -306,7 +297,7 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
 
   useLayoutEffect(() => {
     syncInputFloatHeight()
-  }, [conversationGoal.goal?.revision, editingTurn, goalMode, hotChoices.length, input, showHotChoices, stageRun.runtime.queue.length, syncInputFloatHeight])
+  }, [editingTurn, hotChoices.length, input, showHotChoices, stageRun.runtime.queue.length, syncInputFloatHeight])
 
   useEffect(() => {
     const element = inputFloatRef.current
@@ -326,8 +317,8 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
   }, [snapshotKey])
 
   function clearSubmittedComposer() {
+    speech.stop()
     setInput('')
-    setGoalMode(false)
     setEditingTurn(null)
     setStyleScenes([])
     setStyleSceneQuery(null)
@@ -345,7 +336,7 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
     styleScenes,
     streaming,
     branchTerminal,
-    blocked: !approvalReady,
+    blocked: !approvalReady || (streaming && !supportsRuntimeOperation(conversationConfig.snapshot, 'queue')),
     stageRun,
     liveTurnNavigationAnchorId,
     t,
@@ -359,7 +350,10 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
     setActivity: setStageActivityContent,
     setMessages: setStageLiveMessages,
     clearComposer: clearSubmittedComposer,
-    onTurnPersisted,
+    onTurnPersisted: (event, options) => {
+      speech.onPersisted(event, options)
+      return onTurnPersisted(event, options)
+    },
     onDone,
   })
 
@@ -375,51 +369,6 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
       setPendingOpeningStoryId('')
     })
   }, [agentMessages.length, approvalReady, pendingOpeningStoryId, send, snapshot?.story_id, snapshot?.turn_count, snapshotLoading, storyId, streaming])
-
-  const enterGoalMode = () => {
-    setEditingTurn(null)
-    setGoalMode(true)
-    setShowSkillCommands(false)
-    setSkillCommandQuery(null)
-    setActiveSkillCommandIndex(0)
-    window.requestAnimationFrame(() => inputRef.current?.focus())
-  }
-
-  const submitComposer = async (options?: InputAreaSendOptions) => {
-    if (!goalMode) return send(options)
-    const objective = input.trim()
-    if (!objective || conversationGoal.saving) return false
-    const next = await conversationGoal.set(objective)
-    if (!next) {
-      toast.error(t('chat.goal.updateFailed'))
-      return false
-    }
-    return send(options)
-  }
-
-  const editGoal = () => {
-    if (!conversationGoal.goal) return
-    setInput(conversationGoal.goal.objective)
-    enterGoalMode()
-  }
-
-  const pauseGoal = async () => {
-    const next = await conversationGoal.pause()
-    if (!next) {
-      toast.error(t('chat.goal.updateFailed'))
-      return
-    }
-    if (streaming) await stop()
-  }
-
-  const clearGoal = async () => {
-    const next = await conversationGoal.clear()
-    if (!next) {
-      toast.error(t('chat.goal.updateFailed'))
-      return
-    }
-    if (streaming) await stop()
-  }
 
   const analyzeCurrentContext = async (rawMessage: string) => {
     const message = rawMessage.trim()
@@ -463,6 +412,7 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
     const currentIndex = view.metadata.turn_version_index ?? versions.findIndex((version) => version.current)
     const nextVersion = versions[currentIndex + direction]
     if (!nextVersion) return
+    speech.stop()
     setSwitchingVersionTurnId(turnId)
     setStageActivityContent(direction > 0 ? t('storyStage.activity.switchNewer') : t('storyStage.activity.switchOlder'))
     try {
@@ -504,6 +454,7 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
     if (!turnId) return
     const turn = turnsById.get(turnId)
     if (!turn) return
+    speech.stop()
     setReplyEditTarget({
       turnId: turn.id,
       branchId: turn.branch_id || branchId,
@@ -525,6 +476,11 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
     if (streaming) return
     const turnId = view.metadata.turn_id
     if (!turnId) {
+      if (stageRun.runtime.phase === 'suspended') {
+        // Retry resumes the original operation, including its regeneration target.
+        void resumeTask()
+        return
+      }
       const liveUserMessage = [...liveMessages].reverse().find((item) => item.role === 'user')
       const source = stageRun.retryMessage || (liveUserMessage ? agentMessageDisplayText(liveUserMessage) : '')
       if (source.trim()) void send({ message: source, rewindTurnId: stageRun.rewindTurnId })
@@ -570,10 +526,7 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
 
   const selectSkillCommand = (name: string) => {
     const command = filteredSkillCommands.find((item) => item.name === name)
-    if (command?.builtIn && name === 'goal') {
-      inputRef.current?.replaceActiveTriggerText('')
-      enterGoalMode()
-    } else if (command?.builtIn) {
+    if (command?.builtIn) {
       inputRef.current?.replaceActiveTriggerText(`/${name} `)
     } else {
       inputRef.current?.replaceActiveTriggerWithToken({ kind: 'skill', value: name, label: name })
@@ -655,6 +608,7 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
     <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--nova-surface-2)]">
       <div data-testid="story-stage-card" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--nova-surface-2)]">
         <StoryStageHeader isMobile={isMobile} controls={stageControls} />
+        <div className="shrink-0 px-3"><SpeechPlayback owner={stageKey} /></div>
 
         <div className="nova-story-stage-content flex min-h-0 flex-1 overflow-hidden bg-[var(--nova-surface-2)]">
           {!isMobile && <TurnNavigator items={turnNavigationItems} activeAnchorId={activeTurnAnchorId} onSelect={handleTurnNavigationSelect} />}
@@ -750,7 +704,11 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
                 onCreateBranch={onRequestCreateBranch ? startCreatingBranchFromView : undefined}
                 onRegenerateMessage={regenerateView}
                 onSwitchMessageVersion={switchViewVersion}
-                onGenerateInteractiveImage={generateImageForView}
+                onReadAloud={speech.configured ? (view) => {
+                  const turn = turnsById.get(view.metadata.turn_id || '')
+                  if (turn) speech.read(turn)
+                } : undefined}
+                onGenerateInteractiveImage={imageConfigured ? generateImageForView : undefined}
                 generatingInteractiveImageTurnId={storyImages.generatingTurnId || undefined}
                 onOpenSubAgentSession={openSubAgentSession}
                 activeRunId={stageRun.runtime.operationId}
@@ -778,9 +736,8 @@ export function StoryStage({ projectId, workspace, styleSceneSuggestions = [], s
         editor={{ input, editingTurn, styleScenes, styleSceneQuery, styleSceneSuggestions, showSkillCommands, activeSkillCommandIndex, skillCommands, filteredSkillCommands, filteredBuiltInCommandItems, filteredSkillCommandItems, setStyleSceneQuery, setShowSkillCommands, setSkillCommandQuery, setActiveSkillCommandIndex }}
         story={{ storyId, branchTerminal, hotChoices, hotChoicesExpanded, showHotChoices, canUseHotChoices, setHotChoicesExpanded }}
         runtime={{ streaming, approvalReady, conversationConfig, abortPending: stageRun.runtime.abortPending, recoveryPaused: stageRun.runtime.recoveryPaused, recoveryAbortAvailable: stageRun.runtime.recoveryAbortAvailable, pendingInterruptionId: stageRun.runtime.pendingInterruptionId, operationId: stageRun.runtime.operationId, connection: stageRun.runtime.connection, commandSubmitting, queue: stageRun.runtime.queue, queueActionPendingCommandID }}
-        goal={{ value: conversationGoal.goal, mode: goalMode, pending: conversationGoal.saving, enter: enterGoalMode, exit: () => setGoalMode(false), edit: editGoal, pause: pauseGoal, clear: clearGoal }}
         dialogs={{ contextAnalysisOpen, contextAnalysisLoading, contextAnalysisError, contextAnalysis, tokenUsageOpen, tokenUsageMessages, replyEditTarget, setContextAnalysisOpen, setTokenUsageOpen, closeReplyEditor: () => setReplyEditTarget(null), saveReply: saveEditedReply }}
-        actions={{ cancelEditing, selectHotChoice, selectStyleScene, selectSkillCommand, handleInputChange, handleInputTriggerChange, handleTokenRemove, toggleHotChoices, openContextAnalysis, removeContextCompaction, send: submitComposer, steerQueuedCommand, deleteQueuedCommand, stop: stageRun.runtime.recoveryPaused || stageRun.runtime.connection !== 'connected' ? stop : suspend }}
+        actions={{ cancelEditing, selectHotChoice, selectStyleScene, selectSkillCommand, handleInputChange, handleInputTriggerChange, handleTokenRemove, toggleHotChoices, openContextAnalysis, removeContextCompaction, send, steerQueuedCommand, deleteQueuedCommand, stop: stageRun.runtime.recoveryPaused || stageRun.runtime.connection !== 'connected' || !supportsRuntimeOperation(conversationConfig.snapshot, 'pause') ? stop : suspend }}
       />
     </main>
   )

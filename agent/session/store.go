@@ -172,6 +172,27 @@ type Store interface {
 	Delete(context.Context, Key) error
 }
 
+// ReaderStore permits inspection without acquiring a writer lease or creating
+// a missing Session. The returned Log rejects Append and owns no execution.
+type ReaderStore interface {
+	OpenReader(context.Context, Key) (Log, error)
+}
+
+// ReadOnlyLog exposes only Replay through the Log seam used by recovery.
+type ReadOnlyLog struct {
+	Reader interface {
+		Replay(context.Context, func(Record) error) (ReplayStats, error)
+	}
+}
+
+func (log ReadOnlyLog) Replay(ctx context.Context, apply func(Record) error) (ReplayStats, error) {
+	return log.Reader.Replay(ctx, apply)
+}
+func (ReadOnlyLog) Append(context.Context, Revision, ...Record) (Revision, error) {
+	return 0, errors.New("read-only Agent Session")
+}
+func (ReadOnlyLog) Close() error { return nil }
+
 // Log is the complete transcript Adapter contract. Append commits the whole batch
 // atomically at expected or changes nothing. Replay is streaming and ordered.
 type Log interface {
@@ -182,7 +203,8 @@ type Log interface {
 
 // CanonicalMessageLog marks a host journal whose conversation messages are
 // committed by the host itself. Agent still appends capability and turn
-// records to the same log, but it must not persist a second message snapshot.
+// records to the same log. A compaction checkpoint may retain a bounded active
+// recovery window there, but must not duplicate the complete canonical history.
 //
 // The marker is intentionally optional: Agent's built-in memory and file
 // stores remain self-contained for standalone embedding.

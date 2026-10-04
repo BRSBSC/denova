@@ -1,3 +1,5 @@
+import { InlineErrorNotice } from '@/components/common/inline-error-notice'
+import { errorMessage } from '@/lib/error-diagnostics'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowUpRight, Bell, CheckCheck, CircleAlert, Clock3, Loader2, Sparkles, Star, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -62,7 +64,7 @@ export function MessageCenterButton({ className = '', showLabel = false, unreadC
       setActiveId((current) => current && nextItems.some((item) => item.id === current) ? current : null)
     } catch (e) {
       console.warn('[features/messages/MessageCenter.tsx] loading messages failed', { error: e })
-      setError(t('messages.loadFailed'))
+      setError(errorMessage(e, t('messages.loadFailed')))
       setItems([])
     } finally {
       setLoading(false)
@@ -89,7 +91,7 @@ export function MessageCenterButton({ className = '', showLabel = false, unreadC
       setItems((current) => current.map((item) => item.id === id ? { ...item, ...updated } : item))
     } catch (e) {
       console.warn('[features/messages/MessageCenter.tsx] marking message as read failed', { id, error: e })
-      setError(t('messages.readFailed'))
+      setError(errorMessage(e, t('messages.readFailed')))
       void load()
     } finally {
       pendingReadRef.current.delete(id)
@@ -111,7 +113,7 @@ export function MessageCenterButton({ className = '', showLabel = false, unreadC
       setActiveId((current) => current && nextItems.some((item) => item.id === current) ? current : null)
     } catch (e) {
       console.warn('[features/messages/MessageCenter.tsx] marking all messages as read failed', { error: e })
-      setError(t('messages.readFailed'))
+      setError(errorMessage(e, t('messages.readFailed')))
       void load()
     } finally {
       setMarkingAllRead(false)
@@ -187,8 +189,8 @@ export function MessageCenterButton({ className = '', showLabel = false, unreadC
               <SheetClose asChild><Button variant="ghost" size="icon" aria-label={t('common.close')}><X /></Button></SheetClose>
             </div>
           </SheetHeader>
-          {error && <div role="alert" className="flex items-center justify-between gap-2 border-b px-4 py-2 text-sm text-destructive">
-            <span>{error}</span><Button variant="ghost" size="sm" onClick={() => void load()}>{t('common.retry')}</Button>
+          {error && <div className="flex items-start gap-2 border-b px-4 py-2">
+            <InlineErrorNotice className="flex-1" message={error} /><Button variant="ghost" size="sm" onClick={() => void load()}>{t('common.retry')}</Button>
           </div>}
           <div className="flex min-h-0 flex-1">
             <div ref={listRef} hidden={showDetail} className={cn('min-h-0 flex-1 lg:w-72 lg:flex-none lg:border-r', showDetail && 'hidden')}>
@@ -241,8 +243,8 @@ export function MessageCenterButton({ className = '', showLabel = false, unreadC
                       setOpen(false)
                     }}><ArrowUpRight />{t(activeItem.action_required ? 'messages.openAutomationAction' : 'messages.openAutomation')}</Button>
                   )}
+                  {activeItem.type === 'changelog' && <div className="mb-5"><GitHubStarPrompt /><DonationPrompt /></div>}
                   <MarkdownRenderer content={activeItem.body} />
-                  {activeItem.type === 'changelog' && <div className="mt-8 border-t pt-5"><GitHubStarPrompt /><DonationPrompt /></div>}
                 </article>
               ) : <Empty className="h-full"><EmptyHeader><EmptyMedia variant="icon"><Bell /></EmptyMedia><EmptyTitle>{t('messages.selectEmpty')}</EmptyTitle></EmptyHeader></Empty>}
             </div>

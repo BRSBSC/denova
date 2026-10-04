@@ -166,6 +166,10 @@ func (agent *modelToolLoop) Description(context.Context) string {
 func (agent *modelToolLoop) Run(ctx context.Context, input *loopInput, opts ...loopRunOption) *asyncIterator[*loopEvent] {
 	iterator, generator := newAsyncIteratorPair[*loopEvent]()
 	options := collectLoopRunOptions(opts)
+	if input != nil {
+		owned := *input
+		input = &owned
+	}
 	safeGo(func() {
 		agent.run(ctx, input, options, generator)
 		generator.Close()
@@ -260,6 +264,9 @@ func (agent *modelToolLoop) run(parent context.Context, input *loopInput, option
 	}
 	state.Messages = append(state.Messages, cloneMessages(input.Messages)...)
 	stablePrefixMessages := input.stablePrefixMessages
+	// Run owns this header. The mutable state replaces history after compaction;
+	// retaining the original seed here would keep the archived bodies alive.
+	input.Messages = nil
 	if runContext.Instruction != "" {
 		stablePrefixMessages++
 	}
@@ -267,18 +274,6 @@ func (agent *modelToolLoop) run(parent context.Context, input *loopInput, option
 	for iteration := 0; ; iteration++ {
 		if err := agent.contextError(ctx, options.cancel); err != nil {
 			events.Send(agent.errorEvent(err))
-			return
-		}
-		// A task batch is a synchronization boundary. Waiting here keeps an
-		// attached child concurrent with the tool batch that launched it, while
-		// preventing the next model response from streaming a provisional final
-		// answer that would have to be discarded when the child completes.
-		if _, waitErr := waitForTrackedTaskCompletionsAtSafePoint(
-			ctx,
-			options.cancel,
-			cancelAfterTools|cancelAfterModel,
-		); waitErr != nil {
-			events.Send(agent.errorEvent(waitErr))
 			return
 		}
 		if err := agent.deliverPendingTaskCompletions(ctx, state, events); err != nil {
@@ -327,6 +322,9 @@ func (agent *modelToolLoop) run(parent context.Context, input *loopInput, option
 			}})
 			return
 		}
+		// Children do not block independent parent work. While they are attached,
+		// buffer the response so a provisional final never reaches the transcript.
+		deferFinal := hasTrackedTaskCompletions(ctx)
 		assistant, modelResponseOrdinal, acceptedModelMessages, nextCtx, err := agent.callModelWithRetry(
 			ctx,
 			modelCall,
@@ -334,6 +332,7 @@ func (agent *modelToolLoop) run(parent context.Context, input *loopInput, option
 			registry,
 			events,
 			options.cancel,
+			deferFinal,
 		)
 		ctx = nextCtx
 		stablePrefixSeed = cloneMessages(modelContext.stablePrefixSeed)
@@ -359,6 +358,13 @@ func (agent *modelToolLoop) run(parent context.Context, input *loopInput, option
 			return
 		}
 		state.Messages = cloneMessages(acceptedModelMessages)
+		if deferFinal && len(assistant.ToolCalls) == 0 {
+			if _, waitErr := waitForTrackedTaskCompletionsAtSafePoint(ctx, options.cancel, cancelAfterModel); waitErr != nil {
+				events.Send(agent.errorEvent(waitErr))
+				return
+			}
+			continue
+		}
 		assistant.AgentMeta = &AgentMessageMeta{ModelResponseOrdinal: modelResponseOrdinal}
 		state.Messages = append(state.Messages, assistant.Clone())
 

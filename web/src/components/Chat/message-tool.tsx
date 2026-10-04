@@ -26,24 +26,54 @@ const STREAMING_INPUT_PREVIEW_TOOLS = new Set([
   'submit_interactive_turn',
 ])
 
+interface ParsedToolCall {
+  name: string
+  rawArgs: string
+  args: string
+  resultBody: string
+  resultEnvelope: ToolResultEnvelope | null
+  detailResult: string
+}
+
+// Tool payloads can hold whole documents. Rows remount while the virtualized
+// history settles, so parse each immutable message once instead of per render.
+const parsedToolCalls = new WeakMap<ToolCallChatMessage, ParsedToolCall>()
+
+function parseToolCall(message: ToolCallChatMessage): ParsedToolCall {
+  const cached = parsedToolCalls.get(message)
+  if (cached) return cached
+  const info = parseToolCallContent(message.content || '')
+  const rawArgs = message.args !== undefined ? message.args : info.args
+  const result = message.result || ''
+  const resultBody = stripToolResultMetadata(result)
+  const resultEnvelope = decodeToolResultEnvelope(resultBody)
+  const parsed = {
+    name: message.name || info.name,
+    rawArgs,
+    args: message.streaming === true ? rawArgs : formatMaybeJSON(rawArgs),
+    resultBody,
+    resultEnvelope,
+    detailResult: resultEnvelope ? formatMaybeJSON(resultBody) : result,
+  }
+  parsedToolCalls.set(message, parsed)
+  return parsed
+}
+
 export function ToolExecutionBlock({ message, showAgentSource = true, onResolve, onLayoutChange, onOpenSubAgentSession }: { message: ToolCallChatMessage; showAgentSource?: boolean; onResolve?: AskInteractionResolver; onLayoutChange?: (element: HTMLElement) => void; onOpenSubAgentSession?: (sessionKey: string) => void }) {
   const { t } = useTranslation()
   const approvalInteraction = message.ask?.kind === 'tool_approval' ? message.ask : undefined
   const approvalPending = approvalInteraction?.status === 'pending'
   const [expanded, setExpanded] = useState(() => approvalPending)
-  const info = parseToolCallContent(message.content || '')
-  const name = message.name || info.name
+  const { name, rawArgs, args, resultBody, resultEnvelope, detailResult } = parseToolCall(message)
   const inputStreaming = message.streaming === true
-  const rawArgs = message.args !== undefined ? message.args : info.args
   const showStreamingInput = !approvalInteraction && inputStreaming && rawArgs.length > 0 && STREAMING_INPUT_PREVIEW_TOOLS.has(name)
   const canInterpretInput = !inputStreaming
   const canShowDetail = Boolean(approvalInteraction) || canInterpretInput
-  const args = canInterpretInput ? formatMaybeJSON(rawArgs) : rawArgs
   const status = message.status || 'running'
   const result = message.result || ''
   const presentationKind = toolPresentationKind(message, 'call')
   const isDelegationTool = presentationKind === 'delegation'
-  const isTaskWait = name === 'task_wait'
+  const isTaskWait = (name === 'await' || name === 'task_wait')
   const isScriptTool = presentationKind === 'script'
   const taskSubAgent = canInterpretInput && isDelegationTool ? (message.subagent_type || parseTaskSubagentType(rawArgs)) : ''
   // The raw input remains opaque while streaming. File cards may read only the
@@ -51,7 +81,9 @@ export function ToolExecutionBlock({ message, showAgentSource = true, onResolve,
   const fileTarget = isWorkspaceFileTool(name) ? extractToolArgPath(rawArgs) : ''
   const fileTargetSummary = fileTarget ? workspaceFileName(fileTarget) : ''
   let displayName = toolDisplayName(name, t)
-  if (isDelegationTool) displayName = t('chat.subagent.taskLabel')
+  if (isDelegationTool && name !== 'list_agents') displayName = t('chat.subagent.taskLabel')
+  if (name === 'list_agents') displayName = t('chat.subagent.listLabel')
+  if (name === 'send') displayName = t('chat.subagent.sendLabel')
   if (isTaskWait) displayName = t('chat.subagent.waitLabel')
   const detailArgs = canInterpretInput
     ? (isDelegationTool ? formatTaskDelegationArgs(rawArgs) : args)
@@ -71,12 +103,10 @@ export function ToolExecutionBlock({ message, showAgentSource = true, onResolve,
       summary = commandDescription || fileTargetSummary || buildToolArgSummary(args) || t('chat.tool.preparing')
     }
   }
-  const resultBody = stripToolResultMetadata(result)
-  const taskSessionKey = name === 'task' && status === 'success' ? taskSubAgentSessionKey(resultBody) : ''
+  const taskSessionKey = (name === 'send' || name === 'task') && status === 'success' ? taskSubAgentSessionKey(resultBody) : ''
   const opensTaskSession = Boolean(taskSessionKey && onOpenSubAgentSession)
   const specializedSummary = canInterpretInput ? toolDetailSummary(name, rawArgs, resultBody, t) : ''
   if (specializedSummary) summary = specializedSummary
-  const resultEnvelope = decodeToolResultEnvelope(resultBody)
   const resultSeverity = status === 'error' ? 'error' : resultEnvelope?.severity || 'success'
   const showReadableOutcome = resultSeverity !== 'success'
   const showStackedOutcome = resultSeverity === 'warning'
@@ -88,7 +118,6 @@ export function ToolExecutionBlock({ message, showAgentSource = true, onResolve,
         ? `${fileTargetSummary} · ${resultPreview}`
         : fileTargetSummary)
     : ''
-  const detailResult = resultEnvelope ? formatMaybeJSON(resultBody) : result
   let displaySummary = summary
   if (status === 'cancelled') displaySummary = t('chat.tool.result.cancelled')
   if (status === 'error') displaySummary = (name === 'edit' ? specializedSummary : '') || buildPreview(resultBody, 160) || t('chat.tool.failed')
@@ -271,7 +300,7 @@ function parseTaskSubagentType(args: string) {
   try {
     const data = JSON.parse(args) as Record<string, unknown>
     if (typeof data.subagent_type === 'string') return data.subagent_type
-    const starts = Array.isArray(data.starts) ? data.starts : []
+    const starts = Array.isArray(data.items) ? data.items.filter(item => item?.action === 'delegate') : Array.isArray(data.starts) ? data.starts : []
     const first = starts[0]
     if (!first || typeof first !== 'object') return ''
     const agent = (first as Record<string, unknown>).agent

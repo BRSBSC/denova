@@ -41,8 +41,15 @@ type OutputCommitRequest struct {
 	// Message is the exact provider-neutral final output. Hosts may persist
 	// continuation metadata and usage beside their product projection without
 	// depending on a provider SDK type.
-	Message    Message
-	Checkpoint CanonicalCheckpoint
+	Message Message
+	// ContextMessages is the active canonical window, including this output.
+	// Archived bodies are absent. A host projection must preserve its order and
+	// message count so original journal coordinates remain valid.
+	ContextMessages []*Message
+	// ActiveUserIndex is local to ContextMessages, not the archived journal.
+	// Output projection must leave messages before this cycle unchanged.
+	ActiveUserIndex int
+	Checkpoint      CanonicalCheckpoint
 }
 
 // ContextCommitRequest appends one model-visible, UI-hidden message batch to
@@ -59,8 +66,10 @@ type ContextCommitRequest struct {
 // CanonicalCheckpoint supplies Agent continuation records for the host's
 // exact product commit receipt. Embedded hosts must append these records in
 // the same journal transaction as the product change, after validating the
-// expected Agent revision. Invoke once while preparing that transaction; do
-// not call back into the same Session. A nil callback means no embedded log.
+// expected Agent revision. Preparation may be repeated after a confirmed
+// uncommitted transaction conflict; append only the final attempt. Never retry
+// after an ambiguous or successful commit, or call back into the same Session.
+// A nil callback means no embedded log.
 type CanonicalCheckpoint func(CommitReceipt) (JournalCheckpoint, error)
 
 type JournalCheckpoint struct {
@@ -78,13 +87,11 @@ type CommitReceipt struct{ Revision string }
 type OutputProjection struct {
 	Content  string
 	Thinking string
-	// CanonicalMessages, when non-nil, replaces the retained transcript with
-	// the complete model-visible history reconstructed after the host commit.
-	// Hosts that transform settled messages must return the same projection
-	// used on reload, preserving existing raw message positions for capabilities.
+	// ContextMessages, when non-nil, replaces the supplied active window with
+	// its settled product projection, preserving its positions and count.
 	// Current-turn output and lifecycle still retain the provider's metadata.
 	// Hosts that persist complete Agent messages can leave this nil.
-	CanonicalMessages []*Message
+	ContextMessages []*Message
 }
 
 type OutputCommitReceipt struct {

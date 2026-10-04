@@ -45,7 +45,7 @@ func (session *Session) Clear(ctx context.Context) error {
 	}
 	// Todo belongs to the cleared conversation. Goal intentionally survives so
 	// a user-controlled long-running objective can continue into the fresh transcript.
-	for _, capability := range []string{TodoCapability, compactionHealthCapability} {
+	for _, capability := range []string{TodoCapability, compactionHealthCapability, elisionCapability} {
 		delete(session.capabilities, capability)
 	}
 	session.capabilities[clearCapability] = encoded
@@ -83,6 +83,7 @@ func applyClearToTranscript(transcript *engineTranscript, capabilities map[strin
 	}
 	if clearState.Revision > transcript.ClearRevision {
 		transcript.Messages = nil
+		transcript.Archive = nil
 		transcript.ContextState = contextStateSnapshot{}
 		transcript.ClearRevision = clearState.Revision
 	}

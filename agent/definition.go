@@ -42,6 +42,9 @@ type ToolRequest struct {
 }
 
 // ContextSource returns accountable model-visible fragments for one cycle.
+// Accepted fragments are journaled and reused on same-cycle resume. Materialize
+// runs for new cycles and explicit context refreshes such as compaction; it must
+// not be required to restore executable tool or canonical commit state.
 type ContextSource interface {
 	Identity() CapabilityIdentity
 	Materialize(context.Context, ContextRequest) ([]ContextFragment, error)
@@ -232,6 +235,7 @@ type Definition struct {
 	Context     ContextSource
 	Goal        GoalManager
 	Compaction  CompactionManager
+	Elision     *ElisionPolicy
 	Permission  PermissionPolicy
 	Interaction InteractionPolicy
 	Canonical   CanonicalAdapter
@@ -357,6 +361,11 @@ func validateDefinition(definition Definition) error {
 }
 
 func initializeDefinition(ctx context.Context, definition Definition) (Definition, error) {
+	var err error
+	definition.Elision, err = normalizeElisionPolicy(definition.Elision)
+	if err != nil {
+		return Definition{}, err
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -413,6 +422,8 @@ func initializeDefinition(ctx context.Context, definition Definition) (Definitio
 }
 
 type preparedDefinition struct {
+	historyHead             CanonicalHistoryHead
+	archive                 *historyArchive
 	activeModelUser         *Message
 	activeUserIndex         int
 	lastResponseOrdinal     int
@@ -434,6 +445,7 @@ type preparedDefinition struct {
 	clearRevision           uint64
 	contextState            contextStateSnapshot
 	contextSequence         int
+	elision                 elisionRecord
 }
 
 func prepareDefinition(
@@ -502,6 +514,7 @@ func definitionBehaviorIdentity(definition Definition) (string, error) {
 		Toolset: identityOfToolset(definition.Tools), ResultProcessor: identityOfToolResultProcessor(definition.ResultProcessor),
 		Artifacts: identityOfToolArtifactStorage(definition.Artifacts), Context: identityOfContext(definition.Context),
 		Goal: identityOfGoal(definition.Goal), Compaction: identityOfCompaction(definition.Compaction),
+		Elision:    definition.Elision,
 		Permission: identityOfPermission(definition.Permission), Interaction: identityOfInteraction(definition.Interaction),
 		Canonical:   identityOfCanonical(definition.Canonical),
 		Effects:     identityOfEffects(definition.Effects),
@@ -517,24 +530,12 @@ func materializeDefinitionCapabilities(
 	if prepared == nil {
 		return errors.New("materialize agent Definition capabilities: prepared Definition is nil")
 	}
-	definition := prepared.definition
-	var tools []ToolDefinition
-	var err error
-	if definition.Tools != nil {
-		tools, err = definition.Tools.PrepareTools(ctx, ToolRequest{
-			Session: request.Session, Run: request.Run, Input: request.Input,
-		})
-		if err != nil {
-			return fmt.Errorf("prepare agent Toolset: %w", err)
-		}
+	if err := materializeDefinitionTools(ctx, request, prepared); err != nil {
+		return err
 	}
-	registry, err := NewRegistry(ctx, tools...)
-	if err != nil {
-		return fmt.Errorf("prepare agent Toolset: %w", err)
-	}
-	prepared.tools = registry.Definitions()
-	prepared.toolSnapshots = registry.Snapshots()
 
+	definition := prepared.definition
+	var err error
 	var fragments []ContextFragment
 	if definition.Context != nil {
 		fragments, err = definition.Context.Materialize(ctx, ContextRequest{
@@ -580,7 +581,13 @@ func rematerializeDefinitionContext(
 		return err
 	}
 	prepared.fragments = fragments
-	return updatePreparedPrefixFingerprint(prepared)
+	if err := updatePreparedPrefixFingerprint(prepared); err != nil {
+		return err
+	}
+	if prepared.preparationStage == enginePreparationMaterialized {
+		prepared.materializedFingerprint, err = materializedDefinitionFingerprint(*prepared)
+	}
+	return err
 }
 
 func updatePreparedPrefixFingerprint(prepared *preparedDefinition) error {
@@ -620,6 +627,7 @@ type definitionIdentity struct {
 	Context         CapabilityIdentity
 	Goal            CapabilityIdentity
 	Compaction      CapabilityIdentity
+	Elision         *ElisionPolicy `json:",omitempty"`
 	Permission      CapabilityIdentity
 	Interaction     CapabilityIdentity
 	Canonical       CapabilityIdentity

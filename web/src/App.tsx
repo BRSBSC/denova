@@ -15,7 +15,7 @@ import { useWorkspaceHotkeys } from '@/hooks/use-workspace-hotkeys'
 import { isSharedWorkspaceMode, useWorkspaceStore, workspaceModeRequiresBook, type RightPanel, type WorkspaceMode } from '@/stores/workspace-store'
 import { useInteractiveStore } from '@/features/interactive/stores/interactive-store'
 import type { ChapterSummary } from '@/lib/api'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { setConfiguredLocale } from '@/i18n'
 import { NovaMotionProvider, normalizeMotionIntensity } from '@/features/motion/motion-preferences'
 import {
@@ -39,7 +39,7 @@ import {
   type CharacterCardTargetMode,
 } from '@/components/workbench/CharacterCardImportDialog'
 import { OnboardingGuide, type OnboardingNavigationTarget } from '@/features/onboarding/OnboardingGuide'
-import { SETTINGS_SECTION_EVENT, WRITING_AGENT_INIT_EVENT } from '@/features/onboarding/events'
+import { requestSettingsSection, SETTINGS_SECTION_EVENT, WRITING_AGENT_INIT_EVENT } from '@/features/onboarding/events'
 import {
   isProjectChangeForProject,
   workspaceChangeImpact,
@@ -77,6 +77,11 @@ function App() {
   const [projectExplorerRefreshSignal, setProjectExplorerRefreshSignal] = useState(0)
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(() => readLayoutBoolean(SETTINGS_OPEN_KEY, false))
+  useEffect(() => {
+    const openSettings = () => setSettingsOpen(true)
+    window.addEventListener(SETTINGS_SECTION_EVENT, openSettings)
+    return () => window.removeEventListener(SETTINGS_SECTION_EVENT, openSettings)
+  }, [])
   const [openTabs, setOpenTabs] = useState<Tab[]>([])
   const [activeTabKey, setActiveTabKey] = useState<string | null>(null)
   const [maxOpenTabs, setMaxOpenTabs] = useState<number>(MAX_OPEN_TABS_FALLBACK)
@@ -803,12 +808,7 @@ function App() {
 
   const handleOnboardingNavigate = useCallback((target: OnboardingNavigationTarget, prompt?: string) => {
     if (target === 'settings-model') {
-      setSettingsOpen(true)
-      window.setTimeout(() => {
-        window.dispatchEvent(new CustomEvent(SETTINGS_SECTION_EVENT, {
-          detail: { section: 'model' },
-        }))
-      }, 0)
+      requestSettingsSection('model')
       return
     }
     if (target === 'books') {

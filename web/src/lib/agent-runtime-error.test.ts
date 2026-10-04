@@ -14,9 +14,16 @@ import {
 const t = (key: string) => key
 
 describe('agent runtime error localization', () => {
+  it('localizes product runtime error keys for live and recovered errors', () => {
+    expect(localizeAgentRuntimeError({ error_key: 'agentRuntime.operationFailed' }, 'fallback', t))
+      .toBe('agentRuntime.operationFailed')
+    expect(localizeAgentRuntimeError({ error_key: 'agentRuntime.interrupted', message: 'internal' }, 'fallback', t))
+      .toBe('agentRuntime.interrupted')
+  })
+
   it('localizes truncated model output from both live and recovered terminals', () => {
     expect(localizeAgentRuntimeError({ code: MODEL_OUTPUT_TRUNCATED_CODE, message: 'internal' }, 'fallback', t))
-      .toBe('common.modelOutputTruncated')
+      .toContain('common.modelOutputTruncated')
     expect(localizeAgentRuntimeReason(MODEL_OUTPUT_TRUNCATED_CODE, 'fallback', t))
       .toBe('common.modelOutputTruncated')
   })
@@ -28,7 +35,8 @@ describe('agent runtime error localization', () => {
     [MODEL_OUTPUT_FILTERED_CODE, 'common.modelOutputFiltered'],
     [MODEL_OUTPUT_INCOMPLETE_CODE, 'common.modelOutputIncomplete'],
   ])('localizes distinct incomplete reason %s', (code, key) => {
-    expect(localizeAgentRuntimeError({ code, message: 'internal' }, 'fallback', t)).toBe(key)
+    expect(localizeAgentRuntimeError({ code, message: 'internal' }, 'fallback', t)).toContain(key)
+    expect(localizeAgentRuntimeError({ code, message: 'internal' }, 'fallback', t)).toContain(code)
     expect(localizeAgentRuntimeReason(code, 'fallback', t)).toBe(key)
   })
 

@@ -1,3 +1,5 @@
+import i18n from '@/i18n'
+import { localizeAgentRuntimeError } from './agent-runtime-error'
 import type { AgentAskInteraction, ChapterIllustration, ChatMessage, ChatPlanAction, InteractiveImage, InteractiveImageError, InteractiveImageStatus, PublicRuleRoll, TokenUsageCall } from './api-client/types'
 import type { AgentMessageMetadata, AgentUIMessage } from './agent-ui'
 import { readToolPresentation } from './tool-presentation'
@@ -14,6 +16,7 @@ export type AgentMessageViewKind =
   | 'token-usage'
   | 'execution-summary'
   | 'proposed-plan'
+  | 'todo'
   | 'system'
   | 'error'
   | 'activity'
@@ -157,7 +160,7 @@ function projectCurrentTodoPlans(views: AgentMessageView[]): AgentMessageView[] 
   const selected = new Map<string, number | null>()
   const projected = new Set<number>()
   views.forEach((view, index) => {
-    if (view.kind !== 'tool' || view.metadata.tool_presentation?.call !== 'todo' || view.status === 'error') return
+    if (view.kind !== 'todo' && (view.kind !== 'tool' || view.metadata.tool_presentation?.call !== 'todo' || view.status === 'error')) return
     projected.add(index)
     const scope = todoPlanScope(view)
     if (view.status === 'success' && todoPlanIsEmpty(view)) {
@@ -177,7 +180,7 @@ function todoPlanScope(view: AgentMessageView) {
 }
 
 function todoPlanIsEmpty(view: AgentMessageView) {
-  const output = parseStructuredValue(view.output)
+  const output = view.kind === 'todo' ? view.data : parseStructuredValue(view.output)
   if (output && output.schema === 'agent.todo.v1' && Array.isArray(output.items)) return output.items.length === 0
   return false
 }
@@ -389,7 +392,19 @@ export function isPlanProtocolToolName(name: string) {
   return name === 'proposed_plan'
 }
 
+// Views are immutable (see messageViewsCache). Rows remount while virtualized
+// history settles, so tool payloads are converted once per view, not per render.
+const renderMessagesCache = new WeakMap<AgentMessageView, ChatMessage | null>()
+
 export function agentViewToRenderMessage(view: AgentMessageView, options: { forceDone?: boolean } = {}): ChatMessage | null {
+  if (options.forceDone) return buildRenderMessage(view, options)
+  if (renderMessagesCache.has(view)) return renderMessagesCache.get(view) ?? null
+  const message = buildRenderMessage(view, options)
+  renderMessagesCache.set(view, message)
+  return message
+}
+
+function buildRenderMessage(view: AgentMessageView, options: { forceDone?: boolean }): ChatMessage | null {
   const data = view.data
   const meta = metadataToChatFields(view)
   const streaming = options.forceDone ? false : view.streaming
@@ -458,6 +473,8 @@ export function agentViewToRenderMessage(view: AgentMessageView, options: { forc
       return null
     case 'proposed-plan':
       return { id, role: 'proposed_plan', content: view.content, status, streaming, thinking_preview: readString(data.thinking_preview), plan_action: readPlanAction(data.plan_action), ...meta }
+    case 'todo':
+      return { id, role: 'todo_updated', content: JSON.stringify(data), ...meta }
     case 'system':
       return { id, role: 'system', content: view.content, streaming, ...meta }
     case 'error':
@@ -564,18 +581,21 @@ function buildAgentMessageView(message: AgentUIMessage, part: AgentUIMessage['pa
     case 'data-agent-ask':
       return { ...base, kind: 'ask', data, content: firstAskQuestion(data), status, streaming: readString(data.status) === 'pending' }
     case 'data-agent-context-compaction':
-      return { ...base, kind: 'context-compaction', data, content, status, streaming }
+      return { ...base, kind: 'context-compaction', data, content,
+        status: status || (data.status === 'completed' ? 'success' : data.status === 'failed' ? 'error' : 'running'), streaming }
     case 'data-agent-token-usage':
       return { ...base, kind: 'token-usage', data, content, streaming: false }
     case 'data-agent-execution-summary':
       return { ...base, kind: 'execution-summary', data, content: '', streaming: false }
     case 'data-agent-proposed-plan':
       return { ...base, kind: 'proposed-plan', data, content, status, streaming }
+    case 'data-agent-todo':
+      return { ...base, kind: 'todo', data, content: '', status: 'success', streaming: false }
     case 'data-agent-system':
       if (!content) return null
       return { ...base, kind: 'system', data, content, streaming: false }
     case 'data-agent-error':
-      return { ...base, kind: 'error', data, content, streaming: false }
+      return { ...base, kind: 'error', data, content: localizeAgentRuntimeError(data, content, key => i18n.t(key)), streaming: false }
     case 'data-agent-interactive-image':
       return {
         ...base,
@@ -652,6 +672,7 @@ function metadataToChatFields(view: AgentMessageView): Partial<ChatMessage> {
 
 function contextFields(data: Record<string, unknown>): Partial<ChatMessage> {
   return {
+    runtime_managed: data.runtime_managed === true,
     phase: readString(data.phase),
     attempt: readNumber(data.attempt),
     tokens_before: readNumber(data.tokens_before),

@@ -41,10 +41,12 @@ type persistedSessionTranscript struct {
 }
 
 type persistedMessageCheckpoint struct {
-	Hash         string `json:"hash"`
-	MessageCount int    `json:"message_count"`
-	// Metadata never duplicates committed product messages. Pending contains
-	// only a tool batch that has not yet reached the product commit boundary.
+	Archive      *historyArchive `json:"archive,omitempty"`
+	Hash         string          `json:"hash"`
+	MessageCount int             `json:"message_count"`
+	// Metadata is a message-free locator before compaction, or a bounded active
+	// recovery window for archived history. Pending contains only a tool batch
+	// that has not yet reached the product commit boundary.
 	Metadata json.RawMessage `json:"metadata,omitempty"`
 	Pending  []*Message      `json:"pending,omitempty"`
 }
@@ -77,11 +79,12 @@ type sessionObserver struct {
 // capability updates, and settled turn records may cross process boundaries;
 // all live coordination is intentionally kept here in memory.
 type Session struct {
-	agent   *Agent
-	key     SessionKey
-	binding runstate.BindingRef
-	engine  runstate.Engine
-	log     agentsession.Log
+	agent    *Agent
+	key      SessionKey
+	binding  runstate.BindingRef
+	engine   runstate.Engine
+	log      agentsession.Log
+	recovery *RecoveryIndex
 
 	mu                  sync.RWMutex
 	closed              bool
@@ -94,6 +97,7 @@ type Session struct {
 	capabilities        map[string]json.RawMessage
 	durableCapabilities map[string]json.RawMessage
 	canonicalMessages   bool
+	canonicalSource     CanonicalHistorySource
 	messageCheckpoint   persistedMessageCheckpoint
 	active              *Run
 	maintenance         bool
@@ -121,9 +125,15 @@ func (session *Session) Key() SessionKey {
 	return key
 }
 
-func (session *Session) replay(ctx context.Context) error {
+func (session *Session) replay(ctx context.Context, access sessionAccess) error {
+	if err := session.loadRecovery(ctx); err != nil {
+		return err
+	}
+	if err := session.restoreRecent(ctx); err != nil {
+		return err
+	}
 	var unfinished *persistedTurn
-	stats, err := session.log.Replay(ctx, func(record agentsession.Record) error {
+	apply := func(record agentsession.Record) error {
 		session.revision = record.Revision
 		switch record.Kind {
 		case sessionInputRecord, sessionInputUpdateRecord:
@@ -224,17 +234,22 @@ func (session *Session) replay(ctx context.Context) error {
 			return fmt.Errorf("unsupported Agent Session record %q", record.Kind)
 		}
 		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("replay Agent Session transcript: %w", err)
 	}
-	_ = stats
+	for _, record := range session.recovery.ReplayRecords() {
+		if err := apply(record); err != nil {
+			return fmt.Errorf("replay Agent Session transcript: %w", err)
+		}
+	}
+	session.revision = session.recovery.Revision
 	if unfinished != nil {
 		if run := session.runs[unfinished.RunID]; run != nil {
 			run.result = Result{Status: ResultSuspended, Reason: "Agent Run requires explicit resume"}
 			run.cancel()
 			run.endHandle()
 			close(run.executionDone)
+			if access == sessionInspection {
+				return nil
+			}
 			return run.restoreEffectInteractions()
 		}
 		interrupted := *unfinished
@@ -338,29 +353,62 @@ func (session *Session) Active(_ context.Context) (*Run, bool, error) {
 	return session.active, session.active != nil, nil
 }
 
-func (session *Session) AttachRun(_ context.Context, runID string) (*Run, bool, error) {
+func (session *Session) AttachRun(ctx context.Context, runID string) (*Run, bool, error) {
 	if err := session.usable(); err != nil {
 		return nil, false, err
 	}
 	session.mu.RLock()
 	run := session.runs[strings.TrimSpace(runID)]
 	session.mu.RUnlock()
-	return run, run != nil, nil
+	if run != nil {
+		return run, true, nil
+	}
+	snapshot, found, err := session.RunSnapshot(ctx, runID)
+	if err != nil || !found {
+		return nil, found, err
+	}
+	return session.settledHandle(snapshot), true, nil
 }
 
-func (session *Session) RunInput(_ context.Context, runID string) (Input, bool, error) {
-	run, found, err := session.AttachRun(context.Background(), runID)
+func (session *Session) RunInput(ctx context.Context, runID string) (Input, bool, error) {
+	run, found, err := session.AttachRun(ctx, runID)
 	if err != nil || !found {
 		return Input{}, false, err
 	}
 	run.mu.RLock()
-	defer run.mu.RUnlock()
-	if run.cycle > 0 && !run.settled {
-		input, err := decodeInput(run.snapshot.Input)
-		input.IdempotencyKey = string(run.snapshot.CommandID)
+	// The cycle counter advances before admission/checkpointing completes.
+	// Until a snapshot exists, the accepted Run input remains authoritative.
+	if run.snapshot.Cycle > 0 && !run.settled {
+		saved := run.snapshot.Input
+		commandID := string(run.snapshot.CommandID)
+		run.mu.RUnlock()
+		input, err := decodeInput(saved)
+		input.IdempotencyKey = commandID
 		return input, err == nil, err
 	}
-	return cloneInput(run.input), true, nil
+	if !run.settled {
+		input := cloneInput(run.input)
+		run.mu.RUnlock()
+		return input, true, nil
+	}
+	run.mu.RUnlock()
+	session.mu.RLock()
+	entry, found := session.recovery.Inputs[run.commandID]
+	session.mu.RUnlock()
+	if !found {
+		return Input{}, false, nil
+	}
+	record, err := session.readRecord(ctx, entry.Revision)
+	if err != nil {
+		return Input{}, false, err
+	}
+	var stored persistedInput
+	if err := json.Unmarshal(record.Data, &stored); err != nil {
+		return Input{}, false, err
+	}
+	input, err := decodeInput(stored.Input)
+	input.IdempotencyKey = stored.Receipt.CommandID
+	return input, err == nil, err
 }
 
 func (session *Session) Observe(ctx context.Context, after Cursor) (Observation, error) {
@@ -557,12 +605,13 @@ func (session *Session) closeForTree(releaseTreeID string) error {
 	pending := append([]*Run(nil), session.pending...)
 	session.mu.Unlock()
 	if active != nil {
-		if active.isSuspended() {
-			active.finish(Result{Status: ResultAborted, Reason: "Agent Session closed"}, nil)
-		} else {
+		if !active.isSuspended() {
 			active.abort("Agent Session closed")
 			<-active.executionDone
 		}
+		// The admission fence may suspend execution while Close is waiting.
+		// Settle that handle too; finish leaves an already settled result intact.
+		active.finish(Result{Status: ResultAborted, Reason: "Agent Session closed"}, nil)
 	}
 	for _, run := range pending {
 		run.finish(Result{Status: ResultAborted, Reason: "Agent Session closed"}, nil)
@@ -616,12 +665,23 @@ func (session *Session) appendRecordsLocked(ctx context.Context, records ...agen
 		}
 		return err
 	}
+	if err := session.recordCommittedLocked(records, session.revision+1); err != nil {
+		return err
+	}
 	session.revision = next
 	return nil
 }
 
 func (session *Session) persistTranscriptLocked(ctx context.Context) error {
 	if session.canonicalMessages {
+		state, err := decodeEngineTranscript(session.engineState)
+		if err != nil {
+			return err
+		}
+		session.engineState, err = encodeCanonicalWindow(state, session.capabilities)
+		if err != nil {
+			return err
+		}
 		checkpoint, err := canonicalMessageCheckpoint(session.engineState)
 		if err != nil {
 			return err
