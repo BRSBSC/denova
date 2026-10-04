@@ -285,6 +285,29 @@ function delay(milliseconds) {
   return new Promise(resolve => setTimeout(resolve, milliseconds))
 }
 
+async function writeThinkingStressCompletion(response, body) {
+  response.writeHead(200, {
+    'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive',
+  })
+  writeCompletionFrame(response, completionFrame({ role: 'assistant' }))
+  const chunk = 'Review the saved chapter and verify continuity before changing any details. '.repeat(80)
+  for (let stage = 1; stage <= 3; stage += 1) {
+    for (let frame = 0; frame < 8; frame += 1) {
+      const segments = requestIncludesMarker(body, 'E2E_THINKING_FAST') ? chunk.match(/.{1,64}/gs) : [chunk]
+      for (let index = 0; index < segments.length; index += 1) {
+        writeCompletionFrame(response, completionFrame({ reasoning_content: segments[index] }))
+        if (segments.length > 1 && index % 8 === 0) await delay(1)
+      }
+      await delay(85)
+    }
+    await waitForDelayedRelease(`E2E_THINKING_STAGE_${stage}`)
+  }
+  const frames = requestIncludesTool(body, 'submit_interactive_turn')
+    ? chatCompletionFrames('Thinking stress complete.') : textCompletionFrames('Thinking stress complete.')
+  for (const frame of frames) writeCompletionFrame(response, frame)
+  finishCompletion(response)
+}
+
 function writeGeneratedCompletion(response, content) {
   writeJSON(response, 200, {
     id: 'denova-e2e-response',
@@ -375,6 +398,11 @@ const server = createServer(async (request, response) => {
 
   if (body.stream !== true) {
     writeGeneratedCompletion(response, '保存核心章节内容')
+    return
+  }
+
+  if (requestIncludesMarker(body, 'E2E_THINKING_STRESS')) {
+    await writeThinkingStressCompletion(response, body)
     return
   }
 
