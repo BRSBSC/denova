@@ -12,6 +12,11 @@ Denova records only major user-visible features, important compatibility or data
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- 修复长会话超限后自动与手动压缩仍被拒绝、无法在原会话继续的问题。
+- Fixed automatic and manual compaction being rejected after long conversations exceed context limits, preventing continuation in the same session.
+
 ## [v0.5.1fix] - 2026-10-04
 
 ### Brief / 简要说明
