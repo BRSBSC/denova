@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChat as useAIChat } from '@ai-sdk/react'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
+import { buildContextCompactionMessage, createContextCompactionMessageId } from '@/components/Chat/context-compaction-message'
 import { createAgentCommandID } from '@/lib/api'
 import type { AgentQueuedCommandAction, AgentRuntimeQueuedCommand, ContextAnalysis, IDEContext, SessionSummary, TextSelection } from '@/lib/api'
 import { withErrorLogID } from '@/lib/api-client'
@@ -85,6 +86,8 @@ export function useAgentChat(options: ChatOptions = {}) {
   const { t } = useTranslation()
   const { projectId = '', client = writingAgentChatClient, onAgentFileChange, onWorkspaceChange } = options
   const terminalDiagnosticReceived = useRef(false)
+  const [pendingCompactionID, setPendingCompactionID] = useState('')
+  const compactionMessageCounterRef = useRef(0)
   const transport = useMemo(() => new AgentChatTransport(client.transportOptions), [client])
   const [runtimeRecoverySignal, setRuntimeRecoverySignal] = useState(0)
   const projectStreamCycleRef = useRef<(operationID: string, cycle?: number) => void>(() => undefined)
@@ -177,14 +180,19 @@ export function useAgentChat(options: ChatOptions = {}) {
       ]
     })
   }, [setUIMessages])
-  const messages = useMemo(() => (
-    messageNormalizerRef.current!.normalize(uiMessages).flatMap<AgentUIMessage>((message) => {
+  const messages = useMemo(() => {
+    const normalized = messageNormalizerRef.current!.normalize(uiMessages).flatMap<AgentUIMessage>((message) => {
       const visibleParts = message.parts.filter((part) => part.type !== 'data-agent-error')
       if (visibleParts.length === message.parts.length) return [message]
       if (visibleParts.length === 0) return []
       return [{ ...message, parts: visibleParts }]
     })
-  ), [uiMessages])
+    // Manual maintenance uses a non-streaming API. Keep its pending display outside
+    // canonical history so a background reload cannot erase the submission feedback.
+    return pendingCompactionID ? [...normalized, buildContextCompactionMessage({
+      status: 'started', phase: 'agent', summary: t('chat.contextCompaction.manualRunning'),
+    }, pendingCompactionID)] : normalized
+  }, [pendingCompactionID, t, uiMessages])
   const transportStreaming = status === 'submitted' || status === 'streaming'
   const {
     activeSessionId,
@@ -297,7 +305,7 @@ export function useAgentChat(options: ChatOptions = {}) {
   const isExecutionActive = transportStreaming || runtimeProjection?.active === true
   const lastPart = messages.at(-1)?.parts.at(-1)
   const retry = lastPart?.type === 'data-agent-activity' && lastPart.data.event === 'model_retry' ? lastPart.data : undefined
-  const activityContent = recoveryPending ? t('chat.activity.recovering') : retry && transportStreaming
+  const activityContent = pendingCompactionID ? t('chat.contextCompaction.status.running') : recoveryPending ? t('chat.activity.recovering') : retry && transportStreaming
     ? t(retry.output_state === 'complete' ? 'chat.activity.modelRepair' : 'chat.activity.modelRetry', {
       attempt: Number(retry.attempt) + 1, total: Number(retry.max_attempts), seconds: Math.ceil(Number(retry.delay_ms) / 1000),
     }) : status === 'submitted' ? t('chat.activity.thinking') : ''
@@ -386,7 +394,7 @@ export function useAgentChat(options: ChatOptions = {}) {
 
   const send = useCallback(
     async (input: string, sendOptions: ChatSendOptions = {}) => {
-      if (sessionTransitionPendingRef.current) return false
+      if (sessionTransitionPendingRef.current || commandSubmittingRef.current) return false
       let targetSessionID = (client.fixedSessionId || activeSessionId).trim()
       if (!targetSessionID) {
         const availableSessions = await loadSessions()
@@ -404,17 +412,36 @@ export function useAgentChat(options: ChatOptions = {}) {
       const resumeDisplayMessage = resumeFromEmptyComposer ? t('chat.input.resume') : ''
       const command = isStreaming || sendOptions.attachments?.length ? '' : agentBypassCommand(canonicalInput)
       if (command) {
-        const result = await client.executeCommand(command)
-        if (command === 'clear') {
-          await loadHistory()
-          await loadSessions()
+        if (commandSubmittingRef.current) return false
+        commandSubmittingRef.current = true
+        setCommandSubmitting(true)
+        const compactionID = command === 'compact' ? createContextCompactionMessageId(compactionMessageCounterRef) : ''
+        setPendingCompactionID(compactionID)
+        try {
+          const result = await client.executeCommand(command)
+          if (command === 'clear') {
+            await loadHistory(targetSessionID)
+            await loadSessions()
+            return true
+          }
+          if (command === 'compact') await loadHistory(targetSessionID)
+          appendDataMessage(setUIMessages, 'data-agent-system', { content: result })
           return true
+        } catch (error) {
+          const content = agentCommandErrorMessage(error, t)
+          console.error('[useAgentChat.ts] slash command failed', { sessionId: targetSessionID, command, error })
+          if (compactionID) {
+            appendDataMessage(setUIMessages, 'data-agent-context-compaction', {
+              id: compactionID, status: 'error', phase: 'agent', content,
+            })
+          } else toast.error(content)
+          sendOptions.onSubmissionError?.()
+          return false
+        } finally {
+          setPendingCompactionID('')
+          commandSubmittingRef.current = false
+          setCommandSubmitting(false)
         }
-        if (command === 'compact') await loadHistory()
-        appendDataMessage(setUIMessages, 'data-agent-system', {
-          content: result,
-        })
-        return true
       }
 
       let prepared: ReturnType<typeof prepareAgentRequest>
@@ -787,7 +814,7 @@ export function useAgentChat(options: ChatOptions = {}) {
   }, [abortPending, abortRecovery, activeSessionId, client, runtimeProjection, t])
 
   const runSessionTransition = useCallback(async (mutation: () => Promise<SessionSummary>) => {
-    if (sessionTransitionPendingRef.current) return
+    if (sessionTransitionPendingRef.current || commandSubmittingRef.current) return
     sessionTransitionPendingRef.current = true
     setSessionTransitionPending(true)
     stopAIStream()

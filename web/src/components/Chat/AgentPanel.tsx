@@ -300,7 +300,7 @@ function AgentPanelComponent({
   const recoveryAbortAvailable = Boolean(runtimeProjection?.recovery_actions?.some((action) => action.kind === 'abort'))
   const activeControlsDisabled =
     isStreaming && (!runtimeProjection?.active_operation_id?.trim() || Boolean(runtimeProjection?.runtime_recoverable && !runtimeProjection.stream_attached))
-  const sessionControlsDisabled = sessionActionsDisabled ?? (isStreaming || sessionTransitionPending)
+  const sessionControlsDisabled = sessionActionsDisabled ?? (isStreaming || commandSubmitting || sessionTransitionPending)
   const [chatPaneHost] = useState(() => createStablePortalHost('relative flex h-full min-h-0 w-full min-w-0 flex-col'))
   const ideTellerId = persistedSettings.values.ide_story_teller_id
   const imagePresetId = persistedSettings.values.ide_image_preset_id
