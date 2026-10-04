@@ -12,6 +12,11 @@ Denova records only major user-visible features, important compatibility or data
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- 修复写作与对话 Agent 长时间流式思考时，每次刷新的消息快照都被保留、浏览器内存持续增长直至页面因内存不足崩溃的问题。
+- Fix writing and chat Agent streams retaining every refreshed message snapshot during long reasoning, which grew browser memory until the page crashed with Out of Memory.
+
 ## [v0.5.1fix4] - 2026-10-05
 
 ### Brief / 简要说明

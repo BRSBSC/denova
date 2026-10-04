@@ -84,7 +84,11 @@ interface QueuedComposerDraft {
 
 export function useAgentChat(options: ChatOptions = {}) {
   const { t } = useTranslation()
-  const { projectId = '', client = writingAgentChatClient, onAgentFileChange, onWorkspaceChange } = options
+  const { projectId = '', client = writingAgentChatClient } = options
+  // Parent callbacks are often inline closures over a render scope that holds this hook's
+  // previous result. Capturing them here would chain every streamed message snapshot together.
+  const parentCallbacksRef = useRef(options)
+  parentCallbacksRef.current = options
   const terminalDiagnosticReceived = useRef(false)
   const [pendingCompactionID, setPendingCompactionID] = useState('')
   const compactionMessageCounterRef = useRef(0)
@@ -151,7 +155,7 @@ export function useAgentChat(options: ChatOptions = {}) {
       const event = part.data as WorkspaceChangeEvent
       if (!projectId || !isProjectChangeForProject(event, projectId)) return
       window.dispatchEvent(new CustomEvent('nova:workspace-change', { detail: event }))
-      void onWorkspaceChange?.(event)
+      void parentCallbacksRef.current.onWorkspaceChange?.(event)
     },
     onError: (error) => {
       if (terminalDiagnosticReceived.current) { terminalDiagnosticReceived.current = false; return }
@@ -159,7 +163,7 @@ export function useAgentChat(options: ChatOptions = {}) {
     },
     onFinish: () => {
       terminalDiagnosticReceived.current = false
-      void onAgentFileChange?.()
+      void parentCallbacksRef.current.onAgentFileChange?.()
       void refreshSessionsRef.current()
     },
   })
