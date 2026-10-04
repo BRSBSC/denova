@@ -548,28 +548,32 @@ func (m *modelInputLoggingChatModel) InputEstimator() agent.InputEstimator {
 }
 
 func (m *modelInputLoggingChatModel) Generate(ctx context.Context, input []*agent.Message, opts ...agent.ModelOption) (*agent.Message, error) {
-	if err := modelio.ValidateInput(m.agentKind, m.config, input, m.tools, m.providerInputMaxBytes, m.contextWindowTokens); err != nil {
+	opts = stableToolModelOptions(opts, m.tools)
+	tools := agent.GetCommonOptions(nil, opts...).Tools
+	if err := modelio.ValidateInput(m.agentKind, m.config, input, tools, m.providerInputMaxBytes, m.contextWindowTokens); err != nil {
 		return nil, err
 	}
 	ctx = contextWithModelInputSystemSections(ctx, m.systemSections)
 	source := modelio.TraceSource(ctx)
-	span, callID, spanCtx := BeginLLMCallTrace(ctx, m.agentKind, source, "generate", m.config, input, m.tools, false)
-	msg, err := m.inner.Generate(spanCtx, input, stableToolModelOptions(opts, m.tools)...)
+	span, callID, spanCtx := BeginLLMCallTrace(ctx, m.agentKind, source, "generate", m.config, input, tools, false)
+	msg, err := m.inner.Generate(spanCtx, input, opts...)
 	FinishLLMCallTrace(span, callID, m.agentKind, source, "generate", m.config.Model, 0, msg, err, nil)
 	return msg, err
 }
 
 func (m *modelInputLoggingChatModel) Stream(ctx context.Context, input []*agent.Message, opts ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
-	if err := modelio.ValidateInput(m.agentKind, m.config, input, m.tools, m.providerInputMaxBytes, m.contextWindowTokens); err != nil {
+	opts = stableToolModelOptions(opts, m.tools)
+	tools := agent.GetCommonOptions(nil, opts...).Tools
+	if err := modelio.ValidateInput(m.agentKind, m.config, input, tools, m.providerInputMaxBytes, m.contextWindowTokens); err != nil {
 		return nil, err
 	}
 	ctx = contextWithModelInputSystemSections(ctx, m.systemSections)
 	source := modelio.TraceSource(ctx)
-	span, callID, spanCtx := BeginLLMCallTrace(ctx, m.agentKind, source, "stream", m.config, input, m.tools, true)
+	span, callID, spanCtx := BeginLLMCallTrace(ctx, m.agentKind, source, "stream", m.config, input, tools, true)
 	started := time.Now()
 	var firstChunk time.Time
 	var chunks []*agent.Message
-	stream, err := m.inner.Stream(spanCtx, input, stableToolModelOptions(opts, m.tools)...)
+	stream, err := m.inner.Stream(spanCtx, input, opts...)
 	if err != nil {
 		FinishLLMCallTrace(span, callID, m.agentKind, source, "stream", m.config.Model, 0, nil, err, nil)
 		return nil, err
@@ -606,6 +610,12 @@ func modelInputToolsFromContext(mc *agent.ModelContext) []*agent.ToolInfo {
 func stableToolModelOptions(opts []agent.ModelOption, tools []*agent.ToolInfo) []agent.ModelOption {
 	if len(tools) == 0 {
 		return opts
+	}
+	// Explicit side-call schemas, including an empty list for cold Compaction,
+	// override the primary snapshot. Admission, tracing and provider I/O must
+	// use the same resolved schemas as the request's capacity estimate.
+	if resolved := agent.GetCommonOptions(nil, opts...); resolved.Tools != nil {
+		tools = resolved.Tools
 	}
 	next := make([]agent.ModelOption, 0, len(opts)+1)
 	next = append(next, opts...)
