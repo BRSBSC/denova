@@ -74,3 +74,40 @@ func TestBuiltinSummaryUsesSnapshotAndNeverFallsBackAfterProviderFailure(t *test
 		})
 	}
 }
+
+// reasoningBudgetModel spends its response cap on reasoning first, like
+// providers whose output limit includes chain-of-thought tokens.
+type reasoningBudgetModel struct{ reasoningTokens int }
+
+func (m reasoningBudgetModel) Generate(_ context.Context, _ []*agent.Message, options ...agent.ModelOption) (*agent.Message, error) {
+	if limit := agent.GetCommonOptions(nil, options...).MaxTokens; limit != nil && *limit <= m.reasoningTokens {
+		message := agent.AssistantMessage("", nil)
+		message.ReasoningContent = "still reasoning"
+		message.ResponseMeta = &agent.ResponseMeta{FinishReason: "length"}
+		return message, nil
+	}
+	return agent.AssistantMessage("Checkpoint.", nil), nil
+}
+func (m reasoningBudgetModel) Stream(ctx context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+	result, err := m.Generate(ctx, messages, options...)
+	return agent.StreamReaderFromArray([]*agent.Message{result}), err
+}
+
+func TestSummaryCallLeavesTheModelResponseCapForReasoning(t *testing.T) {
+	model := reasoningBudgetModel{reasoningTokens: 8192}
+	source := []*agent.Message{agent.UserMessage("original task"), agent.AssistantMessage("completed work", nil)}
+	primary := append(append([]*agent.Message{agent.SystemMessage("stable system")}, source...), agent.UserMessage("latest"))
+	snapshot := (&agent.ModelCall{Model: model, Messages: primary, Options: []agent.ModelOption{agent.WithMaxTokens(64000)}}).Snapshot()
+	for name, config := range map[string]ModelSummarizerConfig{"prefix": {}, "cold": {Model: model, Identity: agent.CapabilityIdentity{Kind: "test.summary", Version: 1, ConfigHash: "cold"}}} {
+		t.Run(name, func(t *testing.T) {
+			summarizer, err := ModelSummarizer(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := summarizer.Summarize(t.Context(), SummaryRequest{Messages: source, ModelSnapshot: snapshot, ContextWindowTokens: 1_000_000, SummaryLimitBytes: 64 << 10, HardLimitBytes: 4 << 20})
+			if err != nil || result.Summary != "Checkpoint." {
+				t.Fatalf("result=%#v err=%v", result, err)
+			}
+		})
+	}
+}

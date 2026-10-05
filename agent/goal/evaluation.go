@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	maxGoalEvaluationBytes        = 256 << 10
-	maxGoalEvaluationFieldBytes   = 64 << 10
+	maxGoalEvaluationFieldBytes = 64 << 10
+	// maxGoalEvaluationOutputTokens bounds the verdict text. It is enforced on
+	// the returned content, not as the fork's response cap.
 	maxGoalEvaluationOutputTokens = 512
 )
 
@@ -46,10 +47,10 @@ func (manager *standardManager) AfterRun(ctx context.Context, request agent.Goal
 	if request.ModelRequest == nil || request.Final == nil || request.Final.Role != agent.Assistant || len(request.Final.ToolCalls) != 0 {
 		return agent.GoalAfterRunDecision{}, errors.New("Goal evaluation requires the exact final model request and canonical assistant result")
 	}
-	fork := request.ModelRequest.Append(request.Final.Clone(), agent.UserMessage(goalEvaluationPrompt)).WithOptions(
-		agent.WithoutTools(),
-		agent.WithMaxTokens(maxGoalEvaluationOutputTokens),
-	)
+	// Keep the primary request's response cap. Providers that count reasoning
+	// toward it would otherwise spend a verdict-sized cap before writing any
+	// text; the verdict budget is enforced on the returned content instead.
+	fork := request.ModelRequest.Append(request.Final.Clone(), agent.UserMessage(goalEvaluationPrompt)).WithOptions(agent.WithoutTools())
 	response, err := executeEvaluationFork(ctx, fork)
 	decision := evaluationMetadata(response)
 	if err != nil {
@@ -95,8 +96,8 @@ func evaluationMetadata(response *agent.Message) agent.GoalAfterRunDecision {
 
 func decodeEvaluationPayload(content string) (evaluationPayload, error) {
 	content = strings.TrimSpace(strings.ToValidUTF8(content, "\uFFFD"))
-	if content == "" || len(content) > maxGoalEvaluationBytes {
-		return evaluationPayload{}, fmt.Errorf("Goal evaluation response must contain 1..%d bytes", maxGoalEvaluationBytes)
+	if content == "" || agent.EstimateTextTokens(content) > maxGoalEvaluationOutputTokens {
+		return evaluationPayload{}, fmt.Errorf("Goal evaluation response must contain 1..%d estimated tokens", maxGoalEvaluationOutputTokens)
 	}
 	start := strings.IndexByte(content, '{')
 	if start < 0 {

@@ -128,10 +128,10 @@ func TestStandardGoalEvaluatorForksExactFinalRequestAndCompletes(t *testing.T) {
 	if primary.options.MaxTokens == nil || *primary.options.MaxTokens != 777 || len(primary.options.Tools) != 1 {
 		t.Fatalf("middleware options were not captured: %#v", primary.options)
 	}
-	if evaluator.options.MaxTokens == nil || *evaluator.options.MaxTokens != maxGoalEvaluationOutputTokens ||
+	if evaluator.options.MaxTokens == nil || *evaluator.options.MaxTokens != *primary.options.MaxTokens ||
 		len(evaluator.options.Tools) != 0 || evaluator.options.ToolChoice != nil ||
 		evaluator.options.SessionKey != primary.options.SessionKey {
-		t.Fatalf("evaluator did not preserve cache routing with a bounded tool-free output: %#v", evaluator.options)
+		t.Fatalf("evaluator did not preserve cache routing and the primary response cap without tools: %#v", evaluator.options)
 	}
 	if len(evaluator.messages) != len(primary.messages)+2 ||
 		!reflect.DeepEqual(evaluator.messages[:len(primary.messages)], primary.messages) {
@@ -150,6 +150,41 @@ func TestStandardGoalEvaluatorForksExactFinalRequestAndCompletes(t *testing.T) {
 	}
 	if strings.Contains(goalEvaluationPrompt, "English") {
 		t.Fatal("evaluator prompt must not force English rationale or continuation text")
+	}
+}
+
+// reasoningBudgetGoalModel spends its response cap on reasoning first, like
+// providers whose output limit includes chain-of-thought tokens.
+type reasoningBudgetGoalModel struct{ reasoningTokens int }
+
+func (model reasoningBudgetGoalModel) Generate(_ context.Context, _ []*agent.Message, options ...agent.ModelOption) (*agent.Message, error) {
+	if limit := agent.GetCommonOptions(nil, options...).MaxTokens; limit != nil && *limit <= model.reasoningTokens {
+		message := agent.AssistantMessage("", nil)
+		message.ReasoningContent = "still reasoning"
+		message.ResponseMeta = &agent.ResponseMeta{FinishReason: "length"}
+		return message, nil
+	}
+	return agent.AssistantMessage(`{"verdict":"complete","reason":"verified","next_instruction":""}`, nil), nil
+}
+
+func (model reasoningBudgetGoalModel) Stream(ctx context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+	result, err := model.Generate(ctx, messages, options...)
+	return agent.StreamReaderFromArray([]*agent.Message{result}), err
+}
+
+func TestGoalEvaluationLeavesTheModelResponseCapForReasoning(t *testing.T) {
+	snapshot := (&agent.ModelCall{
+		Model:    reasoningBudgetGoalModel{reasoningTokens: 8192},
+		Messages: []*agent.Message{agent.SystemMessage("stable system"), agent.UserMessage("ship it")},
+		Options:  []agent.ModelOption{agent.WithMaxTokens(64000)},
+	}).Snapshot()
+	decision, err := Standard().AfterRun(context.Background(), agent.GoalAfterRunRequest{
+		Present: true, State: agent.GoalState{ID: "goal-1", Objective: "ship it", Status: agent.GoalActive, Revision: 1},
+		Result:       agent.Result{Status: agent.ResultCompleted},
+		ModelRequest: snapshot, Final: agent.AssistantMessage("shipped and verified", nil),
+	})
+	if err != nil || decision.Verdict != agent.GoalVerdictComplete || decision.Reason != "verified" {
+		t.Fatalf("decision=%#v err=%v", decision, err)
 	}
 }
 
@@ -216,6 +251,8 @@ func TestStandardGoalEvaluatorFailureStopsWithoutFalseCompletion(t *testing.T) {
 		evaluation *agent.Message
 	}{
 		{name: "malformed", evaluation: agent.AssistantMessage("not-json", nil)},
+		{name: "oversized", evaluation: agent.AssistantMessage(
+			`{"verdict":"complete","reason":"`+strings.Repeat("word ", 4*maxGoalEvaluationOutputTokens)+`","next_instruction":""}`, nil)},
 		{name: "tool_call", evaluation: agent.AssistantMessage(`{"verdict":"complete","reason":"invalid","next_instruction":""}`, []agent.ToolCall{{
 			ID: "denied", Type: "function", Function: agent.FunctionCall{Name: "unexpected", Arguments: `{}`},
 		}})},

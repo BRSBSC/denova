@@ -4,13 +4,32 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix5）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix6）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix5) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix6) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
 ## [Unreleased]
+
+## [v0.5.1fix6] - 2026-10-05
+
+### Brief / 简要说明
+
+#### 中文
+
+- 修复 DeepSeek 等思考计入输出上限的模型上，自动压缩上下文与 Goal 评估反复失败的问题。
+
+#### English
+
+- Fix automatic context compaction and Goal evaluation repeatedly failing on models whose reasoning counts toward the output cap, such as DeepSeek.
+
+### Fixed / 修复
+
+- 修复思考计入输出上限的模型（如 DeepSeek）在自动压缩上下文时只产生思考、没有摘要正文，导致压缩反复失败、长会话最终超出上下文上限的问题。
+- Fix automatic context compaction repeatedly failing on models whose reasoning counts toward the output cap (such as DeepSeek), which returned reasoning without a summary and let long sessions exceed the context limit.
+- 修复思考计入输出上限的模型（如 DeepSeek）在 Goal 回合结束评估时只产生思考、没有评估结论，导致 Goal 评估失败、自动续跑中断的问题。
+- Fix Goal evaluation failing and autonomous continuation stopping on models whose reasoning counts toward the output cap (such as DeepSeek), which returned reasoning without a verdict.
 
 ## [v0.5.1fix5] - 2026-10-05
 
