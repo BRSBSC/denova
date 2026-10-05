@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { shallow } from 'zustand/shallow'
 import type { AgentAskInteraction, AgentRuntimeActiveOutput, AgentRuntimeOpenTool, AgentRuntimeQueuedCommand } from '@/lib/api'
 import type { AgentUIMessage } from '@/lib/agent-ui'
 import type { BranchSummary, GamePlanningTemplate, InteractiveSubmode, InteractiveTurnPersistedEvent, Snapshot, StorySummary, Teller, TurnEvent } from '../types'
@@ -79,6 +80,31 @@ export function emptyStoryStageRun(): StoryStageRunState {
       abortPending: false,
     },
   }
+}
+
+/**
+ * Creates the selector a component uses to render one stage run. The display
+ * replay cursor advances on every SSE event and is only read imperatively from
+ * the store, so a cursor-only change keeps the previous snapshot instead of
+ * re-rendering the stage once per streamed token. Never read
+ * `runtime.streamEventCursor` from the selected value; each subscriber needs
+ * its own selector instance.
+ */
+export function createRenderedStoryStageRunSelector(stageKey: string, fallback: StoryStageRunState) {
+  let rendered: StoryStageRunState | undefined
+  return (state: InteractiveStore): StoryStageRunState => {
+    const next = state.storyStageRuns[stageKey] || fallback
+    if (rendered && sameExceptStreamCursor(rendered, next)) return rendered
+    rendered = next
+    return next
+  }
+}
+
+function sameExceptStreamCursor(a: StoryStageRunState, b: StoryStageRunState) {
+  return a === b || (
+    shallow({ ...a, runtime: undefined }, { ...b, runtime: undefined })
+    && shallow({ ...a.runtime, streamEventCursor: '' }, { ...b.runtime, streamEventCursor: '' })
+  )
 }
 
 function readRememberedBranches(): Record<string, string> {
@@ -204,6 +230,8 @@ export const useInteractiveStore = create<InteractiveStore>((set) => ({
   setStoryStageRun: (stageKey, updater) => set((state) => {
     const current = state.storyStageRuns[stageKey] || emptyStoryStageRun()
     const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater }
+    // An updater that returns the stored run unchanged must not notify subscribers.
+    if (next === state.storyStageRuns[stageKey]) return state
     return { storyStageRuns: { ...state.storyStageRuns, [stageKey]: next } }
   }),
   clearStoryStageRun: (stageKey) => set((state) => {

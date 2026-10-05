@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { mergeInteractiveTurnPersistedSnapshot, useInteractiveStore } from './interactive-store'
+import { createRenderedStoryStageRunSelector, emptyStoryStageRun, mergeInteractiveTurnPersistedSnapshot, useInteractiveStore } from './interactive-store'
 import type { InteractiveTurnPersistedEvent, Snapshot, StorySummary, TurnEvent } from '../types'
 
 describe('interactive-store', () => {
@@ -207,6 +207,27 @@ describe('interactive-store', () => {
 
     expect(useInteractiveStore.getState().submode).toBe('timeline')
     expect(window.localStorage.getItem('nova.interactive.submode.v1')).toBe('timeline')
+  })
+
+  it('keeps the rendered stage run stable while only the stream cursor advances', () => {
+    const select = createRenderedStoryStageRunSelector('stage', emptyStoryStageRun())
+    const { setStoryStageRun } = useInteractiveStore.getState()
+    setStoryStageRun('stage', { streaming: true, activityContent: 'Thinking' })
+    const rendered = select(useInteractiveStore.getState())
+    let notifications = 0
+    const unsubscribe = useInteractiveStore.subscribe(() => { notifications += 1 })
+
+    // One SSE delta: the cursor advances and the unchanged activity is re-announced.
+    setStoryStageRun('stage', (current) => ({ ...current, runtime: { ...current.runtime, streamEventCursor: '7' } }))
+    setStoryStageRun('stage', (current) => current)
+    unsubscribe()
+
+    expect(notifications).toBe(1)
+    expect(select(useInteractiveStore.getState())).toBe(rendered)
+    expect(useInteractiveStore.getState().storyStageRuns.stage.runtime.streamEventCursor).toBe('7')
+
+    setStoryStageRun('stage', (current) => ({ ...current, runtime: { ...current.runtime, streamEventCursor: '8', phase: 'running' } }))
+    expect(select(useInteractiveStore.getState())).toMatchObject({ runtime: { phase: 'running', streamEventCursor: '8' } })
   })
 
   it('merges a persisted turn by appending it to the active branch snapshot', () => {

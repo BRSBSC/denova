@@ -21,7 +21,7 @@ import type { ConversationConfigBinding, ConversationConfigChanges } from '@/fea
 import { supportsRuntimeOperation } from '@/features/conversation-config/types'
 import { analyzeInteractiveContext, getActiveInteractiveChat, getInteractiveHistoryPage, removeInteractiveContextCompaction, resolveInteractiveAsk, switchInteractiveTurnVersion, updateInteractiveTurnNarrative } from '../api'
 import { sanitizeStoredNarrative } from '../stream-parser'
-import { emptyStoryStageRun, useInteractiveStore } from '../stores/interactive-store'
+import { createRenderedStoryStageRunSelector, emptyStoryStageRun, useInteractiveStore } from '../stores/interactive-store'
 import type { StoryStageRunState } from '../stores/interactive-store'
 import { useInteractiveAgentCommands, type StoryStageRuntimeUpdater } from '../use-interactive-agent-commands'
 import { DEFAULT_NARRATIVE_STYLE_ID } from '../narrative-style'
@@ -81,7 +81,7 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
   const { displaySnapshot, historyWindow, prependPage: prependHistoryPage, resetToLatest: resetHistoryToLatest } = useStoryHistoryWindow(stageKey, snapshot)
   const speech = useStorySpeech({ owner: stageKey, story, snapshot: displaySnapshot, active })
   const [historyLoading, setHistoryLoading] = useState(false)
-  const stageRun = useInteractiveStore((state) => state.storyStageRuns[stageKey] || EMPTY_STAGE_RUN)
+  const stageRun = useInteractiveStore(useMemo(() => createRenderedStoryStageRunSelector(stageKey, EMPTY_STAGE_RUN), [stageKey]))
   const setStoryStageRun = useInteractiveStore((state) => state.setStoryStageRun)
   const clearStoryStageRun = useInteractiveStore((state) => state.clearStoryStageRun)
   const streaming = stageRun.streaming
@@ -169,7 +169,8 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
 
   const setStageActivityContent = useCallback(
     (value: string) => {
-      updateStageRun({ activityContent: value })
+      // Stream events re-announce the same activity for every delta.
+      updateStageRun((current) => current.activityContent === value ? current : { ...current, activityContent: value })
     },
     [updateStageRun],
   )
