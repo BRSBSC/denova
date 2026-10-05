@@ -88,6 +88,9 @@ for (const theme of ['dark', 'light']) {
     await indexEditor.getByRole('button', { name: '阅读指引', exact: true }).click()
     await indexEditor.getByRole('textbox', { name: '阅读指引', exact: true }).fill('Read the harbor lore first.')
     await directory.getByRole('button', { name: '资料总览', exact: true }).click()
+    // Navigation finishes only after the draft (including conflict recovery) is saved.
+    await expect(library).toBeVisible()
+    await expect(indexEditor).toBeHidden()
     expect((await index()).intro_markdown).toContain('Read the harbor lore first.')
     await directory.getByRole('button', { name: '资料索引', exact: true }).click()
     await expect(indexEditor.getByRole('textbox', { name: '阅读指引', exact: true })).toContainText('Read the harbor lore first.')
@@ -116,3 +119,63 @@ for (const theme of ['dark', 'light']) {
     }
   })
 }
+
+test('keeps the lore index open until a conflicted save finishes', async ({ page, request }) => {
+  const book = await createAndOpenBook(request, 'Lore index save recovery')
+  const indexPath = `/api/projects/${book.projectId}/book/lore/index`
+  const snapshot = async () => (await (await request.get(indexPath)).json())
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await page.goto('/')
+  await page.getByLabel('工作台侧边栏').getByRole('button', { name: '写作', exact: true }).click()
+  await page.getByTestId('book-settings-header-frame').getByRole('button', { name: '设定', exact: true }).click()
+  const workspace = page.getByRole('region', { name: '作品设定', exact: true })
+  const directory = workspace.locator('[data-slot="sidebar"]')
+  await directory.getByRole('button', { name: '资料索引', exact: true }).click()
+  const editor = workspace.getByTestId('lore-index-editor')
+  const library = workspace.getByTestId('lore-library')
+  await expect(editor).toBeVisible()
+
+  let releaseSave!: () => void
+  const saveGate = new Promise<void>(resolve => { releaseSave = resolve })
+  let writes = 0
+  await page.route(`**${indexPath}`, async route => {
+    if (route.request().method() !== 'PUT') { await route.continue(); return }
+    writes += 1
+    if (writes === 1) {
+      // Advance the real file revision immediately before the captured write.
+      // This guarantees a conflict independently of file-watch/refetch timing.
+      const latest = await snapshot()
+      const external = await request.put(indexPath, { data: {
+        base_revision: latest.revision,
+        guide: { ...latest.guide, automatic_details: { resident: 'brief' } },
+      } })
+      expect(external.ok(), await external.text()).toBe(true)
+      const conflict = await route.fetch()
+      expect(conflict.status()).toBe(409)
+      expect((await conflict.json()).code).toBe('api.resource.revisionConflict')
+      await route.fulfill({ response: conflict })
+      return
+    }
+    await saveGate
+    await route.continue()
+  })
+  try {
+    await editor.getByRole('button', { name: '阅读指引', exact: true }).click()
+    await editor.getByRole('textbox', { name: '阅读指引', exact: true }).fill('Saved after conflict recovery.')
+    await directory.getByRole('button', { name: '资料总览', exact: true }).click()
+    await expect.poll(() => writes).toBe(2)
+    await expect(editor).toBeVisible()
+    await expect(library).toBeHidden()
+    expect((await snapshot()).guide).toMatchObject({ intro_markdown: '', automatic_details: { resident: 'brief' } })
+  } finally {
+    releaseSave()
+  }
+  await expect(library).toBeVisible()
+  await expect(editor).toBeHidden()
+  expect((await snapshot()).guide).toMatchObject({
+    intro_markdown: expect.stringContaining('Saved after conflict recovery.'), automatic_details: { resident: 'brief' },
+  })
+  await page.reload()
+  await directory.getByRole('button', { name: '资料索引', exact: true }).click()
+  await expect(editor.getByRole('textbox', { name: '阅读指引', exact: true })).toContainText('Saved after conflict recovery.')
+})
