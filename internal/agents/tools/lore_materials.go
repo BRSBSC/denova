@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"denova/config"
 	"denova/internal/book/lore"
@@ -12,7 +11,7 @@ import (
 )
 
 type listLoreMaterialsInput struct {
-	ItemID string `json:"item_id" jsonschema_description:"Exact enabled lore item ID. Find the item by name or type with list_lore_items first."`
+	ItemID string `json:"item_id" jsonschema_description:"Exact enabled lore item ID. Find the item by name or type with query_lore_items first."`
 	Offset int    `json:"offset,omitempty" jsonschema_description:"Zero-based material offset; continue from next_offset."`
 	Limit  int    `json:"limit,omitempty" jsonschema_description:"Page size, default 10, maximum 50."`
 }
@@ -51,18 +50,12 @@ func newLoreMaterialsTool(workspace string) (agent.ToolDefinition, error) {
 		if next >= len(item.ResolvedMaterials) {
 			next = -1
 		}
-		coverID := ""
-		if item.Materials != nil {
-			coverID = item.Materials.CoverAssetID
-		} else if item.Image != nil && len(item.ResolvedMaterials) > 0 {
-			coverID = item.ResolvedMaterials[0].ID
-		}
 		encoded, err := json.Marshal(struct {
 			ItemID       string          `json:"item_id"`
 			CoverAssetID string          `json:"cover_asset_id"`
 			Materials    []lore.Material `json:"materials"`
 			NextOffset   int             `json:"next_offset"`
-		}{item.ID, coverID, entries, next})
+		}{item.ID, loreCoverAssetID(item), entries, next})
 		return string(encoded), err
 	})
 	if err != nil {
@@ -71,20 +64,19 @@ func newLoreMaterialsTool(workspace string) (agent.ToolDefinition, error) {
 	return defineTool(tool, boundedReadDescriptor(ToolSourceLore, config.AgentToolLoreRead, agent.ToolResultRecoveryRerun))
 }
 
-// Material references remain behind the explicit discovery tool, never injected into
-// the resident lore prefix. This compact hint is used only by requested reads.
-func loreMaterialReadHint(item lore.Item) string {
-	if len(item.ResolvedMaterials) == 0 {
-		return ""
+// Query results expose cover status without fetching the material catalog.
+// Paths, URLs and descriptions remain behind explicit material discovery.
+func loreMaterialSummaryMarkdown(item lore.Item) string {
+	cover, _ := json.Marshal(loreCoverAssetID(item))
+	return fmt.Sprintf("material_count: %d\ncover_asset_id: %s", len(item.ResolvedMaterials), cover)
+}
+
+func loreCoverAssetID(item lore.Item) string {
+	if item.Materials != nil {
+		return item.Materials.CoverAssetID
 	}
-	var kinds []string
-	for _, kind := range []string{"image", "audio"} {
-		for _, m := range item.ResolvedMaterials {
-			if strings.HasPrefix(m.MIMEType, kind+"/") {
-				kinds = append(kinds, kind)
-				break
-			}
-		}
+	if item.Image != nil && len(item.ResolvedMaterials) > 0 {
+		return item.ResolvedMaterials[0].ID
 	}
-	return fmt.Sprintf("\nLinked materials: %d (%s). Use list_lore_materials with item_id=%q to select materials.\n", len(item.ResolvedMaterials), strings.Join(kinds, ", "), item.ID)
+	return ""
 }

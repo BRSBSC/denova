@@ -1,4 +1,4 @@
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,8 +11,10 @@ import { useLoreCategories } from './use-lore-categories'
 import { loreTypeLabel } from './options'
 
 /** One preview with local back navigation; source editor and its scroll/undo state stay mounted. */
-export function LoreReferencePreview({ projectId, items, history, onHistoryChange }: {
+export function LoreReferencePreview({ projectId, items, history, onHistoryChange, onSelectItem }: {
   projectId: string; items: LoreItem[]; history: string[]; onHistoryChange: (history: string[]) => void
+  /** The owning editor saves its draft before selecting the target. */
+  onSelectItem: (id: string) => void
 }) {
   const { t } = useTranslation()
   const { categories } = useLoreCategories(projectId)
@@ -27,6 +29,16 @@ export function LoreReferencePreview({ projectId, items, history, onHistoryChang
           {history.length > 1 && <Button variant="ghost" size="sm" className="self-start" onClick={() => onHistoryChange(history.slice(0, -1))}><ArrowLeft data-icon="inline-start" />{t('lore.references.back')}</Button>}
           <SheetTitle className="break-words">{item?.name || name}</SheetTitle>
           <SheetDescription>{t('lore.references.previewHint')}</SheetDescription>
+          {item && (
+            <Button variant="outline" size="sm" className="self-start" onClick={() => {
+              console.info('[lore-reference] navigating to item', { projectId, itemId: item.id })
+              onHistoryChange([])
+              onSelectItem(item.id)
+            }}>
+              <ArrowUpRight data-icon="inline-start" />
+              {t('lore.references.openItem')}
+            </Button>
+          )}
         </SheetHeader>
         {item ? (
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" key={name}>

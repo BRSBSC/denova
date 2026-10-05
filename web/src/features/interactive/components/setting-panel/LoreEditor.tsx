@@ -1,5 +1,7 @@
 import { useLoreCategories } from '@/features/lore/use-lore-categories'
 import { LoreDetailTabs } from '@/features/lore/LoreDetailTabs'
+import { LoreIndexMemberships } from '@/features/lore/LoreIndexMemberships'
+import { LoreTagsInput } from '@/features/lore/LoreTagsInput'
 import { useId } from 'react'
 import { Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -33,6 +35,7 @@ export function LoreEditor({
   setDraft,
   setTagDraft,
   onSave,
+  onSelectItem,
   documentReview,
   documentReviewNavigationIntent,
   onPrepareReviewSnapshot,
@@ -49,6 +52,7 @@ export function LoreEditor({
   setDraft: (draft: LoreItem | null) => void
   setTagDraft: (value: string) => void
   onSave: () => void
+  onSelectItem: (id: string) => void
   documentReview?: DocumentReviewController
   documentReviewNavigationIntent?: DocumentReviewNavigationIntent | null
   onPrepareReviewSnapshot?: () => Promise<DocumentReviewSnapshot>
@@ -108,7 +112,7 @@ export function LoreEditor({
                 data-slot="lore-primary-fields"
                 className={cn(
                   'grid min-w-0 grid-cols-2 gap-2 @lg/lore-fields:grid-cols-3',
-                  '@3xl/lore-fields:grid-cols-[minmax(12rem,2fr)_repeat(4,minmax(7rem,1fr))]',
+                  '@3xl/lore-fields:grid-cols-[minmax(10rem,2fr)_repeat(5,minmax(0,1fr))]',
                 )}
               >
                 <Field label={t('settingPanel.field.name')} className="col-span-2 @3xl/lore-fields:col-span-1">
@@ -158,11 +162,13 @@ export function LoreEditor({
                     </SelectContent>
                   </Select>
                 </Field>
+                <LoreIndexMemberships projectId={projectId} memberships={draft.index_memberships}
+                  onChange={index_memberships => setDraft({ ...draft, index_memberships })} />
               </div>
               <div data-slot="lore-secondary-fields" className="grid min-w-0 items-start gap-2 @lg/lore-fields:grid-cols-[minmax(10rem,0.8fr)_minmax(0,1.2fr)]">
                 <Field label={t('settingPanel.field.tags')} htmlFor={tagInputId}>
                   <div className="flex min-w-0 items-center gap-1.5">
-                    <Input id={tagInputId} className={cn(inputClassName, 'min-w-0 flex-1')} value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder={t('settingPanel.placeholder.tags')} />
+                    <LoreTagsInput key={draft.id} id={tagInputId} value={tagDraft} onChange={setTagDraft} suggestions={items.flatMap(item => item.tags || [])} />
                     {draft.type === 'character' ? (
                       <TooltipIconButton
                         label={t(protagonistTagActive ? 'loreWorkspace.unmarkProtagonist' : 'loreWorkspace.markProtagonist')}
@@ -207,6 +213,7 @@ export function LoreEditor({
                 autoFocus={autoFocusContent}
                 projectId={projectId}
                 resourceKey={draft.id}
+                onSelectItem={onSelectItem}
                 items={items}
                 value={draft.content || ''}
                 onChange={(content) => setDraft({ ...draft, content })}

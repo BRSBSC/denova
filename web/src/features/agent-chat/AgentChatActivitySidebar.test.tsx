@@ -27,7 +27,7 @@ function props(projects: AgentChatProject[] = []): AgentChatActivitySidebarProps
   return {
     projects, activitiesByProject: new Map(), loading: false, error: '', activeProjectId: 'a',
     onSelectProject: vi.fn(), onOpenActivity: vi.fn(), onOpenSession: vi.fn(),
-    onRenameSession: vi.fn(), onCreateSession: vi.fn(), onOpenHistory: vi.fn(),
+    onRenameSession: vi.fn(), onDeleteSession: vi.fn(), onCreateSession: vi.fn(), onOpenHistory: vi.fn(),
     onAddProject: vi.fn(), projectDirectoryBusy: false, onRenameProject: vi.fn(),
     onRelinkProject: vi.fn(), onArchiveProject: vi.fn(),
   }

@@ -11,9 +11,10 @@ import (
 // Collections are distribution units with stable source IDs. Receipts track
 // members in the existing project libraries, not in a second content store.
 type portableCollection[T any] struct {
-	Version    int             `json:"version"`
-	Items      []T             `json:"items"`
-	Categories []lore.Category `json:"categories,omitempty"`
+	Version    int              `json:"version"`
+	Items      []T              `json:"items"`
+	Categories []lore.Category  `json:"categories,omitempty"`
+	IndexGuide *lore.IndexGuide `json:"index_guide,omitempty"`
 }
 
 func collectionPath(kind string) string {

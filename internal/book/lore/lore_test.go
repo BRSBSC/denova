@@ -211,10 +211,10 @@ func TestLoreStoreProgressiveContextSplitsResidentAndIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(context, "## Resident Lore") || !strings.Contains(context, "主角完整正文") {
+	if !strings.Contains(context, "## Resident") || !strings.Contains(context, "主角完整正文") {
 		t.Fatalf("resident context missing full content: %s", context)
 	}
-	if !strings.Contains(context, "## On-demand Lore Name Catalog") || !strings.Contains(context, "黄泉酒馆") || !strings.Contains(context, "隐藏规则") || !strings.Contains(context, "候选角色11") {
+	if !strings.Contains(context, "## Location · On demand") || !strings.Contains(context, "黄泉酒馆") || !strings.Contains(context, "隐藏规则") || !strings.Contains(context, "候选角色11") {
 		t.Fatalf("name catalog context missing non-resident items: %s", context)
 	}
 	if strings.Contains(context, "id: base") || strings.Contains(context, "黄泉酒馆索引简介") {

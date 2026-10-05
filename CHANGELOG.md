@@ -14,6 +14,9 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Added / 新增
 
+- 资料库新增文档式资料索引，支持自定义与自动分组、逐项双向关联和实时预览；按组直接向写作与游戏 Agent 注入名称、简介或全文，并可按组名或全文关键词查询。
+- Lore adds a document-style index with custom and automatic groups, shared item associations and live previews. Groups directly inject names, briefs or full text into Writing and Game, with group queries and full-body keyword search.
+
 - 资料正文支持通过 @ 搜索插入名称引用、点击查看资料与反向引用；缺失引用和改名影响有明确提示，写作与游戏共用。
 - Lore bodies support @ search for name references, linked previews and backlinks, with missing-reference and rename notices shared across Writing and Game.
 

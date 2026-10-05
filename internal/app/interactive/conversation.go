@@ -512,16 +512,9 @@ func (c *Conversation) AssembleModelContext(ctx context.Context, originalMessage
 		return agentcontext.ModelContextResult{}, err
 	}
 	loreStore := lore.NewStore(c.workspace)
-	residentLore, err := loreStore.ResidentContextMarkdown()
+	residentLore, err := loreStore.ProgressiveContextMarkdown()
 	if err != nil {
 		return agentcontext.ModelContextResult{}, fmt.Errorf("读取常驻资料失败: %w", err)
-	}
-	residentContentBytes, err := loreStore.ResidentContentBytes()
-	if err != nil {
-		return agentcontext.ModelContextResult{}, fmt.Errorf("读取常驻资料预算失败: %w", err)
-	}
-	if residentContentBytes > lore.ResidentLoreSafetyMaxBytes {
-		return agentcontext.ModelContextResult{}, fmt.Errorf("常驻资料正文异常过大（%d KB）；请检查是否误将大型文件设为常驻资料", (residentContentBytes+1023)/1024)
 	}
 	if len([]byte(residentLore)) > interactiveResidentLoreMessageMaxBytes {
 		return agentcontext.ModelContextResult{}, fmt.Errorf("常驻资料模型上下文过大: %d > %d bytes", len([]byte(residentLore)), interactiveResidentLoreMessageMaxBytes)
@@ -570,11 +563,11 @@ func (c *Conversation) AssembleModelContext(ctx context.Context, originalMessage
 	}
 	if strings.TrimSpace(residentLore) != "" {
 		fragments = append(fragments, agentcontext.Fragment{
-			ID: "interactive_resident_lore", Source: "interactive.resident_lore", Title: "Resident Lore",
-			Purpose: "provide revisioned enabled resident lore for the current agent session",
+			ID: "interactive_resident_lore", Source: "interactive.resident_lore", Title: "Lore Index",
+			Purpose: "provide the Markdown lore guide, always-loaded settings and discovery entries",
 			Content: residentLore, Placement: agentcontext.PlacementLeadingMessage, Limit: interactiveResidentLoreMessageMaxBytes, Included: true,
 			Stability: agent.ContextStablePrefix,
-			Note:      "source=enabled resident lore; lifecycle=replaceable stable prefix; revision=" + strings.TrimSpace(loreRevision),
+			Note:      "source=setting/lore/items.json index guide and enabled items; lifecycle=replaceable stable prefix; revision=" + strings.TrimSpace(loreRevision),
 		})
 	}
 	if strings.TrimSpace(tellerTurnContextPrompt) != "" {
@@ -623,6 +616,14 @@ func (c *Conversation) AssembleModelContext(ctx context.Context, originalMessage
 	residentVisible := residentLore
 	for _, fragment := range assembled.Fragments {
 		if fragment.Source == "interactive.resident_lore" {
+			if fragment.Truncated {
+				locale := ""
+				if c.cfg != nil {
+					locale = c.cfg.Language
+				}
+				slog.ErrorContext(ctx, "[lore] game index context exceeds injection budget", "bytes", len(residentLore), "limit", fragment.Limit)
+				return agentcontext.ModelContextResult{}, fmt.Errorf("%s", i18n.New(locale).T("lore.index.contextTooLarge", "limit", fragment.Limit))
+			}
 			residentVisible = fragment.Content
 			if fragment.Included && fragment.Content != "" {
 				stableLeadingMessage = agentcontext.StandaloneMessage(fragment.Title, fragment.Content, "")

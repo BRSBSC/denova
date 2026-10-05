@@ -142,7 +142,7 @@ func (s *Store) Search(query, itemType string, limit int) ([]Item, error) {
 }
 
 func (s *Store) SearchIndexMarkdown(options IndexOptions) (string, error) {
-	items, err := s.List()
+	items, _, err := s.indexQueryItems(options)
 	if err != nil {
 		return "", err
 	}
@@ -154,7 +154,7 @@ func (s *Store) SearchIndexMarkdown(options IndexOptions) (string, error) {
 }
 
 // ResidentIndexMarkdown returns a bounded discovery index containing only
-// enabled resident lore. Bodies stay behind read_lore_items so specialized
+// enabled resident lore. Bodies stay behind query_lore_items so specialized
 // agents can review relevant rules without injecting the complete library.
 func (s *Store) ResidentIndexMarkdown(maxBytes int) (string, error) {
 	items, err := s.List()
@@ -224,28 +224,9 @@ func (s *Store) IndexMarkdown() (string, error) {
 }
 
 func (s *Store) ProgressiveContextMarkdown() (string, error) {
-	resident, err := s.ResidentContextMarkdown()
+	collection, err := s.loadOrCreate()
 	if err != nil {
 		return "", err
 	}
-	catalog, err := s.NameCatalogMarkdown(NameCatalogOptions{
-		MaxBytes:        IndexDefaultMaxBytes,
-		ExcludeResident: true,
-		OmitWhenEmpty:   true,
-	})
-	if err != nil {
-		return "", err
-	}
-	var sb strings.Builder
-	if resident != "" {
-		sb.WriteString("## Resident Lore\n\n")
-		sb.WriteString(resident)
-		sb.WriteString("\n\n")
-	}
-	if catalog != "" {
-		fmt.Fprintf(&sb, "## On-demand Lore Name Catalog (source: %s, max 64 KiB)\n\n", ItemsRelativePath)
-		sb.WriteString(strings.TrimSpace(strings.TrimPrefix(catalog, "# Lore Name Catalog")))
-		sb.WriteString("\n\n")
-	}
-	return strings.TrimSpace(sb.String()), nil
+	return renderIndexGuide(collection)
 }

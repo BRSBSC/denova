@@ -166,6 +166,8 @@ func (s *Store) MutateCategory(input CategoryMutation) ([]Category, error) {
 			}
 		}
 		collection.Categories = slices.Delete(collection.Categories, index, index+1)
+		delete(collection.IndexGuide.AutomaticDetails, automaticGroupKey(LoadModeAuto, input.ID))
+		delete(collection.IndexGuide.AutomaticDetails, automaticGroupKey(LoadModeManual, input.ID))
 	case "move":
 		if index < 0 || input.Index < 0 || input.Index >= len(collection.Categories) {
 			return nil, fmt.Errorf("%w: invalid category position", ErrCategory)

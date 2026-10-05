@@ -17,6 +17,7 @@ interface LoreContentEditorProps {
   items: LoreItem[]
   value: string
   onChange: (value: string) => void
+  onSelectItem: (id: string) => void
   onSaveShortcut?: () => void
   autoFocus?: boolean
   highlightQuery?: string
@@ -34,6 +35,7 @@ export function LoreContentEditor({
   items,
   value,
   onChange,
+  onSelectItem,
   onSaveShortcut,
   autoFocus,
   highlightQuery,
@@ -105,7 +107,7 @@ export function LoreContentEditor({
         />
         <LoreReferences items={items} id={resourceKey} content={value} onOpen={openReference} />
       </div>
-      <LoreReferencePreview projectId={projectId} items={items} history={history} onHistoryChange={setHistory} />
+      <LoreReferencePreview projectId={projectId} items={items} history={history} onHistoryChange={setHistory} onSelectItem={onSelectItem} />
     </div>
   )
 }

@@ -431,8 +431,13 @@ export function useVirtuosoBottomLock({ resetKey, resetPosition = 'end', itemCou
   }, [cancelScheduledScroll, resetAfterContentInteraction, resetKey])
 
   useEffect(() => {
+    // A restored stream or a large batch can put the actual tail outside the
+    // mounted range. Materialize it before measuring its bottom; overscan rows
+    // are not the execution tail and must never become the scroll target.
+    const scroller = currentScrollerElement()
+    if (canAutoFollowStreamingTail() && scroller && !scroller.querySelector('[data-nova-chat-tail-row]')) scrollToBottomNow()
     updateAwayFromBottom()
-  }, [itemCount, updateAwayFromBottom])
+  }, [canAutoFollowStreamingTail, currentScrollerElement, itemCount, scrollToBottomNow, updateAwayFromBottom])
 
   useEffect(() => cancelScheduledScroll, [cancelScheduledScroll])
 

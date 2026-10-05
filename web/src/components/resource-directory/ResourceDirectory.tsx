@@ -294,6 +294,7 @@ export function ResourceDirectory({
                       size="icon-sm"
                       onClick={toggleAllSections}
                       aria-label={allCollapsed ? t('common.expandAll') : t('common.collapseAll')}
+                      title={allCollapsed ? t('common.expandAll') : t('common.collapseAll')}
                     >
                       {allCollapsed ? <ChevronsUpDown /> : <ChevronsDownUp />}
                     </Button>

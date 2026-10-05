@@ -80,7 +80,7 @@ func TestInteractiveConversationBuildsHistoryAndPersistsAssistantToStory(t *test
 	if len(history) != 4 {
 		t.Fatalf("history length = %d, want 4", len(history))
 	}
-	if history[0].Role != agents.RoleUser || !strings.Contains(history[0].Content, "Resident Lore") || !strings.Contains(history[0].Content, "林川：谨慎的幸存者") || !strings.Contains(history[0].Content, "世界已进入黄昏末日") {
+	if history[0].Role != agents.RoleUser || !strings.Contains(history[0].Content, "## Resident") || !strings.Contains(history[0].Content, "林川：谨慎的幸存者") || !strings.Contains(history[0].Content, "世界已进入黄昏末日") {
 		t.Fatalf("history[0] should be stable resident lore: %#v", history[0])
 	}
 	if history[1].Role != agents.RoleUser || history[1].Content != "我推开酒馆的门" {
@@ -100,7 +100,7 @@ func TestInteractiveConversationBuildsHistoryAndPersistsAssistantToStory(t *test
 		"[Current Turn Runtime Context]",
 		"800 Chinese characters",
 		"Highest length constraint",
-		"list_lore_items",
+		"query_lore_items",
 		"search_story_history",
 		"turn_id",
 		"Game Agent Planning",

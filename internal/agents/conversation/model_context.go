@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	agent "github.com/alfredxw/denova/agent"
@@ -12,6 +13,7 @@ import (
 	agentrun "denova/internal/agents/run"
 	"denova/internal/agents/session"
 	"denova/internal/agents/toolresult"
+	"denova/internal/i18n"
 )
 
 var ErrMissingAgentCycleIdentity = errors.New("session canonical write requires durable agent cycle identity")
@@ -71,6 +73,16 @@ func (c *SessionConversation) AssembleModelContext(ctx context.Context, _ string
 	})
 	if err != nil {
 		return agentcontext.ModelContextResult{}, err
+	}
+	for _, fragment := range assembled.Fragments {
+		if fragment.Source == "workspace.runtime.stable" && fragment.Truncated {
+			locale := ""
+			if c.cfg != nil {
+				locale = c.cfg.Language
+			}
+			slog.ErrorContext(ctx, "[lore] stable workspace context exceeds injection budget", "bytes", len(c.stableContext), "limit", fragment.Limit)
+			return agentcontext.ModelContextResult{}, fmt.Errorf("%s", i18n.New(locale).T("lore.index.contextTooLarge", "limit", fragment.Limit))
+		}
 	}
 	return agentcontext.ModelContextResult{
 		Messages: assembled.Messages, Context: assembled,

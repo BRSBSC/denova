@@ -795,6 +795,7 @@ export interface LoreItem {
   name: string
   importance: 'major' | 'important' | 'minor'
   load_mode: 'resident' | 'auto' | 'manual'
+  index_memberships?: LoreIndexMembership[]
   tags: string[]
   brief_description: string
   keywords: string[]
@@ -810,6 +811,45 @@ export interface LoreItem {
     source_record_id: string
     source_hash: string
   }
+}
+
+export type LoreIndexDetail = 'name' | 'brief' | 'full'
+export interface LoreIndexMembership {
+  group_id: string
+  detail: 'inherit' | LoreIndexDetail
+}
+export interface LoreIndexGroup {
+  id: string
+  name: string
+  purpose: string
+  body_markdown: string
+  default_detail: LoreIndexDetail
+}
+export interface LoreIndexGuide {
+  intro_markdown: string
+  groups: LoreIndexGroup[]
+  automatic_details?: Record<string, LoreIndexDetail>
+  /** Presentation only: custom:<id> or automatic:<mode[:category]>; never membership. */
+  group_order?: string[]
+  item_order?: Record<string, string[]>
+}
+export interface LoreAutomaticGroup {
+  key: string
+  category_id?: string
+  load_mode: 'resident' | 'auto' | 'manual'
+  default_detail: LoreIndexDetail
+  item_ids: string[]
+}
+export interface LoreIndexPreview {
+  markdown: string
+  token_estimate: number
+  automatic_groups: LoreAutomaticGroup[]
+  custom_item_ids: Record<string, string[]>
+  over_budget: boolean
+}
+export interface LoreIndexSnapshot {
+  guide: LoreIndexGuide
+  revision: string
 }
 
 export interface LoreAsset {

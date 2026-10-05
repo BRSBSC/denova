@@ -74,6 +74,14 @@ func DecodeCollection(data []byte) (Collection, error) {
 	if err := validateMaterials(collection); err != nil {
 		return Collection{}, err
 	}
+	if raw, ok := envelope["index_guide"]; ok {
+		if err := json.Unmarshal(raw, &collection.IndexGuide); err != nil {
+			return Collection{}, fmt.Errorf("invalid lore index guide: %w", err)
+		}
+	}
+	if err := validateIndexGuide(collection); err != nil {
+		return Collection{}, err
+	}
 	return collection, nil
 }
 

@@ -84,7 +84,7 @@ const (
 	// The raw resident bodies keep their 1 MiB safety ceiling. This additional
 	// bounded allowance covers deterministic Lore metadata and the standalone
 	// message wrapper while still constraining the exact model-visible fragment.
-	interactiveResidentLoreMessageMaxBytes = lore.ResidentLoreSafetyMaxBytes + interactive.StoryContextMaxBytes
+	interactiveResidentLoreMessageMaxBytes = lore.IndexContextMaxBytes
 )
 
 func SnapshotTurnCount(snapshot interactive.Snapshot) int {

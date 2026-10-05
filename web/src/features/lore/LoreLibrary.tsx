@@ -1,11 +1,13 @@
+import { LORE_INDEX_ID } from "./LoreIndexDocument"
 import { useLoreCategories } from '@/features/lore/use-lore-categories'
 import { LoreCategoryManager } from './LoreCategoryManager'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CheckCheck, ImagePlus, ListChecks, MoreHorizontal, Plus, Search, Sparkles, Tags, Trash2, X } from 'lucide-react'
+import { CheckCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, Folder, ImagePlus, ListChecks, MoreHorizontal, Plus, Search, Sparkles, Tags, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,24 +30,19 @@ import {
 import { cn } from '@/lib/utils'
 import { useImageModelConfigured } from '@/features/settings/use-image-model-configured'
 import { sectionItems, type KnowledgeSection } from './knowledge-sections'
-import { LoreCard, type LoreCardSize, type LoreCoverAction } from './LoreCard'
+import { LoreCard, LORE_CARD_LAYOUTS, type LoreCardSize, type LoreCoverAction } from './LoreCard'
 import { LoreCoverDialog } from './LoreCoverDialog'
 import { LoreMaterialGenerateDialog } from './LoreMaterialGenerateDialog'
 import { notifyLoreUpdated } from './events'
 import type { LoreBatchImageMode } from './lore-image-task'
 import { LoreFiltersButton, LoreFilterSummary } from './LoreFilters'
-import type { LoreFilters } from './lore-filters'
+import { loreTagFilterValue, type LoreFilters } from './lore-filters'
+import { LORE_PROTAGONIST_TAG } from './tags'
 
 export const LORE_OVERVIEW_ID = '__lore_overview__'
 
 const CARD_SIZE_KEY = 'nova.lore.card-size'
 const CARD_SIZES = ['small', 'medium', 'large'] as const
-const CARD_LAYOUTS: Record<LoreCardSize, string> = {
-  small: 'grid-cols-[repeat(auto-fill,minmax(min(100%,160px),1fr))] gap-2',
-  medium: 'grid-cols-[repeat(auto-fill,minmax(min(100%,200px),1fr))] gap-3',
-  large: 'grid-cols-[repeat(auto-fill,minmax(min(100%,250px),1fr))] gap-4',
-}
-
 function readCardSize(): LoreCardSize {
   try {
     const value = window.localStorage.getItem(CARD_SIZE_KEY)
@@ -98,6 +95,8 @@ export function LoreLibrary({
   const imageConfigured = useImageModelConfigured(projectId)
   // Density is a browser preference shared by writing and game libraries.
   const [cardSize, setCardSize] = useState(readCardSize)
+  const [view, setView] = useState<'category' | 'tag'>('category')
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
   const [selecting, setSelecting] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [coverTarget, setCoverTarget] = useState<{ id: string; action: LoreCoverAction } | null>(
@@ -111,21 +110,41 @@ export function LoreLibrary({
     () => filteredItems.filter((item) => selectedIds.includes(item.id)),
     [filteredItems, selectedIds],
   )
-  const sections = useMemo(
-    () =>
-      categorySections.map((section) => ({
-        ...section,
-        items: sectionItems(filteredItems, section),
+  const sections = useMemo(() => {
+    if (view === 'category') return categorySections.map(section => ({
+      id: `category:${section.id}`, name: section.name || t(section.labelKey), icon: section.icon,
+      items: sectionItems(filteredItems, section),
+    }))
+    const groups = new Map<string, LoreItem[]>()
+    const untagged: LoreItem[] = []
+    for (const item of filteredItems) {
+      if (!item.tags?.length) untagged.push(item)
+      for (const tag of new Set((item.tags || []).map(loreTagFilterValue))) {
+        const group = groups.get(tag) ?? []
+        group.push(item)
+        groups.set(tag, group)
+      }
+    }
+    return [
+      ...Array.from(groups).sort(([a], [b]) => a.localeCompare(b)).map(([tag, items]) => ({
+        id: `tag:${tag}`, name: tag === LORE_PROTAGONIST_TAG ? t('lore.library.protagonist') : tag, icon: Tags, items,
       })),
-    [filteredItems, categorySections],
-  )
-  const visible = sections.flatMap((section) => section.items)
+      { id: 'untagged', name: t('lore.filters.untagged'), icon: Tags, items: untagged },
+    ]
+  }, [filteredItems, categorySections, view, t])
+  // An item may appear under several tags; counts and batch actions use unique items.
+  const visible = filteredItems
+  const visibleSections = sections.filter((section) => section.items.length)
+  const allCollapsed = visibleSections.length > 0 && visibleSections.every((section) => collapsedSections[section.id])
   const coverItem = items.find((item) => item.id === coverTarget?.id)
   const toggle = (id: string) =>
     setSelectedIds((ids) => (ids.includes(id) ? ids.filter((value) => value !== id) : [...ids, id]))
   useEffect(() => {
     setSelectedIds([])
   }, [filters, query])
+  useEffect(() => {
+    setCollapsedSections({})
+  }, [projectId])
 
   const deleteSelected = async () => {
     if (!deleteTargets) return
@@ -216,6 +235,7 @@ export function LoreLibrary({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
+                  <DropdownMenuItem onSelect={() => onSelect(LORE_INDEX_ID)}>{t('lore.index.title')}</DropdownMenuItem>
                   <DropdownMenuItem disabled={organizingDisabled || !items.length} onSelect={onOrganizeTypes}>
                     <Tags />{t('settingPanel.loreClassification.open')}
                   </DropdownMenuItem>
@@ -225,6 +245,12 @@ export function LoreLibrary({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <ToggleGroup type="single" variant="outline" size="sm" spacing={0} value={view}
+            aria-label={t('lore.library.view')}
+            onValueChange={value => { if (value) setView(value as typeof view) }}>
+            <ToggleGroupItem value="category"><Folder />{t('lore.library.categoryView')}</ToggleGroupItem>
+            <ToggleGroupItem value="tag"><Tags />{t('lore.library.tagView')}</ToggleGroupItem>
+          </ToggleGroup>
           <InputGroup className="min-w-0 flex-1 basis-64">
             <InputGroupAddon>
               <Search />
@@ -237,6 +263,19 @@ export function LoreLibrary({
             />
           </InputGroup>
           <LoreFiltersButton projectId={projectId} items={items} filters={filters} onChange={onFiltersChange} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!visibleSections.length}
+            onClick={() => setCollapsedSections((current) => ({
+              ...current,
+              ...Object.fromEntries(visibleSections.map((section) => [section.id, !allCollapsed])),
+            }))}
+          >
+            {allCollapsed ? <ChevronsUpDown data-icon="inline-start" /> : <ChevronsDownUp data-icon="inline-start" />}
+            {t(allCollapsed ? 'common.expandAll' : 'common.collapseAll')}
+          </Button>
           <ToggleGroup
             type="single"
             value={cardSize}
@@ -303,21 +342,26 @@ export function LoreLibrary({
             </Button>
           </div>
         )}
-        {sections
-          .filter((section) => section.items.length)
-          .map((section) => (
-            <section
-              key={section.id}
-              aria-label={(section.name || t(section.labelKey))}
-              className="flex min-w-0 flex-col gap-4"
-            >
-              <div className="flex items-center gap-2">
-                <section.icon className="size-4 shrink-0 text-muted-foreground" />
-                <h2 className="min-w-0 break-all text-sm font-medium">{(section.name || t(section.labelKey))}</h2>
-                <span className="text-xs text-muted-foreground">{section.items.length}</span>
-                <Separator className="ml-2 flex-1" />
-              </div>
-              <div className={cn('grid', CARD_LAYOUTS[cardSize])}>
+        {visibleSections.map((section) => (
+          <Collapsible
+            key={section.id}
+            asChild
+            open={!collapsedSections[section.id]}
+            onOpenChange={(open) => setCollapsedSections((current) => ({ ...current, [section.id]: !open }))}
+          >
+            <section aria-label={section.name} className="min-w-0">
+              <h2>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="ghost" className="h-auto w-full justify-start gap-2 py-2 text-left whitespace-normal aria-expanded:bg-transparent">
+                    <ChevronDown className={cn('transition-transform', collapsedSections[section.id] && '-rotate-90')} aria-hidden="true" />
+                    <section.icon aria-hidden="true" />
+                    <span className="min-w-0 break-all">{section.name}</span>
+                    <span className="text-xs text-muted-foreground">{section.items.length}</span>
+                    <Separator className="ml-2 min-w-0 flex-1" />
+                  </Button>
+                </CollapsibleTrigger>
+              </h2>
+              <CollapsibleContent className={cn('grid pt-4', LORE_CARD_LAYOUTS[cardSize])}>
                 {section.items.map((item) => (
                   <LoreCard
                     key={item.id}
@@ -333,9 +377,10 @@ export function LoreLibrary({
                     onChanged={onChanged}
                   />
                 ))}
-              </div>
+              </CollapsibleContent>
             </section>
-          ))}
+          </Collapsible>
+        ))}
         {!visible.length && (
           <Empty className="py-16">
             <EmptyHeader>

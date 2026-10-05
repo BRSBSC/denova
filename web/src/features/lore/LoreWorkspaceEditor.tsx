@@ -1,5 +1,7 @@
 import { useLoreCategories } from '@/features/lore/use-lore-categories'
 import { LoreDetailTabs } from './LoreDetailTabs'
+import { LoreIndexMemberships } from './LoreIndexMemberships'
+import { LoreTagsInput } from './LoreTagsInput'
 import { useMemo, useState, type ReactNode } from 'react'
 import {
   AtSign,
@@ -62,6 +64,7 @@ interface LoreWorkspaceEditorProps {
   navigationIntent?: DocumentReviewNavigationIntent | null
   highlightQuery?: string
   onDraftChange: (draft: LoreItem) => void
+  onSelectItem: (id: string) => void
   onTagDraftChange: (value: string) => void
   onPrepareSnapshot: () => Promise<{ content: string; revision: string }>
   onFlush: () => Promise<boolean>
@@ -84,6 +87,7 @@ export function LoreWorkspaceEditor({
   navigationIntent,
   highlightQuery,
   onDraftChange,
+  onSelectItem,
   onTagDraftChange,
   onPrepareSnapshot,
   onFlush,
@@ -189,7 +193,7 @@ export function LoreWorkspaceEditor({
       <Collapsible
         open={metadataOpen}
         onOpenChange={setMetadataOpen}
-        className="shrink-0 border-b border-[var(--nova-border)] bg-[var(--nova-surface-2)]"
+        className="max-h-[50%] shrink-0 overflow-y-auto border-b border-[var(--nova-border)] bg-[var(--nova-surface-2)]"
       >
         <div className="flex min-w-0 items-center">
           <CollapsibleTrigger asChild>
@@ -304,18 +308,14 @@ export function LoreWorkspaceEditor({
               </SelectContent>
             </Select>
           </MetadataField>
+          <LoreIndexMemberships projectId={projectId} memberships={draft.index_memberships}
+            onChange={index_memberships => onDraftChange({ ...draft, index_memberships })} />
           <MetadataField
             label={t('settingPanel.field.tags')}
             className="sm:col-span-2"
           >
             <div className="flex min-w-0 items-center gap-1.5">
-              <Input
-                aria-label={t('settingPanel.field.tags')}
-                className="nova-field h-8 min-w-0 flex-1"
-                value={tagDraft}
-                onChange={(event) => onTagDraftChange(event.target.value)}
-                placeholder={t('settingPanel.placeholder.tags')}
-              />
+              <LoreTagsInput key={draft.id} value={tagDraft} onChange={onTagDraftChange} suggestions={items.flatMap(item => item.tags || [])} />
               {draft.type === 'character' ? (
                 <TooltipIconButton
                   label={t(protagonistTagActive ? 'loreWorkspace.unmarkProtagonist' : 'loreWorkspace.markProtagonist')}
@@ -356,6 +356,7 @@ export function LoreWorkspaceEditor({
           autoFocus={autoFocusContent}
           projectId={projectId}
           resourceKey={draft.id}
+          onSelectItem={onSelectItem}
           items={items}
           value={draft.content || ''}
           onChange={(content) => onDraftChange({ ...draft, content })}

@@ -1,3 +1,4 @@
+import { ToolInspectorHost, type InspectableToolMessage } from './ToolInspector'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode, UIEvent } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -6,29 +7,27 @@ import type { Components, ContextProp, ListItem } from 'react-virtuoso'
 import type { AgentAskAnswer, AgentAskResolution, ChapterIllustration } from '@/lib/api'
 import type { AgentUIMessage } from '@/lib/agent-ui'
 import {
-  agentViewToRenderMessage,
   agentViewContent,
+  agentViewToRenderMessage,
   agentViewAskInteraction,
-  agentViewStableKey,
-  buildAgentSubAgentTimelineGroups,
   buildAgentMessageViews,
+  shareAgentMessageViews,
   isAgentRunMetadataView,
-  isAgentTraceView,
   selectAgentExecutionTimings,
   type AgentMessageView,
   type AgentPartRef,
 } from '@/lib/agent-message-view'
-import { buildSubAgentSummaryMessage } from './subagent-session'
 import { VIRTUOSO_BOTTOM_THRESHOLD, useVirtuosoBottomLock } from './useVirtuosoBottomLock'
 import { ScrollToBottomButton } from './ScrollToBottomButton'
 import { StableAfterContentBoundary } from './StableAfterContentBoundary'
-import { AgentChatListRow, chatListItemNavigationAnchor, chatListItemRunID, type AgentChatListItem } from './AgentChatListRow'
-import { buildAgentRunPresentation } from './agent-run-presentation'
+import { AgentChatListRow, chatListItemNavigationAnchor, type AgentChatListItem } from './AgentChatListRow'
+import { buildAgentChatListItems } from './agent-chat-list-items'
 import { scheduleChatRowBottomAnchor, scheduleResolvedChatRowBottomAnchor } from './chat-row-bottom-anchor'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { LoadingState } from '@/components/common/LoadingState'
 import { AttachmentPreviewScopeProvider } from './ComposerAttachments'
+import { VirtualizedMessageState } from './VirtualizedMessageState'
 import type { ChatAttachmentScope } from '@/lib/chat-attachments'
 
 interface MessageListProps {
@@ -124,13 +123,23 @@ interface MessageListVirtuosoContext {
   onLoadEarlierMessages?: () => void | Promise<void>
 }
 
-export function MessageList({ projectId, attachmentScope, messages, projection, isStreaming, activeRunId, visible = true, isExecutionActive = isStreaming, activityContent, highlightDialogue = false, scrollResetKey, bottomPaddingClassName = '', bottomPaddingPx, contentClassName, afterContent, afterContentKey, hasEarlierMessages = false, isLoadingEarlierMessages = false, onLoadEarlierMessages, timelineAttachments = [], messageStyle, collapseTraceGroups = false, activeTraceDisplay = 'expanded', canMutateMessage, onEditMessage, onEditAssistantReply, onCreateBranch, onRegenerateMessage, onSwitchMessageVersion, onOpenSubAgentSession, onInsertIllustration, onReadAloud, onGenerateInteractiveImage, generatingInteractiveImageTurnId, activeSubAgentSessionKey, onApprovePlan, onContinuePlan, onExitPlanMode, onResolveAsk, turnScrollRequest, onVisibleTurnAnchorChange }: MessageListProps) {
+export function MessageList(props: MessageListProps) {
+  return <VirtualizedMessageState key={props.scrollResetKey || 'default'}><MessageListContent {...props} /></VirtualizedMessageState>
+}
+
+function MessageListContent({ projectId, attachmentScope, messages, projection, isStreaming, activeRunId, visible = true, isExecutionActive = isStreaming, activityContent, highlightDialogue = false, scrollResetKey, bottomPaddingClassName = '', bottomPaddingPx, contentClassName, afterContent, afterContentKey, hasEarlierMessages = false, isLoadingEarlierMessages = false, onLoadEarlierMessages, timelineAttachments = [], messageStyle, collapseTraceGroups = false, activeTraceDisplay = 'expanded', canMutateMessage, onEditMessage, onEditAssistantReply, onCreateBranch, onRegenerateMessage, onSwitchMessageVersion, onOpenSubAgentSession, onInsertIllustration, onReadAloud, onGenerateInteractiveImage, generatingInteractiveImageTurnId, activeSubAgentSessionKey, onApprovePlan, onContinuePlan, onExitPlanMode, onResolveAsk, turnScrollRequest, onVisibleTurnAnchorChange }: MessageListProps) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const renderedItemsRef = useRef<ListItem<AgentChatListItem>[]>([])
   const lastVisibleTurnAnchorRef = useRef('')
   const lastTurnScrollRequestIdRef = useRef<number | null>(null)
-  const views = useMemo(() => projection?.views ?? buildAgentMessageViews(messages), [messages, projection?.views])
+  const previousViews = useRef<AgentMessageView[]>([])
+  const views = useMemo(() => {
+    const next = shareAgentMessageViews(previousViews.current, projection?.views ?? buildAgentMessageViews(messages))
+    previousViews.current = next
+    return next
+  }, [messages, projection?.views])
+  const [disclosures, setDisclosures] = useState<Record<string, { running: boolean; expanded: boolean }>>({})
   const initialPosition = projection?.initialPosition ?? 'end'
   const subAgentPresentation = projection?.subAgentPresentation ?? 'card'
   const executionTimings = useMemo(() => selectAgentExecutionTimings(views), [views])
@@ -163,8 +172,10 @@ export function MessageList({ projectId, attachmentScope, messages, projection, 
       collapseTraceGroups,
       groupSubAgentTimeline: Boolean(onOpenSubAgentSession),
       timelineAttachments,
+      disclosures,
+      activeTraceDisplay,
     }),
-    [activeRunId, collapseTraceGroups, isExecutionActive, isStreaming, onOpenSubAgentSession, timelineAttachments, views, visibleActivityContent],
+    [activeTraceDisplay, disclosures, activeRunId, collapseTraceGroups, isExecutionActive, isStreaming, onOpenSubAgentSession, timelineAttachments, views, visibleActivityContent],
   )
   // Transport streaming may pause between tool/recovery phases while the turn
   // remains active and can still publish layout updates.
@@ -226,7 +237,7 @@ export function MessageList({ projectId, attachmentScope, messages, projection, 
     const rowKey = latestInteractiveCardAnchor?.rowKey
     if (!rowKey) return
     scheduleChatRowBottomAnchor(containerRef.current, rowKey, bottomInsetPx, scrollLock.scrollElementBottomIntoView)
-  }, [bottomPaddingPx, latestInteractiveCardAnchor, scrollLock.scrollElementBottomIntoView])
+  }, [bottomPaddingPx, latestInteractiveCardAnchor?.rowKey, scrollLock.scrollElementBottomIntoView])
 
   useEffect(() => {
     const bottomInsetPx = Math.max(0, bottomPaddingPx || 0)
@@ -284,6 +295,11 @@ export function MessageList({ projectId, attachmentScope, messages, projection, 
     notifyVisibleTurnAnchor(renderedItemsRef.current, event.currentTarget.scrollTop)
   }, [notifyVisibleTurnAnchor, scrollLock.onScroll])
 
+  const onProcessExpandedChange = useCallback((key: string, running: boolean, expanded: boolean) => {
+    scrollLock.releaseBottomLock()
+    setDisclosures(current => ({ ...current, [key]: { running, expanded } }))
+  }, [scrollLock.releaseBottomLock])
+
   const itemContent = useCallback((index: number, item?: AgentChatListItem) => {
     const resolvedItem = item || listItems[index - firstItemIndex]
     if (!resolvedItem) return null
@@ -296,7 +312,7 @@ export function MessageList({ projectId, attachmentScope, messages, projection, 
         nextItem={listItems[index - firstItemIndex + 1]}
         isStreaming={isStreaming}
         tailFollowActive={tailFollowActive}
-        activeTraceDisplay={activeTraceDisplay}
+        onProcessExpandedChange={onProcessExpandedChange}
         subAgentPresentation={subAgentPresentation}
         highlightDialogue={highlightDialogue}
         messageStyle={messageStyle}
@@ -321,7 +337,7 @@ export function MessageList({ projectId, attachmentScope, messages, projection, 
         syncStreamingTailLayout={tailFollowActive ? scrollLock.syncStreamingTailLayout : undefined}
       />
     )
-  }, [activeSubAgentSessionKey, activeTraceDisplay, anchorLatestInteractiveCardBottom, canMutateMessage, contentClassName, executionTimings, firstItemIndex, generatingInteractiveImageTurnId, highlightDialogue, isStreaming, listItems, messageStyle, onApprovePlan, onContinuePlan, onCreateBranch, onEditAssistantReply, onEditMessage, onExitPlanMode, onReadAloud, onGenerateInteractiveImage, onInsertIllustration, onOpenSubAgentSession, onRegenerateMessage, onResolveAsk, onSwitchMessageVersion, projectId, scrollLock.streamingRowRef, scrollLock.syncStreamingTailLayout, subAgentPresentation, tailFollowActive])
+  }, [activeSubAgentSessionKey, onProcessExpandedChange, anchorLatestInteractiveCardBottom, canMutateMessage, contentClassName, executionTimings, firstItemIndex, generatingInteractiveImageTurnId, highlightDialogue, isStreaming, listItems, messageStyle, onApprovePlan, onContinuePlan, onCreateBranch, onEditAssistantReply, onEditMessage, onExitPlanMode, onReadAloud, onGenerateInteractiveImage, onInsertIllustration, onOpenSubAgentSession, onRegenerateMessage, onResolveAsk, onSwitchMessageVersion, projectId, scrollLock.streamingRowRef, scrollLock.syncStreamingTailLayout, subAgentPresentation, tailFollowActive])
 
   useLayoutEffect(() => {
     if (initialPosition !== 'end' || !visible || !hasInitialContent || positionedKey === initialPositionKey) return
@@ -332,7 +348,7 @@ export function MessageList({ projectId, attachmentScope, messages, projection, 
     }
     let secondFrame = 0
     const placeAtBottom = () => {
-      scroller.scrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+      scrollLock.virtuosoRef.current?.scrollToIndex({ index: 'LAST', align: 'end', behavior: 'auto' })
     }
     placeAtBottom()
     const firstFrame = window.requestAnimationFrame(() => {
@@ -346,9 +362,16 @@ export function MessageList({ projectId, attachmentScope, messages, projection, 
       window.cancelAnimationFrame(firstFrame)
       if (secondFrame) window.cancelAnimationFrame(secondFrame)
     }
-  }, [hasInitialContent, initialPosition, initialPositionKey, positionedKey, resolveMessageScroller, visible])
+  }, [hasInitialContent, initialPosition, initialPositionKey, positionedKey, resolveMessageScroller, scrollLock.virtuosoRef, visible])
+
+  const resolveInspectedMessage = useCallback((message: InspectableToolMessage) => {
+    const view = views.find(view => view.partId === message.id && view.metadata.run_id === message.run_id && view.metadata.subagent_session_id === message.subagent_session_id)
+    const current = view && agentViewToRenderMessage(view)
+    return current && (current.role === 'tool_call' || current.role === 'tool_result' || current.role === 'ask') ? current : undefined
+  }, [views])
 
   return (
+    <ToolInspectorHost projectId={projectId} resolveMessage={resolveInspectedMessage} restoreFocus={resolveMessageScroller}>
     <AttachmentPreviewScopeProvider projectId={projectId} scope={attachmentScope}>
       <div ref={containerRef} className="relative flex min-h-0 flex-1 flex-col">
       <Virtuoso
@@ -365,7 +388,7 @@ export function MessageList({ projectId, attachmentScope, messages, projection, 
         atBottomStateChange={scrollLock.onAtBottomStateChange}
         atBottomThreshold={VIRTUOSO_BOTTOM_THRESHOLD}
         totalListHeightChanged={tailFollowActive ? scrollLock.syncStreamingTailLayout : scrollLock.syncIdleBottomLayout}
-        initialItemCount={Math.min(listItems.length, 40)}
+        initialTopMostItemIndex={initialPosition === 'end' ? { index: 'LAST', align: 'end' } : 0}
         firstItemIndex={firstItemIndex}
         data={listItems}
         context={virtuosoContext}
@@ -403,6 +426,7 @@ export function MessageList({ projectId, attachmentScope, messages, projection, 
       />
       </div>
     </AttachmentPreviewScopeProvider>
+    </ToolInspectorHost>
   )
 }
 
@@ -479,116 +503,6 @@ function MessageListFooter({ context }: ContextProp<MessageListVirtuosoContext>)
   )
 }
 
-function buildAgentChatListItems({ views, isStreaming, activeRunId, isExecutionActive, visibleActivityContent, collapseTraceGroups, groupSubAgentTimeline, timelineAttachments }: { views: AgentMessageView[]; isStreaming: boolean; activeRunId?: string; isExecutionActive: boolean; visibleActivityContent: string; collapseTraceGroups: boolean; groupSubAgentTimeline: boolean; timelineAttachments: AgentTimelineAttachment[] }): AgentChatListItem[] {
-  const items: AgentChatListItem[] = []
-  if (!isStreaming && views.every(isAgentRunMetadataView)) {
-    items.push({ kind: 'empty', key: 'empty' })
-    return items
-  }
-  const subAgentGroups = groupSubAgentTimeline ? buildAgentSubAgentTimelineGroups(views) : []
-  const subAgentGroupsByStart = new Map(subAgentGroups.map(group => [group.startIndex, group]))
-  const groupedSubAgentIndexes = new Set(subAgentGroups.flatMap(group => group.viewIndexes))
-
-  for (let index = 0; index < views.length; index += 1) {
-    const view = views[index]
-    if (isAgentRunMetadataView(view)) continue
-    const subAgentGroup = subAgentGroupsByStart.get(index)
-    if (subAgentGroup) {
-      const pendingApprovalView = subAgentGroup.views.find(item => agentViewAskInteraction(item)?.status === 'pending')
-      if (pendingApprovalView) {
-        const approvalMessage = agentViewToRenderMessage(pendingApprovalView)
-        if (approvalMessage) {
-          items.push({
-            kind: 'legacy-message', key: `subagent-approval-${subAgentGroup.key || index}`,
-            message: approvalMessage, sourceIndex: index, openView: pendingApprovalView,
-          })
-          continue
-        }
-      }
-      const summary = buildSubAgentSummaryMessage(subAgentGroup.views)
-      if (summary) {
-        items.push({ kind: 'legacy-message', key: `subagent-${subAgentGroup.key || index}`, message: summary, sourceIndex: index, openView: subAgentGroup.views[0] })
-        continue
-      }
-    }
-    if (groupedSubAgentIndexes.has(index)) continue
-    if (collapseTraceGroups) {
-      const run = buildAgentRunPresentation(views, index, isExecutionActive)
-      if (run) {
-        items.push({
-          kind: 'run',
-          key: run.key,
-          runId: run.runID,
-          sections: run.sections,
-          sourceIndex: index,
-        })
-        index = run.nextIndex - 1
-        continue
-      }
-    }
-    if (collapseTraceGroups && isAgentTraceView(view)) {
-      // 连续的 thinking/工具调用统一折成一个分组，不要求后面紧跟正文：
-      // 游戏模式正文之后（提交结果、重试循环）和回合末尾的 trace 也归组折叠。
-      const traceViews: AgentMessageView[] = []
-      let nextIndex = index
-      while (nextIndex < views.length && isAgentTraceView(views[nextIndex])) {
-        traceViews.push(views[nextIndex])
-        nextIndex += 1
-      }
-      const activeStreamingTrace = isActiveStreamingTrace(views, nextIndex, isExecutionActive)
-      items.push({ kind: 'trace', key: `trace-${agentViewStableKey(traceViews[0]) || index}`, views: traceViews, activeStreamingTrace })
-      index = nextIndex - 1
-      continue
-    }
-    if (view.kind === 'clear') {
-      items.push({ kind: 'clear', key: agentMessageItemKey(view, index), createdAt: readString(view.data.created_at) || view.metadata.created_at })
-      continue
-    }
-    items.push({ kind: 'message', key: agentMessageItemKey(view, index), view, sourceIndex: index })
-  }
-
-  for (const attachment of timelineAttachments) {
-    const runId = attachment.runId.trim()
-    if (!runId) continue
-    let insertAt = -1
-    for (let index = items.length - 1; index >= 0; index -= 1) {
-      if (chatListItemRunID(items[index]) === runId) {
-        insertAt = index + 1
-        break
-      }
-    }
-    if (insertAt < 0) continue
-    while (insertAt < items.length && items[insertAt]?.kind === 'attachment') insertAt += 1
-    items.splice(insertAt, 0, {
-      kind: 'attachment',
-      key: `attachment-${attachment.id}`,
-      runId,
-      content: attachment.content,
-    })
-  }
-
-  if (isStreaming) {
-    if (visibleActivityContent) {
-      items.push({
-        kind: 'activity', key: `activity-${visibleActivityContent.length}`, content: visibleActivityContent,
-        runId: activeRunId && !items.some(item => chatListItemRunID(item) === activeRunId) ? activeRunId : undefined,
-      })
-    } else if (views.length === 0) {
-      items.push({ kind: 'typing', key: 'typing' })
-    }
-  }
-
-  return items
-}
-
-function agentMessageItemKey(view: AgentMessageView, index: number) {
-  const prefix = view.kind === 'clear' ? 'clear' : 'message'
-  const stableKey = agentViewStableKey(view)
-  if (stableKey) return `${prefix}-${stableKey}`
-  if (view.metadata.created_at) return `${prefix}-${view.metadata.created_at}-${index}`
-  return `${prefix}-${index}`
-}
-
 function latestInteractiveCardBottomAnchorTarget(items: AgentChatListItem[]) {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
@@ -620,27 +534,8 @@ function latestInteractiveCardBottomAnchorTarget(items: AgentChatListItem[]) {
 function chatListItemViews(item: AgentChatListItem): AgentMessageView[] {
   if (item.kind === 'message') return [item.view]
   if (item.kind === 'legacy-message') return item.openView ? [item.openView] : []
-  if (item.kind === 'trace') return item.views
-  if (item.kind === 'run') {
-    return item.sections.flatMap(section => section.kind === 'process' ? section.views : [section.view])
-  }
+  if (item.kind === 'process' && !item.expanded) return item.views
   return []
-}
-
-function isActiveStreamingTrace(views: AgentMessageView[], afterTraceIndex: number, isStreaming: boolean) {
-  if (!isStreaming) return false
-  for (let index = afterTraceIndex; index < views.length; index += 1) {
-    const view = views[index]
-    if (isAgentRunMetadataView(view)) continue
-    if (view.kind === 'user') return false
-    if (view.kind === 'assistant' && agentViewContent(view).trim()) {
-      // A prose row is the semantic boundary after the preceding trace. The
-      // prose may still be streaming, but its thinking/tools disclosure is no
-      // longer the active tail and must match the completed presentation.
-      return false
-    }
-  }
-  return true
 }
 
 function readString(value: unknown) {

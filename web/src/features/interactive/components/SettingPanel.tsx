@@ -1,3 +1,4 @@
+import { LoreIndexDocument, LORE_INDEX_ID } from "@/features/lore/LoreIndexDocument"
 import { useLoreCategories } from '@/features/lore/use-lore-categories'
 import { ResourceExchangeActions } from '@/features/market/ResourceExchangeActions'
 import { closeMobilePanes } from '@/components/layout/mobile-pane-events'
@@ -40,7 +41,8 @@ import { EMPTY_IMAGE_PRESETS, EMPTY_STORY_DIRECTORS, EMPTY_TELLERS } from './set
 import { sectionItems, type KnowledgeSection } from '@/features/lore/knowledge-sections'
 import { EMPTY_LORE_FILTERS, filterLoreItems, type LoreFilters } from '@/features/lore/lore-filters'
 import { LoreFiltersButton, LoreFilterSummary } from '@/features/lore/LoreFilters'
-import { isProjectChangeForProject, type WorkspaceChangeEvent } from '@/features/changes/types'
+import { isProjectChangeForProject, workspaceChangePaths, type WorkspaceChangeEvent } from '@/features/changes/types'
+import { isLoreItemsPath } from '@/lib/workspace-path'
 import type { DocumentReviewController, DocumentReviewNavigationIntent } from '@/features/document-review/controller'
 import type { DocumentReviewSnapshot } from '@/components/Editor/documentReviewAnchors'
 import type { ToolNavigationIntent } from '@/components/Chat/tool-navigation'
@@ -129,6 +131,9 @@ function LoreSettingPanel({
   const [loading, setLoading] = useState(Boolean(projectId))
   const [loadError, setLoadError] = useState<string | null>(null)
   const [activeId, setActiveId] = useState(LORE_OVERVIEW_ID)
+  const indexFlush = useRef<(() => Promise<boolean>) | null>(null)
+  const [indexHeaderActionsTarget, setIndexHeaderActionsTarget] = useState<HTMLDivElement | null>(null)
+  const handleIndexFlush = useCallback((handler: (() => Promise<boolean>) | null) => { indexFlush.current = handler }, [])
   const [creating, setCreating] = useState<KnowledgeSection | null>(null)
   const [createdId, setCreatedId] = useState('')
   const [draft, setDraft] = useState<LoreItem | null>(null)
@@ -333,7 +338,7 @@ function LoreSettingPanel({
     try {
       const data = await getProjectLoreItems(projectId)
       setItems(data)
-      setActiveId((current) => current === LORE_OVERVIEW_ID || current === CREATOR_ENTRY_ID || current === INTERACTIVE_OPENING_PRESET_ENTRY_ID || data.some((item) => item.id === current) ? current : LORE_OVERVIEW_ID)
+      setActiveId((current) => current === LORE_OVERVIEW_ID || current === LORE_INDEX_ID || current === CREATOR_ENTRY_ID || current === INTERACTIVE_OPENING_PRESET_ENTRY_ID || data.some((item) => item.id === current) ? current : LORE_OVERVIEW_ID)
     } catch (error) {
       setItems([])
       setActiveId('')
@@ -583,7 +588,7 @@ function LoreSettingPanel({
     // Preserve an existing selection, including the overview, after background updates.
     setActiveId((current) => {
       if (nextActiveId && data.some((item) => item.id === nextActiveId)) return nextActiveId
-      if (current === LORE_OVERVIEW_ID || current === CREATOR_ENTRY_ID || current === INTERACTIVE_OPENING_PRESET_ENTRY_ID) return current
+      if (current === LORE_OVERVIEW_ID || current === LORE_INDEX_ID || current === CREATOR_ENTRY_ID || current === INTERACTIVE_OPENING_PRESET_ENTRY_ID) return current
       if (current && data.some((item) => item.id === current)) return current
       return LORE_OVERVIEW_ID
     })
@@ -593,10 +598,21 @@ function LoreSettingPanel({
     const onLoreUpdated = (event: Event) => {
       const detail = (event as CustomEvent<LoreUpdatedDetail>).detail
       if (detail?.projectId !== projectId) return
-      void refreshItems(detail.source === 'materials' ? undefined : detail.ids?.[0])
+      void refreshItems(detail.source === 'materials' || detail.source === 'lore-index' ? undefined : detail.ids?.[0])
+    }
+    const onWorkspaceChange = (event: Event) => {
+      const detail = (event as CustomEvent<WorkspaceChangeEvent>).detail
+      if (!isProjectChangeForProject(detail, projectId)) return
+      if (detail.resync || workspaceChangePaths(detail).some(isLoreItemsPath)) {
+        void refreshItems().catch(error => console.warn('[lore-index] failed to refresh externally changed items', { projectId, error }))
+      }
     }
     window.addEventListener(LORE_UPDATED_EVENT, onLoreUpdated)
-    return () => window.removeEventListener(LORE_UPDATED_EVENT, onLoreUpdated)
+    window.addEventListener('nova:workspace-change', onWorkspaceChange)
+    return () => {
+      window.removeEventListener(LORE_UPDATED_EVENT, onLoreUpdated)
+      window.removeEventListener('nova:workspace-change', onWorkspaceChange)
+    }
   }, [projectId, refreshItems])
 
   useEffect(() => {
@@ -652,6 +668,7 @@ function LoreSettingPanel({
 
   const flushActiveAutosave = useCallback(async () => {
     try {
+      if (activeId === LORE_INDEX_ID) return await (indexFlush.current?.() ?? Promise.resolve(true))
       if (activeMode === 'creator' || (activeMode === 'lore' && activeId === CREATOR_ENTRY_ID)) {
         await (creatorAutosave.flushPending() ?? creatorAutosave.saveNow('manual'))
         return true
@@ -704,7 +721,9 @@ function LoreSettingPanel({
     setCreatedId('')
     if (id === activeId) { closeMobilePanes(); return }
     try {
-      if (activeId === CREATOR_ENTRY_ID) {
+      if (activeId === LORE_INDEX_ID) {
+        if (!(await indexFlush.current?.())) return
+      } else if (activeId === CREATOR_ENTRY_ID) {
         await (creatorAutosave.flushPending() ?? creatorAutosave.saveNow('auto'))
       } else if (activeId === INTERACTIVE_OPENING_PRESET_ENTRY_ID) {
         await (openingPresetAutosave.flushPending() ?? openingPresetAutosave.saveNow('auto'))
@@ -742,6 +761,7 @@ function LoreSettingPanel({
     void handleSelectLore(targetID)
   }, [activeId, handleSelectLore, items, projectId, toolNavigationIntent])
 
+  const isIndex = !creating && activeMode === 'lore' && activeId === LORE_INDEX_ID
   const isOverview = !creating && activeMode === 'lore' && activeId === LORE_OVERVIEW_ID
 
   const isOpeningPresetActive = activeMode === 'lore' && activeId === INTERACTIVE_OPENING_PRESET_ENTRY_ID
@@ -756,12 +776,12 @@ function LoreSettingPanel({
       ? openingPresetAutosave.error
       : loreAutosave.error
   const editorHeaderIcon = isOverview ? LayoutGrid : isCreatorActive ? BookMarked : isOpeningPresetActive ? Sparkles : Database
-  const editorHeaderTitle = creating ? t('lore.library.create') : isOverview ? t('lore.library.title') : isCreatorActive
+  const editorHeaderTitle = isIndex ? t('lore.index.title') : creating ? t('lore.library.create') : isOverview ? t('lore.library.title') : isCreatorActive
       ? CREATOR_PATH
       : isOpeningPresetActive
         ? t('settingPanel.openingPreset.title')
         : editorTitle(activeMode, draft, t)
-  const editorHeaderSubtitle = creating ? (creating.name || t(creating.labelKey)) : isOverview ? t('lore.library.subtitle') : isCreatorActive
+  const editorHeaderSubtitle = isIndex ? undefined : creating ? (creating.name || t(creating.labelKey)) : isOverview ? t('lore.library.subtitle') : isCreatorActive
       ? t('settingPanel.editor.creatorSubtitle')
       : isOpeningPresetActive
         ? t('settingPanel.openingPreset.subtitle')
@@ -789,11 +809,13 @@ function LoreSettingPanel({
         ) : (
           <ResourceDirectory
             sections={loreDirectorySections}
+            showExpandCollapseAll
             activeId={activeId || null}
             onSelect={handleSelectLore}
             saving={saving}
             pinnedEntries={[
               { id: LORE_OVERVIEW_ID, label: t('lore.library.title'), icon: LayoutGrid },
+              { id: LORE_INDEX_ID, label: t('lore.index.title'), icon: BookMarked },
               { id: CREATOR_ENTRY_ID, label: CREATOR_PATH, icon: BookMarked },
               { id: INTERACTIVE_OPENING_PRESET_ENTRY_ID, label: t('settingPanel.openingPreset.title'), icon: Sparkles },
             ]}
@@ -833,8 +855,9 @@ function LoreSettingPanel({
             <ConfigManagerChat
               projectId={projectId}
               origin="lore"
-              resourceId={isOverview ? 'lore' : activeId || 'lore'}
+              resourceId={isIndex ? 'index' : isOverview ? 'lore' : activeId || 'lore'}
               context={{
+                ...(isIndex ? { resource: 'lore_index' } : {}),
                 active_lore_id: draft?.id || '',
                 active_lore_name: draft?.name || '',
                 item_count: String(items.length),
@@ -892,6 +915,7 @@ function LoreSettingPanel({
                       <Trash2 data-icon="inline-start" />
                     </Button>
                   )}
+                  {isIndex && <div ref={setIndexHeaderActionsTarget} className="contents" />}
                   <ConfigManagerToggle
                     open={agentOpen}
                     label={t('settingPanel.loreAgent.title')}
@@ -949,6 +973,8 @@ function LoreSettingPanel({
                         notifyLoreUpdated({ projectId, ids: [item.id] })
                       }}
                     />
+                  ) : isIndex ? (
+                    <LoreIndexDocument key={projectId} projectId={projectId} items={items} headerActionsTarget={indexHeaderActionsTarget} onSelect={id => void handleSelectLore(id)} onChanged={item => setItems(current => [...current.filter(i => i.id !== item.id), item])} onFlushHandlerChange={handleIndexFlush} />
                   ) : isOverview ? null : items.length === 0 && !loadError && !activeId ? (
                     <EmptyState
                       icon={Database}
@@ -977,6 +1003,7 @@ function LoreSettingPanel({
                       setDraft={setDraft}
                       setTagDraft={setTagDraft}
                       onSave={flushActiveAutosave}
+                      onSelectItem={handleSelectLore}
                       documentReview={documentReview}
                       documentReviewNavigationIntent={documentReviewNavigationIntent}
                       onPrepareReviewSnapshot={prepareLoreReviewSnapshot}

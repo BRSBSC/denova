@@ -1,4 +1,5 @@
-import { Children, Fragment, cloneElement, isValidElement, memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizedMessageState } from './VirtualizedMessageState'
+import { Children, Fragment, cloneElement, isValidElement, memo, useLayoutEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { math } from '@streamdown/math'
@@ -225,9 +226,9 @@ function highlightDialogueText(text: string, enabled: boolean, keyPrefix: string
 export function ThinkingBlock({ projectId, message, content, streaming, showAgentSource = true }: { projectId: string; message: ThinkingChatMessage; content: string; streaming: boolean; showAgentSource?: boolean }) {
   const { t } = useTranslation()
   const preview = agentContentPreview(content)
-  const [expanded, setExpanded] = useState(streaming)
-  const userToggledRef = useRef(false)
-  const wasStreamingRef = useRef(streaming)
+  const [expanded, setExpanded] = useVirtualizedMessageState('thinking-expanded', streaming)
+  const [userToggled, setUserToggled] = useVirtualizedMessageState('thinking-toggled', false)
+  const [wasStreaming, setWasStreaming] = useVirtualizedMessageState('thinking-streaming', streaming)
   const contentScrollLock = useBottomScrollLock<HTMLDivElement>({
     enabled: streaming && expanded,
     resetKey: `${message.id || message.created_at || 'thinking'}:thinking-stream`,
@@ -235,18 +236,17 @@ export function ThinkingBlock({ projectId, message, content, streaming, showAgen
   })
 
   useLayoutEffect(() => {
-    const wasStreaming = wasStreamingRef.current
-    wasStreamingRef.current = streaming
+    setWasStreaming(streaming)
     if (!wasStreaming && streaming) {
-      userToggledRef.current = false
+      setUserToggled(false)
       setExpanded(true)
-    } else if (wasStreaming && !streaming && !userToggledRef.current) {
+    } else if (wasStreaming && !streaming && !userToggled) {
       setExpanded(false)
     }
   }, [streaming])
 
   const handleOpenChange = (open: boolean) => {
-    userToggledRef.current = true
+    setUserToggled(true)
     setExpanded(open)
   }
 

@@ -33,41 +33,44 @@ const (
 
 // Item 是用户可编辑的作品资料条目。固定字段只负责索引和展示，正文继续使用 Markdown。
 type Item struct {
-	ID               string     `json:"id"`
-	Enabled          bool       `json:"enabled"`
-	Type             string     `json:"type"`
-	TypeSource       string     `json:"type_source"`
-	Name             string     `json:"name"`
-	Importance       string     `json:"importance"`
-	Tags             []string   `json:"tags"`
-	BriefDescription string     `json:"brief_description"`
-	Keywords         []string   `json:"keywords"`
-	LoadMode         string     `json:"load_mode"`
-	Content          string     `json:"content"`
-	CreatedAt        string     `json:"created_at"`
-	UpdatedAt        string     `json:"updated_at"`
-	Image            *Image     `json:"image,omitempty"`
-	Materials        *Materials `json:"materials,omitempty"`
+	ID               string            `json:"id"`
+	Enabled          bool              `json:"enabled"`
+	Type             string            `json:"type"`
+	TypeSource       string            `json:"type_source"`
+	Name             string            `json:"name"`
+	Importance       string            `json:"importance"`
+	Tags             []string          `json:"tags"`
+	BriefDescription string            `json:"brief_description"`
+	Keywords         []string          `json:"keywords"`
+	LoadMode         string            `json:"load_mode"`
+	IndexMemberships []IndexMembership `json:"index_memberships,omitempty"`
+	Content          string            `json:"content"`
+	CreatedAt        string            `json:"created_at"`
+	UpdatedAt        string            `json:"updated_at"`
+	Image            *Image            `json:"image,omitempty"`
+	Materials        *Materials        `json:"materials,omitempty"`
 	// ResolvedMaterials is a read projection, never persisted by Store.
 	ResolvedMaterials []Material  `json:"resolved_materials,omitempty"`
 	Provenance        *Provenance `json:"provenance,omitempty"`
 }
 
 type ItemInput struct {
-	ID               string      `json:"id"`
-	Enabled          *bool       `json:"enabled,omitempty"`
-	Type             string      `json:"type"`
-	TypeSource       string      `json:"type_source,omitempty"`
-	Name             string      `json:"name"`
-	Importance       string      `json:"importance"`
-	Tags             []string    `json:"tags"`
-	BriefDescription string      `json:"brief_description"`
-	Keywords         []string    `json:"keywords"`
-	LoadMode         string      `json:"load_mode"`
-	Content          string      `json:"content"`
-	Image            *Image      `json:"image,omitempty"`
-	Provenance       *Provenance `json:"provenance,omitempty"`
-	BaseRevision     string      `json:"base_revision,omitempty"`
+	ID               string   `json:"id"`
+	Enabled          *bool    `json:"enabled,omitempty"`
+	Type             string   `json:"type"`
+	TypeSource       string   `json:"type_source,omitempty"`
+	Name             string   `json:"name"`
+	Importance       string   `json:"importance"`
+	Tags             []string `json:"tags"`
+	BriefDescription string   `json:"brief_description"`
+	Keywords         []string `json:"keywords"`
+	LoadMode         string   `json:"load_mode"`
+	// Omission preserves memberships on update; an explicit empty array clears them.
+	IndexMemberships []IndexMembership `json:"index_memberships"`
+	Content          string            `json:"content"`
+	Image            *Image            `json:"image,omitempty"`
+	Provenance       *Provenance       `json:"provenance,omitempty"`
+	BaseRevision     string            `json:"base_revision,omitempty"`
 }
 
 // ReadResult preserves the caller's lookup order while reporting entries
@@ -114,6 +117,7 @@ type Collection struct {
 	Categories []Category `json:"categories"`
 	Items      []Item     `json:"items"`
 	Assets     []Asset    `json:"assets,omitempty"`
+	IndexGuide IndexGuide `json:"index_guide"`
 }
 
 type Operation struct {
@@ -143,6 +147,7 @@ type NameAllocator struct {
 // IndexOptions controls model-visible lore index rendering. Keywords are
 // matched independently; Match selects OR (any) or AND (all) semantics.
 type IndexOptions struct {
+	GroupNames      []string
 	Keywords        []string
 	Match           string
 	Types           []string

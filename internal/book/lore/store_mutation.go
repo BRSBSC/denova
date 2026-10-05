@@ -67,10 +67,15 @@ func (s *Store) Revision() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	guideCollection, err := s.loadOrCreate()
+	if err != nil {
+		return "", err
+	}
 	data, err := json.Marshal(struct {
 		Items      []Item
 		Categories []Category
-	}{items, categories})
+		Guide      IndexGuide
+	}{items, categories, guideCollection.IndexGuide})
 	if err != nil {
 		return "", err
 	}
@@ -125,6 +130,7 @@ func (s *Store) Create(input ItemInput) (Item, error) {
 		BriefDescription: input.BriefDescription,
 		Keywords:         input.Keywords,
 		LoadMode:         input.LoadMode,
+		IndexMemberships: input.IndexMemberships,
 		Content:          input.Content,
 		CreatedAt:        now,
 		UpdatedAt:        now,
@@ -191,6 +197,7 @@ func (s *Store) Update(id string, input ItemInput) (Item, error) {
 			BriefDescription: input.BriefDescription,
 			Keywords:         input.Keywords,
 			LoadMode:         input.LoadMode,
+			IndexMemberships: previous.IndexMemberships,
 			Content:          input.Content,
 			CreatedAt:        collection.Items[i].CreatedAt,
 			UpdatedAt:        time.Now().UTC().Format(time.RFC3339Nano),
@@ -198,6 +205,9 @@ func (s *Store) Update(id string, input ItemInput) (Item, error) {
 			Materials:        previous.Materials,
 			Provenance:       collection.Items[i].Provenance,
 		})
+		if input.IndexMemberships != nil {
+			updated.IndexMemberships = input.IndexMemberships
+		}
 		if updated.Name == "" {
 			return Item{}, errors.New("资料名称不能为空")
 		}
@@ -273,6 +283,7 @@ func (s *Store) ApplyOperations(message string, ops []Operation) (ApplyResult, e
 				BriefDescription: op.Item.BriefDescription,
 				Keywords:         op.Item.Keywords,
 				LoadMode:         op.Item.LoadMode,
+				IndexMemberships: op.Item.IndexMemberships,
 				Content:          op.Item.Content,
 				CreatedAt:        now,
 				UpdatedAt:        time.Now().UTC().Format(time.RFC3339Nano),
@@ -308,6 +319,9 @@ func (s *Store) ApplyOperations(message string, ops []Operation) (ApplyResult, e
 			if idx < 0 {
 				return ApplyResult{}, fmt.Errorf("资料不存在: %s", id)
 			}
+			if op.Item.BaseRevision != "" && next[idx].UpdatedAt != op.Item.BaseRevision {
+				return ApplyResult{}, ErrRevisionConflict
+			}
 			typeName := firstNonEmptyLoreValue(op.Item.Type, next[idx].Type)
 			typeSource := next[idx].TypeSource
 			if NormalizeType(typeName) != next[idx].Type {
@@ -324,6 +338,7 @@ func (s *Store) ApplyOperations(message string, ops []Operation) (ApplyResult, e
 				BriefDescription: firstNonEmptyLoreValue(op.Item.BriefDescription, next[idx].BriefDescription),
 				Keywords:         op.Item.Keywords,
 				LoadMode:         firstNonEmptyLoreValue(op.Item.LoadMode, next[idx].LoadMode),
+				IndexMemberships: next[idx].IndexMemberships,
 				Content:          firstNonEmptyLoreValue(op.Item.Content, next[idx].Content),
 				CreatedAt:        next[idx].CreatedAt,
 				UpdatedAt:        time.Now().UTC().Format(time.RFC3339Nano),
@@ -331,6 +346,9 @@ func (s *Store) ApplyOperations(message string, ops []Operation) (ApplyResult, e
 				Materials:        next[idx].Materials,
 				Provenance:       next[idx].Provenance,
 			})
+			if op.Item.IndexMemberships != nil {
+				updated.IndexMemberships = op.Item.IndexMemberships
+			}
 			if op.Item.Tags == nil {
 				updated.Tags = append([]string(nil), next[idx].Tags...)
 			}

@@ -1,4 +1,5 @@
-import { useLayoutEffect, useState } from 'react'
+import { useVirtualizedMessageState } from './VirtualizedMessageState'
+import { useLayoutEffect } from 'react'
 import { AlertTriangle, CheckCircle2, FileText, PanelRightOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ToolCallChatMessage } from '@/lib/api'
@@ -63,7 +64,8 @@ export function ToolExecutionBlock({ message, showAgentSource = true, onResolve,
   const { t } = useTranslation()
   const approvalInteraction = message.ask?.kind === 'tool_approval' ? message.ask : undefined
   const approvalPending = approvalInteraction?.status === 'pending'
-  const [expanded, setExpanded] = useState(() => approvalPending)
+  const [expanded, setExpanded] = useVirtualizedMessageState('tool-expanded', () => approvalPending)
+  const [expandedApprovalId, setExpandedApprovalId] = useVirtualizedMessageState<string | undefined>('tool-approval-id', undefined)
   const { name, rawArgs, args, resultBody, resultEnvelope, detailResult } = parseToolCall(message)
   const inputStreaming = message.streaming === true
   const showStreamingInput = !approvalInteraction && inputStreaming && rawArgs.length > 0 && STREAMING_INPUT_PREVIEW_TOOLS.has(name)
@@ -90,8 +92,11 @@ export function ToolExecutionBlock({ message, showAgentSource = true, onResolve,
     : ''
   const hasResult = status === 'success'
   useLayoutEffect(() => {
-    if (approvalPending) setExpanded(true)
-  }, [approvalPending, approvalInteraction?.id])
+    if (approvalPending && approvalInteraction?.id !== expandedApprovalId) {
+      setExpandedApprovalId(approvalInteraction?.id)
+      setExpanded(true)
+    }
+  }, [approvalPending, approvalInteraction?.id, expandedApprovalId, setExpanded, setExpandedApprovalId])
   const commandDescription = isDescribedTool(name) ? readToolArgDescription(rawArgs) : ''
   let summary = fileTargetSummary || commandDescription || t('chat.tool.preparing')
   if (!inputStreaming) {
@@ -217,7 +222,7 @@ export function ToolExecutionBlock({ message, showAgentSource = true, onResolve,
 
 export function ToolResultBlock({ content }: { content: string }) {
   const { t } = useTranslation()
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useVirtualizedMessageState('result-expanded', false)
   const envelope = decodeToolResultEnvelope(stripToolResultMetadata(content))
   const severity = envelope?.severity || 'success'
   const preview = envelope ? buildToolResultEnvelopeSummary(t, envelope) : buildPreview(content, 160)

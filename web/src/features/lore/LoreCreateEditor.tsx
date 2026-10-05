@@ -1,3 +1,5 @@
+import { LoreIndexMemberships } from "./LoreIndexMemberships"
+import type { LoreIndexMembership } from "@/lib/api-client/types"
 import { useEffect, useId, useRef, useState } from 'react'
 import { BookMarked, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -28,6 +30,7 @@ export function LoreCreateEditor({
   const submitting = useRef(false)
   const composing = useRef(false)
   const [name, setName] = useState('')
+  const [memberships, setMemberships] = useState<LoreIndexMembership[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -55,7 +58,7 @@ export function LoreCreateEditor({
     try {
       const item = await createProjectLoreItem(projectId, {
         name: title, type: category, enabled: true, importance, load_mode: loadMode,
-        tags: [], keywords: [], brief_description: '', content: '',
+        tags: [], keywords: [], brief_description: '', content: '', index_memberships: memberships,
       })
       console.info('[lore-create] created item', { projectId, itemId: item.id })
       if (mounted.current) onCreated(item)
@@ -101,6 +104,7 @@ export function LoreCreateEditor({
         </FieldGroup>
         <Button size="icon-sm" variant="ghost" disabled={saving} aria-label={t('common.cancel')} onClick={onCancel}><X /></Button>
       </div>
+      <div className="w-full max-w-sm shrink-0 px-4 py-3"><LoreIndexMemberships projectId={projectId} memberships={memberships} onChange={setMemberships} /></div>
       <div className="flex min-h-0 flex-1 p-2 sm:p-3">
         <div
           role="textbox" aria-label={t('settingPanel.field.content')} aria-readonly="true"

@@ -24,6 +24,9 @@ func readLoreCollection(raw []byte) (portableCollection[json.RawMessage], []lore
 		return collection, nil, fmt.Errorf("Lore collection requires version 1 and nonempty items")
 	}
 	native := lore.Collection{Version: 3, Categories: collection.Categories, Items: []lore.Item{}}
+	if collection.IndexGuide != nil {
+		native.IndexGuide = *collection.IndexGuide
+	}
 	if len(native.Categories) == 0 {
 		native.Version = 2 // Released collections without definitions use the legacy mapping.
 	}
@@ -90,13 +93,18 @@ func (s *Service) exportLoreCollection(ctx context.Context, ref LocalRef) (map[s
 	if err != nil {
 		return nil, err
 	}
+	guide, err := lore.NewStore(layout.ContentRoot).IndexGuide()
+	if err != nil {
+		return nil, err
+	}
 	sourceIDs, err := s.collectionSourceIDs(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	collection := portableCollection[json.RawMessage]{Version: 1, Items: []json.RawMessage{}}
+	collection := portableCollection[json.RawMessage]{Version: 1, Items: []json.RawMessage{}, IndexGuide: &guide.Guide}
 	files := map[string][]byte{}
 	usedCategories := map[string]bool{"character": true}
+	exportedIDs := map[string]string{}
 	for _, item := range items {
 		sourceID := item.ID
 		if ref.ID != "all" {
@@ -107,6 +115,7 @@ func (s *Service) exportLoreCollection(ctx context.Context, ref LocalRef) (map[s
 			}
 		}
 		usedCategories[item.Type] = true
+		exportedIDs[item.ID] = sourceID
 		item.ID = sourceID
 		raw, err := portableJSON("lore.entry", item)
 		if err != nil {
@@ -123,6 +132,7 @@ func (s *Service) exportLoreCollection(ctx context.Context, ref LocalRef) (map[s
 	if len(collection.Items) == 0 {
 		return nil, fmt.Errorf("Lore collection is empty")
 	}
+	collection.IndexGuide.ItemOrder = remapLoreIndexItemOrder(collection.IndexGuide.ItemOrder, exportedIDs)
 	for _, category := range categories {
 		if usedCategories[category.ID] {
 			collection.Categories = append(collection.Categories, category)
@@ -178,6 +188,36 @@ func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, re
 			category.Name = fmt.Sprintf("%s (%d)", base, suffix)
 		}
 		collection.Categories = append(collection.Categories, category)
+	}
+	if portable.IndexGuide != nil {
+		if collection.IndexGuide.AutomaticDetails == nil {
+			collection.IndexGuide.AutomaticDetails = map[string]string{}
+		}
+		for key, detail := range portable.IndexGuide.AutomaticDetails {
+			if _, exists := collection.IndexGuide.AutomaticDetails[key]; !exists {
+				collection.IndexGuide.AutomaticDetails[key] = detail
+			}
+		}
+		// Project-owned sections win by stable identity. New imported sections
+		// keep their presets; names are disambiguated for exact tool lookup.
+		if collection.IndexGuide.IntroMarkdown == "" {
+			collection.IndexGuide.IntroMarkdown = portable.IndexGuide.IntroMarkdown
+		}
+		for _, group := range portable.IndexGuide.Groups {
+			if slices.ContainsFunc(collection.IndexGuide.Groups, func(g lore.IndexGroup) bool { return g.ID == group.ID }) {
+				continue
+			}
+			base := group.Name
+			for suffix := 2; slices.ContainsFunc(collection.IndexGuide.Groups, func(g lore.IndexGroup) bool { return strings.EqualFold(g.Name, group.Name) }); suffix++ {
+				group.Name = fmt.Sprintf("%s (%d)", base, suffix)
+			}
+			collection.IndexGuide.Groups = append(collection.IndexGuide.Groups, group)
+		}
+		for _, key := range portable.IndexGuide.GroupOrder {
+			if !slices.Contains(collection.IndexGuide.GroupOrder, key) {
+				collection.IndexGuide.GroupOrder = append(collection.IndexGuide.GroupOrder, key)
+			}
+		}
 	}
 	if binding.Members == nil {
 		binding.Members = map[string]CollectionMember{}
@@ -277,12 +317,32 @@ func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, re
 		if at >= 0 {
 			previous := collection.Items[at]
 			incoming[i].CreatedAt = previous.CreatedAt
+			if portable.IndexGuide == nil {
+				incoming[i].IndexMemberships = previous.IndexMemberships
+			}
 			incoming[i].Materials, incoming[i].Image = previous.Materials, previous.Image
 			collection.Items[at] = incoming[i]
 		} else {
 			collection.Items = append(collection.Items, incoming[i])
 		}
 		binding.Members[sourceID] = member
+	}
+	if portable.IndexGuide != nil {
+		localIDs := map[string]string{}
+		for sourceID, member := range binding.Members {
+			localIDs[sourceID] = member.ID
+		}
+		if collection.IndexGuide.ItemOrder == nil {
+			collection.IndexGuide.ItemOrder = map[string][]string{}
+		}
+		// Local order wins. Remap package IDs before appending new positions.
+		for key, order := range remapLoreIndexItemOrder(portable.IndexGuide.ItemOrder, localIDs) {
+			for _, id := range order {
+				if !slices.Contains(collection.IndexGuide.ItemOrder[key], id) {
+					collection.IndexGuide.ItemOrder[key] = append(collection.IndexGuide.ItemOrder[key], id)
+				}
+			}
+		}
 	}
 	content, err := json.Marshal(collection)
 	if err != nil {
@@ -356,4 +416,18 @@ func (s *Service) stageLoreCollection(ctx context.Context, previewDir string, re
 	}
 	staged[target], err = os.ReadFile(filepath.Join(dir, filepath.FromSlash(target.Path)))
 	return err
+}
+
+// Collection receipts translate item identity at the package boundary. Sorting
+// is presentation metadata, so references outside the exported set are omitted.
+func remapLoreIndexItemOrder(orders map[string][]string, ids map[string]string) map[string][]string {
+	result := map[string][]string{}
+	for key, order := range orders {
+		for _, id := range order {
+			if mapped := ids[id]; mapped != "" {
+				result[key] = append(result[key], mapped)
+			}
+		}
+	}
+	return result
 }

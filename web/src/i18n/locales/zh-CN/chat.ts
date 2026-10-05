@@ -221,6 +221,8 @@ const chat = {
   'chat.tool.scriptBadge': '脚本工具',
   'chat.tool.name.configRead': '读取配置',
   'chat.tool.name.configApply': '修改配置',
+  'chat.tool.name.queryLoreItems': '查询资料库',
+  'chat.tool.detail.missingLore': '未找到的资料',
   'chat.tool.name.listLoreItems': '浏览资料库',
   'chat.tool.name.readLoreItems': '读取资料',
   'chat.tool.name.writeLoreItems': '更新资料库',

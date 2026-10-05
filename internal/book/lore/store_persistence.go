@@ -79,6 +79,10 @@ func (s *Store) save(collection Collection) error {
 	if err := validateMaterials(collection); err != nil {
 		return err
 	}
+	if err := validateIndexGuide(collection); err != nil {
+		return err
+	}
+	pruneIndexOrder(&collection)
 	path := s.itemsPath()
 	if err := s.backupLegacyCategories(path); err != nil {
 		return err

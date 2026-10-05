@@ -124,6 +124,7 @@ export function LoreWorkspaceTab({
       ) : (
         <ResourceDirectory
           sections={sections}
+          showExpandCollapseAll
           activeId={creating ? null : lore.activeId || null}
           onSelect={(id) => {
             setCreating(null)
@@ -240,6 +241,7 @@ export function LoreWorkspaceTab({
               }
               highlightQuery={searchQuery}
               onDraftChange={lore.setDraft}
+              onSelectItem={lore.selectItem}
               onTagDraftChange={lore.setTagDraft}
               onPrepareSnapshot={lore.prepareSnapshot}
               onFlush={lore.flush}

@@ -112,7 +112,7 @@ func buildPresentationContext(workspace string, settings *interactive.StoryPrese
 		content.Write(encoded)
 		content.WriteByte('\n')
 	}
-	fmt.Fprintf(&content, "Catalog: %d complete items included; %d items (%d images) omitted by the %d-byte limit. Use list_lore_items and list_lore_materials to inspect other enabled items when needed.\n", included, omitted, omittedMaterials, presentationContextMaxBytes)
+	fmt.Fprintf(&content, "Catalog: %d complete items included; %d items (%d images) omitted by the %d-byte limit. Use query_lore_items and list_lore_materials to inspect other enabled items when needed.\n", included, omitted, omittedMaterials, presentationContextMaxBytes)
 	source.Content = content.String()
 	source.Note = fmt.Sprintf("source=enabled Lore associations and parent Turn; included_items=%d; omitted_items=%d; omitted_images=%d", included, omitted, omittedMaterials)
 	source.Truncated = omitted > 0

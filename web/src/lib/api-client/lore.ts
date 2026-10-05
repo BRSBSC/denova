@@ -5,6 +5,9 @@ import type {
   LoreClassificationPreviewRequest,
   LoreItem,
   LoreCategory,
+  LoreIndexGuide,
+  LoreIndexSnapshot,
+  LoreIndexPreview,
   LoreAsset,
   LoreMaterialMutation,
   LoreItemImageGenerateRequest,
@@ -16,6 +19,18 @@ import { projectAPIPath } from './project-scope'
 
 function lorePath(projectId: string, suffix: string): string {
   return projectAPIPath(projectId, `book/lore/${suffix.replace(/^\/+/, '')}`)
+}
+
+export function getLoreIndex(projectId: string): Promise<LoreIndexSnapshot> {
+  return requestJSON(lorePath(projectId, 'index'))
+}
+
+export function updateLoreIndex(projectId: string, guide: LoreIndexGuide, baseRevision: string): Promise<LoreIndexSnapshot> {
+  return requestJSON(lorePath(projectId, 'index'), { method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ guide, base_revision: baseRevision }) })
+}
+
+export function previewLoreIndex(projectId: string, guide: LoreIndexGuide): Promise<LoreIndexPreview> {
+  return requestJSON(lorePath(projectId, 'index/preview'), { method: 'POST', headers: jsonHeaders, body: JSON.stringify(guide) })
 }
 
 export function getLoreCategories(projectId: string): Promise<LoreCategory[]> {

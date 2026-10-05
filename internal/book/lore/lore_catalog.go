@@ -93,26 +93,11 @@ func (s *Store) NameCatalogMarkdown(options NameCatalogOptions) (string, error) 
 	if len([]byte(minimal)) <= maxBytes {
 		return minimal, nil
 	}
-	compact := fmt.Sprintf("# Lore Name Catalog\nTotal: %d; omitted: %d. Use list_lore_items.", len(entries), len(entries)-offset)
+	compact := fmt.Sprintf("# Lore Name Catalog\nTotal: %d; omitted: %d. Use query_lore_items.", len(entries), len(entries)-offset)
 	if len([]byte(compact)) <= maxBytes {
 		return compact, nil
 	}
 	return "", fmt.Errorf("lore name catalog limit is too small; at least %d bytes are required", len([]byte(minimal)))
-}
-
-// QueryLoreItems returns the same deterministic page used by the index tool.
-// It lets callers render complete bodies without requiring a second lookup.
-func (s *Store) QueryLoreItems(options IndexOptions) ([]Item, error) {
-	items, err := s.List()
-	if err != nil {
-		return nil, err
-	}
-	entries, _, _ := filterLoreIndexEntries(items, options)
-	result := make([]Item, 0, len(entries))
-	for _, entry := range entries {
-		result = append(result, entry.Item)
-	}
-	return result, nil
 }
 
 func renderLoreNameCatalog(revision string, total, offset, shown int, lines []string) string {

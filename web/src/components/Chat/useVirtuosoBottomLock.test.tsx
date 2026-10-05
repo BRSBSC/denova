@@ -1,7 +1,24 @@
 import { act, renderHook } from '@testing-library/react'
 import type { PointerEvent, WheelEvent } from 'react'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
+import type { VirtuosoHandle } from 'react-virtuoso'
 import { useVirtuosoBottomLock } from './useVirtuosoBottomLock'
+
+it('materializes a streamed tail outside the virtual range without overriding an upward scroll', () => {
+  const scroller = document.createElement('div')
+  Object.defineProperty(scroller, 'clientHeight', { value: 500 })
+  Object.defineProperty(scroller, 'scrollHeight', { value: 1000 })
+  const resolveScroller = () => scroller
+  const { result, rerender } = renderHook(({ count }) => useVirtuosoBottomLock({ itemCount: count, autoFollowEnabled: true, resolveScroller }), { initialProps: { count: 3 } })
+  const scrollToIndex = vi.fn()
+  result.current.virtuosoRef.current = { scrollToIndex } as unknown as VirtuosoHandle
+  rerender({ count: 1000 })
+  expect(scrollToIndex).toHaveBeenCalledWith({ index: 'LAST', align: 'end', behavior: 'auto' })
+  scrollToIndex.mockClear()
+  act(() => result.current.onWheel({ deltaY: -100 } as WheelEvent<HTMLDivElement>))
+  rerender({ count: 1001 })
+  expect(scrollToIndex).not.toHaveBeenCalled()
+})
 
 it('follows footer expansion from the bottom throughout layout updates', () => {
   const scroller = document.createElement('div')

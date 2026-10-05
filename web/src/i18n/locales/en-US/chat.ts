@@ -221,6 +221,8 @@ const chat = {
   'chat.tool.scriptBadge': 'Script Tool',
   'chat.tool.name.configRead': 'Read configuration',
   'chat.tool.name.configApply': 'Update configuration',
+  'chat.tool.name.queryLoreItems': 'Query lore',
+  'chat.tool.detail.missingLore': 'Missing lore',
   'chat.tool.name.listLoreItems': 'Browse lore',
   'chat.tool.name.readLoreItems': 'Read lore',
   'chat.tool.name.writeLoreItems': 'Update lore',

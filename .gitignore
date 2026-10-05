@@ -34,6 +34,7 @@ docs/tests/*
 !docs/claude-runtime.md
 !docs/ci-performance.md
 !docs/skills-library.md
+!docs/lore-index.md
 !docs/automatic-updates.md
 !docs/resource-pack-import-export-design.md
 !docs/speech.md
@@ -46,6 +47,7 @@ docs/tests/*
 prd
 .playwright-cli/
 tmp/
+.tmp/
 /npm/
 
 # Local AVG engine and its integration checks are not distributed.

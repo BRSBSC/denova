@@ -35,6 +35,11 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	collection := portableCollection[json.RawMessage]{Version: 1, Categories: append(lore.DefaultCategories(), lore.Category{ID: "ability-category", Name: "Abilities"})}
+	collection.IndexGuide = &lore.IndexGuide{AutomaticDetails: map[string]string{"auto:ability-category": lore.IndexDetailBrief}, IntroMarkdown: "Imported index introduction", Groups: []lore.IndexGroup{
+		{ID: "source-section", Name: "Abilities guide", Purpose: "When choosing an ability", BodyMarkdown: "Imported guide prose", DefaultDetail: lore.IndexDetailBrief},
+	}}
+	collection.IndexGuide.GroupOrder = []string{"automatic:auto:ability-category", "custom:source-section"}
+	collection.IndexGuide.ItemOrder = map[string][]string{"custom:source-section": {"item-2", "item-1", "item-0"}}
 	for i := 0; i < 300; i++ {
 		name := fmt.Sprintf("Item %d", i)
 		if i == 1 {
@@ -42,7 +47,7 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 		} else if i == 2 {
 			name = "沈凝"
 		}
-		collection.Items = append(collection.Items, jsonBytes(t, map[string]any{"id": fmt.Sprintf("item-%d", i), "name": name, "type": "ability-category", "content": fmt.Sprintf("Setting %d", i)}))
+		collection.Items = append(collection.Items, jsonBytes(t, map[string]any{"id": fmt.Sprintf("item-%d", i), "name": name, "type": "ability-category", "content": fmt.Sprintf("Setting %d", i), "index_memberships": []lore.IndexMembership{{GroupID: "source-section", Detail: lore.IndexDetailInherit}}}))
 	}
 	manifest := Manifest{Format: "denova.resource-pack", SchemaVersion: 1, Package: PackageInfo{ID: "world", Name: "World"}, Resources: []Resource{{ID: "lore", Kind: "lore.collection", Path: "lore.json"}, {ID: "opening", Kind: "game.openings", Path: "opening.json", Requires: []string{"lore"}}}}
 	preview := func() Preview {
@@ -92,6 +97,17 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 	if err != nil || len(items) != 302 {
 		t.Fatal(len(items), err)
 	}
+	importedIndex, err := store.IndexGuide()
+	if err != nil || len(importedIndex.Guide.Groups) != 1 || importedIndex.Guide.Groups[0].ID != "source-section" || importedIndex.Guide.AutomaticDetails["auto:ability-category"] != lore.IndexDetailBrief {
+		t.Fatalf("lost imported guide: %#v %v", importedIndex, err)
+	}
+	if fmt.Sprint(importedIndex.Guide.GroupOrder) != fmt.Sprint(collection.IndexGuide.GroupOrder) || fmt.Sprint(importedIndex.Guide.ItemOrder["custom:source-section"]) != "[沈凝 item_0-3 item_0-2]" {
+		t.Fatalf("import lost order or failed to translate item IDs: %+v", importedIndex.Guide)
+	}
+	grouped, err := store.Query(lore.QueryOptions{IndexOptions: lore.IndexOptions{GroupNames: []string{"Abilities guide"}, Limit: 300}})
+	if err != nil || len(grouped.Items) != 300 {
+		t.Fatalf("lost imported memberships: %d %v", len(grouped.Items), err)
+	}
 	// Simulate a user edit captured by staging after an earlier live state read.
 	// Admission must compare the exact staged snapshot, not read the live file again.
 	snapshot, err := os.ReadFile(lore.ItemsPath(dir))
@@ -123,6 +139,20 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 	if err != nil || len(files) != 2 {
 		t.Fatalf("expected only manifest and collection: %d %v", len(files), err)
 	}
+	exportedGuideFound := false
+	for name, data := range files {
+		if name == "denova-pack.json" {
+			continue
+		}
+		exportedCollection, exportedItems, err := readLoreCollection(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		exportedGuideFound = exportedCollection.IndexGuide != nil && len(exportedCollection.IndexGuide.Groups) == 1 && len(exportedItems[0].IndexMemberships) == 1
+	}
+	if !exportedGuideFound {
+		t.Fatal("export discarded the guide or memberships")
+	}
 	var roundtrip Manifest
 	if err := json.Unmarshal(files["denova-pack.json"], &roundtrip); err != nil {
 		t.Fatal(err)
@@ -130,6 +160,9 @@ func TestLoreCollectionLifecycle(t *testing.T) {
 	portable, portableItems, err := readLoreCollection(files[roundtrip.Resources[0].Path])
 	if err != nil || len(portableItems) != 300 || portableItems[0].ID != "item-0" {
 		t.Fatal("roundtrip identities", len(portableItems), err)
+	}
+	if fmt.Sprint(portable.IndexGuide.ItemOrder["custom:source-section"]) != "[item-2 item-1 item-0]" {
+		t.Fatalf("export lost ordered package identities: %+v", portable.IndexGuide.ItemOrder)
 	}
 	category, err := store.Categories()
 	if err != nil {
