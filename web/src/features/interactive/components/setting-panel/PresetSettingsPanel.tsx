@@ -45,7 +45,7 @@ import type { ActorStateModule, EventPackageModule, GamePlanningTemplate, ImageP
 import { PresetResourcePane } from './PresetResourcePane'
 import { PresetDirectorySidebar } from './PresetDirectorySidebar'
 import { buildPresetDirectorySections, presetDirectoryEntryId } from './preset-directory-sections'
-import { applyPresetDirectoryOrder, usePresetDirectoryOrder } from './use-preset-directory-order'
+import { applyResourceDirectoryOrder, useResourceDirectoryOrder } from '@/components/resource-directory/use-resource-directory-order'
 import { usePresetDraftSync, usePresetResources } from './use-preset-resources'
 import { usePresetSelection } from './use-preset-selection'
 import { createPresetConflictResolver, usePresetResourceAutosave } from './usePresetResourceAutosave'
@@ -153,7 +153,7 @@ export function PresetSettingsPanel({
     refreshRuleSystems,
     refreshActorStates,
   } = resources
-  const presetDirectoryOrder = usePresetDirectoryOrder()
+  const presetDirectoryOrder = useResourceDirectoryOrder('nova.preset-directory-order')
 
   function reportPresetError(scope: string, fallback: string, error: unknown): void {
     console.warn(scope, error)
@@ -584,7 +584,7 @@ export function PresetSettingsPanel({
   const title = presetEditorTitle(presetResourceKind, presetDrafts, t)
   const subtitle = presetEditorSubtitle(presetResourceKind, presetDrafts, t)
 
-  const presetDirectorySections = applyPresetDirectoryOrder(buildPresetDirectorySections({
+  const presetDirectorySections = applyResourceDirectoryOrder(buildPresetDirectorySections({
     lists: { tellers, storyDirectors, imagePresets, eventPackages, ruleSystems, actorStates },
     onCreateKind: (kind) => void createPresetResource(kind),
     t,

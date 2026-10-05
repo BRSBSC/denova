@@ -3,11 +3,10 @@ import { useLoreCategories } from '@/features/lore/use-lore-categories'
 import { LoreCategoryManager } from './LoreCategoryManager'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CheckCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, Folder, ImagePlus, ListChecks, MoreHorizontal, Plus, Search, Sparkles, Tags, Trash2, X } from 'lucide-react'
+import { CheckCheck, ChevronsDownUp, ChevronsUpDown, Folder, ImagePlus, ListChecks, MoreHorizontal, Plus, Search, Sparkles, Tags, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,7 +17,6 @@ import {
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Field, FieldLabel } from '@/components/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
-import { Separator } from '@/components/ui/separator'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   createVersion,
@@ -27,10 +25,12 @@ import {
   type LoreItem,
   type LoreItemImageGenerateRequest,
 } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { useResourceDirectoryOrder } from '@/components/resource-directory/use-resource-directory-order'
 import { useImageModelConfigured } from '@/features/settings/use-image-model-configured'
 import { sectionItems, type KnowledgeSection } from './knowledge-sections'
-import { LoreCard, LORE_CARD_LAYOUTS, type LoreCardSize, type LoreCoverAction } from './LoreCard'
+import { LoreCard, type LoreCardSize, type LoreCoverAction } from './LoreCard'
+import { LoreLibrarySection } from './LoreLibrarySection'
+import { LoreIndexSortArea, LoreIndexSortableCard, orderIndexEntries } from './LoreIndexSorting'
 import { LoreCoverDialog } from './LoreCoverDialog'
 import { LoreMaterialGenerateDialog } from './LoreMaterialGenerateDialog'
 import { notifyLoreUpdated } from './events'
@@ -92,6 +92,9 @@ export function LoreLibrary({
   const { t } = useTranslation()
   const pendingCreation = useRef<KnowledgeSection | null>(null)
   const { sections: categorySections } = useLoreCategories(projectId)
+  // Category card order is shared with the directory; tag and section order are overview preferences.
+  const directoryOrder = useResourceDirectoryOrder(`nova.lore-directory-order:${projectId}`)
+  const overviewOrder = useResourceDirectoryOrder(`nova.lore-overview-order:${projectId}`)
   const imageConfigured = useImageModelConfigured(projectId)
   // Density is a browser preference shared by writing and game libraries.
   const [cardSize, setCardSize] = useState(readCardSize)
@@ -112,12 +115,12 @@ export function LoreLibrary({
   )
   const sections = useMemo(() => {
     if (view === 'category') return categorySections.map(section => ({
-      id: `category:${section.id}`, name: section.name || t(section.labelKey), icon: section.icon,
-      items: sectionItems(filteredItems, section),
+      id: section.id, name: section.name || t(section.labelKey), icon: section.icon,
+      items: sectionItems(items, section),
     }))
     const groups = new Map<string, LoreItem[]>()
     const untagged: LoreItem[] = []
-    for (const item of filteredItems) {
+    for (const item of items) {
       if (!item.tags?.length) untagged.push(item)
       for (const tag of new Set((item.tags || []).map(loreTagFilterValue))) {
         const group = groups.get(tag) ?? []
@@ -131,10 +134,15 @@ export function LoreLibrary({
       })),
       { id: 'untagged', name: t('lore.filters.untagged'), icon: Tags, items: untagged },
     ]
-  }, [filteredItems, categorySections, view, t])
+  }, [items, categorySections, view, t])
   // An item may appear under several tags; counts and batch actions use unique items.
   const visible = filteredItems
-  const visibleSections = sections.filter((section) => section.items.length)
+  const visibleIds = new Set(filteredItems.map(item => item.id))
+  const itemOrder = view === 'category' ? directoryOrder : overviewOrder
+  const visibleSections = orderIndexEntries(sections.map(section => ({
+    ...section,
+    items: orderIndexEntries(section.items.filter(item => visibleIds.has(item.id)), itemOrder.order[section.id], item => item.id),
+  })).filter(section => section.items.length), overviewOrder.order[view], section => section.id)
   const allCollapsed = visibleSections.length > 0 && visibleSections.every((section) => collapsedSections[section.id])
   const coverItem = items.find((item) => item.id === coverTarget?.id)
   const toggle = (id: string) =>
@@ -342,29 +350,24 @@ export function LoreLibrary({
             </Button>
           </div>
         )}
-        {visibleSections.map((section) => (
-          <Collapsible
-            key={section.id}
-            asChild
-            open={!collapsedSections[section.id]}
-            onOpenChange={(open) => setCollapsedSections((current) => ({ ...current, [section.id]: !open }))}
-          >
-            <section aria-label={section.name} className="min-w-0">
-              <h2>
-                <CollapsibleTrigger asChild>
-                  <Button type="button" variant="ghost" className="h-auto w-full justify-start gap-2 py-2 text-left whitespace-normal aria-expanded:bg-transparent">
-                    <ChevronDown className={cn('transition-transform', collapsedSections[section.id] && '-rotate-90')} aria-hidden="true" />
-                    <section.icon aria-hidden="true" />
-                    <span className="min-w-0 break-all">{section.name}</span>
-                    <span className="text-xs text-muted-foreground">{section.items.length}</span>
-                    <Separator className="ml-2 min-w-0 flex-1" />
-                  </Button>
-                </CollapsibleTrigger>
-              </h2>
-              <CollapsibleContent className={cn('grid pt-4', LORE_CARD_LAYOUTS[cardSize])}>
-                {section.items.map((item) => (
+        <LoreIndexSortArea ids={visibleSections.map(section => section.id)} layout="list"
+          onReorder={ids => overviewOrder.reorderItems(view, ids, sections.map(section => section.id))}>
+          {visibleSections.map((section) => (
+            <LoreLibrarySection
+              key={section.id}
+              id={section.id}
+              name={section.name}
+              icon={section.icon}
+              ids={section.items.map(item => item.id)}
+              cardSize={cardSize}
+              disabled={busy || selecting || visibleSections.length < 2}
+              open={!collapsedSections[section.id]}
+              onOpenChange={(open) => setCollapsedSections((current) => ({ ...current, [section.id]: !open }))}
+              onReorder={ids => itemOrder.reorderItems(section.id, ids, sections.find(entry => entry.id === section.id)!.items.map(item => item.id))}
+            >
+              {section.items.map((item) => (
+                <LoreIndexSortableCard key={item.id} id={item.id} name={item.name} disabled={busy || selecting || section.items.length < 2}>
                   <LoreCard
-                    key={item.id}
                     projectId={projectId}
                     item={item}
                     cardSize={cardSize}
@@ -376,11 +379,11 @@ export function LoreLibrary({
                     onCover={(action) => setCoverTarget({ id: item.id, action })}
                     onChanged={onChanged}
                   />
-                ))}
-              </CollapsibleContent>
-            </section>
-          </Collapsible>
-        ))}
+                </LoreIndexSortableCard>
+              ))}
+            </LoreLibrarySection>
+          ))}
+        </LoreIndexSortArea>
         {!visible.length && (
           <Empty className="py-16">
             <EmptyHeader>

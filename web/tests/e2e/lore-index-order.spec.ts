@@ -4,6 +4,7 @@ import type { Locator, Page } from '@playwright/test'
 
 async function drag(page: Page, source: Locator, target: Locator) {
   await source.scrollIntoViewIfNeeded()
+  await source.hover()
   const from = (await source.boundingBox())!
   const to = (await target.boundingBox())!
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)

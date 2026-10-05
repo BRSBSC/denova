@@ -20,6 +20,7 @@ import { AutosaveStatusIndicator } from '@/components/forms/autosave-status'
 import { ResourceWorkspace, useResponsiveAgentOpen } from '@/components/layout/resource-workspace'
 import { FeaturePageShell } from '@/components/layout/feature-page-shell'
 import { ResourceDirectory } from '@/components/resource-directory/ResourceDirectory'
+import { applyResourceDirectoryOrder, useResourceDirectoryOrder } from '@/components/resource-directory/use-resource-directory-order'
 import type { ResourceDirectoryBadge, ResourceDirectoryItem, ResourceDirectorySection } from '@/components/resource-directory/types'
 import { INTERACTIVE_OPENING_PRESET_PATH, INTERACTIVE_OPENING_PRESET_UPDATED_EVENT, INTERACTIVE_OPENING_PRESET_ENTRY_ID, LEGACY_INTERACTIVE_OPENING_PRESET_PATH, parseBookOpeningPresets, serializeBookOpeningPresets, type BookOpeningPreset } from '../opening'
 import type { GamePlanningTemplate, ImagePreset, Teller } from '../types'
@@ -126,6 +127,7 @@ function LoreSettingPanel({
 }) {
   const { t } = useTranslation()
   const { sections: categorySections } = useLoreCategories(projectId, refreshSignal)
+  const directoryOrder = useResourceDirectoryOrder(`nova.lore-directory-order:${projectId}`)
   const activeMode = mode
   const [items, setItems] = useState<LoreItem[]>([])
   const [loading, setLoading] = useState(Boolean(projectId))
@@ -786,14 +788,15 @@ function LoreSettingPanel({
       : isOpeningPresetActive
         ? t('settingPanel.openingPreset.subtitle')
         : editorSubtitle(draft, t, categorySections.find((section) => section.id === draft?.type)?.name)
-  const loreDirectorySections: ResourceDirectorySection[] = categorySections.filter((section) => filters.category === 'all' || section.id === filters.category).map((section) => ({
+  const loreDirectorySections = applyResourceDirectoryOrder(categorySections.filter((section) => filters.category === 'all' || section.id === filters.category).map((section): ResourceDirectorySection => ({
     id: section.id,
     label: (section.name || t(section.labelKey)),
     icon: section.icon,
+    reorderable: true,
     items: sectionItems(filteredItems, section).map((item) => loreItemToDirectoryItem(item, projectId, t)),
     onCreate: () => void handleCreateLore(section),
     createLabel: `${t('chat.new')}${(section.name || t(section.labelKey))}`,
-  }))
+  })), directoryOrder.order)
   const directoryPanel = (
     <div className="nova-sidebar flex h-full min-h-0 flex-col bg-[var(--nova-surface-2)]">
       {activeMode === 'lore' ? (
@@ -812,6 +815,7 @@ function LoreSettingPanel({
             showExpandCollapseAll
             activeId={activeId || null}
             onSelect={handleSelectLore}
+            onReorderItems={(sectionId, orderedItemIds) => directoryOrder.reorderItems(sectionId, orderedItemIds, items.filter(item => item.type === sectionId).map(item => item.id))}
             saving={saving}
             pinnedEntries={[
               { id: LORE_OVERVIEW_ID, label: t('lore.library.title'), icon: LayoutGrid },

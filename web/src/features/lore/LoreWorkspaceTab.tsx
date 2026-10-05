@@ -1,9 +1,10 @@
 import { useLoreCategories } from '@/features/lore/use-lore-categories'
-import { BookMarked, Database, LibraryBig } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { BookMarked, Database, LayoutGrid } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AdaptiveSurface } from '@/components/layout/adaptive-surface'
 import { ResourceDirectory } from '@/components/resource-directory/ResourceDirectory'
+import { applyResourceDirectoryOrder, useResourceDirectoryOrder } from '@/components/resource-directory/use-resource-directory-order'
 import type {
   ResourceDirectoryBadge,
   ResourceDirectoryItem,
@@ -29,6 +30,9 @@ import { LoadingState } from '@/components/common/LoadingState'
 import { EMPTY_LORE_FILTERS, filterLoreItems, type LoreFilters } from './lore-filters'
 import { LoreFiltersButton, LoreFilterSummary } from './LoreFilters'
 import type { ToolNavigationIntent } from '@/components/Chat/tool-navigation'
+import { LORE_OVERVIEW_ID } from './LoreLibrary'
+import { LORE_INDEX_ID } from './LoreIndexDocument'
+import { LoreWorkspaceLibraryView } from './LoreWorkspaceLibraryView'
 
 interface LoreWorkspaceTabProps {
   projectId: string
@@ -54,15 +58,31 @@ export function LoreWorkspaceTab({
 }: LoreWorkspaceTabProps) {
   const { t } = useTranslation()
   const { sections: categorySections } = useLoreCategories(projectId, refreshSignal)
+  const directoryOrder = useResourceDirectoryOrder(`nova.lore-directory-order:${projectId}`)
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState<LoreFilters>(EMPTY_LORE_FILTERS)
   const [creating, setCreating] = useState<KnowledgeSection | null>(null)
   const [createdId, setCreatedId] = useState('')
-  useEffect(() => { setFilters(EMPTY_LORE_FILTERS); setSearchQuery(''); setCreating(null); setCreatedId('') }, [projectId])
+  const [libraryDestination, setLibraryDestination] = useState<typeof LORE_OVERVIEW_ID | typeof LORE_INDEX_ID | null>(null)
+  const indexFlush = useRef<EditorFlushHandler | null>(null)
+  const itemFlush = useRef<EditorFlushHandler | null>(null)
+  const handledReviewNavigation = useRef('')
+  const handledToolNavigation = useRef('')
+  const handleItemFlush = useCallback((handler: EditorFlushHandler | null) => { itemFlush.current = handler }, [])
+  const handleIndexFlush = useCallback((handler: EditorFlushHandler | null) => { indexFlush.current = handler }, [])
+  const flush = useCallback(async () => {
+    if (itemFlush.current && !(await itemFlush.current())) return false
+    return indexFlush.current ? indexFlush.current() : true
+  }, [])
+  useEffect(() => {
+    onEditorFlushHandlerChange(flush)
+    return () => onEditorFlushHandlerChange(null)
+  }, [flush, onEditorFlushHandlerChange])
+  useEffect(() => { setFilters(EMPTY_LORE_FILTERS); setSearchQuery(''); setCreating(null); setCreatedId(''); setLibraryDestination(null) }, [projectId])
   const lore = useLoreWorkspace({
     projectId,
     refreshSignal,
-    onFlushHandlerChange: onEditorFlushHandlerChange,
+    onFlushHandlerChange: handleItemFlush,
   })
   const navigationTargetID = navigationIntent
     ? documentReview.comments.find(
@@ -70,22 +90,40 @@ export function LoreWorkspaceTab({
       )?.target.id || ''
     : ''
   const startCreating = useCallback(async (section: KnowledgeSection) => {
-    if (!(await lore.flush())) return
+    if (!(await flush())) return
     setCreating(section)
     setCreatedId('')
     closeMobilePanes()
-  }, [lore.flush])
+  }, [flush])
+  const selectDestination = useCallback(async (id: string) => {
+    if (!(await flush())) return
+    if (id === LORE_OVERVIEW_ID || id === LORE_INDEX_ID) {
+      setLibraryDestination(id)
+    } else {
+      if (!(await lore.selectItem(id))) return
+      setLibraryDestination(null)
+    }
+    setCreating(null)
+    setCreatedId('')
+    closeMobilePanes()
+    console.info('[lore-workspace] destination selected', { projectId, destination: id })
+  }, [flush, lore.selectItem, projectId])
   useEffect(() => {
-    if (!navigationTargetID || navigationTargetID === lore.activeId) return
-    void lore.selectItem(navigationTargetID)
-  }, [lore.activeId, lore.selectItem, navigationTargetID])
+    const key = `${projectId}:${navigationIntent?.nonce}`
+    if (!navigationTargetID || handledReviewNavigation.current === key || !lore.items.some(item => item.id === navigationTargetID)) return
+    handledReviewNavigation.current = key
+    void selectDestination(navigationTargetID)
+  }, [lore.items, navigationIntent?.nonce, navigationTargetID, projectId, selectDestination])
   useEffect(() => {
+    const key = `${projectId}:${toolNavigationIntent?.nonce}`
+    if (handledToolNavigation.current === key) return
     const target = toolNavigationIntent?.target
     if (!target || target.kind !== 'lore_item') return
     const targetID = target.id || lore.items.find((item) => item.name === target.name)?.id || ''
-    if (!targetID || targetID === lore.activeId) return
-    void lore.selectItem(targetID)
-  }, [lore.activeId, lore.items, lore.selectItem, toolNavigationIntent?.nonce])
+    if (!targetID || !lore.items.some(item => item.id === targetID)) return
+    handledToolNavigation.current = key
+    void selectDestination(targetID)
+  }, [lore.items, projectId, selectDestination, toolNavigationIntent])
   const filteredItems = useMemo(() => filterLoreItems(lore.items, filters, searchQuery, projectId), [lore.items, filters, searchQuery, projectId])
   const sections = useMemo<ResourceDirectorySection[]>(
     () =>
@@ -93,6 +131,7 @@ export function LoreWorkspaceTab({
         id: section.id,
         label: (section.name || t(section.labelKey)),
         icon: section.icon,
+        reorderable: true,
         items: sectionItems(filteredItems, section).map((item) =>
           loreDirectoryItem(item, projectId, t),
         ),
@@ -123,14 +162,15 @@ export function LoreWorkspaceTab({
         </div>
       ) : (
         <ResourceDirectory
-          sections={sections}
+          sections={applyResourceDirectoryOrder(sections, directoryOrder.order)}
           showExpandCollapseAll
-          activeId={creating ? null : lore.activeId || null}
-          onSelect={(id) => {
-            setCreating(null)
-            setCreatedId('')
-            void lore.selectItem(id)
-          }}
+          activeId={creating ? null : libraryDestination || lore.activeId || null}
+          pinnedEntries={[
+            { id: LORE_OVERVIEW_ID, label: t('lore.library.title'), icon: LayoutGrid },
+            { id: LORE_INDEX_ID, label: t('lore.index.title'), icon: BookMarked },
+          ]}
+          onSelect={id => void selectDestination(id)}
+          onReorderItems={(sectionId, orderedItemIds) => directoryOrder.reorderItems(sectionId, orderedItemIds, lore.items.filter(item => item.type === sectionId).map(item => item.id))}
           saving={lore.autosaveStatus === 'saving'}
           searchPlaceholder={t('loreWorkspace.search')}
           query={searchQuery}
@@ -138,33 +178,7 @@ export function LoreWorkspaceTab({
           filterItem={() => true}
           headerActions={<LoreFiltersButton projectId={projectId} presentation="icon" items={lore.items} filters={filters} onChange={setFilters} />}
           searchDetails={<LoreFilterSummary projectId={projectId} filters={filters} onChange={setFilters} query={searchQuery} onQueryChange={setSearchQuery} matched={filteredItems.length} total={lore.items.length} />}
-          headerContent={
-            <div className="grid gap-2">
-              <div className="flex items-start gap-2 px-1 pb-1">
-                <BookMarked className="mt-0.5 h-4 w-4 shrink-0 text-[var(--nova-success)]" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium text-[var(--nova-text)]">
-                    {t('loreWorkspace.directoryTitle')}
-                  </div>
-                  <div className="mt-0.5 text-[10px] leading-4 text-[var(--nova-text-faint)]">
-                    {t('loreWorkspace.directoryDescription')}
-                  </div>
-                </div>
-                {onOpenLibrary ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={onOpenLibrary}
-                    aria-label={t('loreWorkspace.openLibrary')}
-                  >
-                    <LibraryBig />
-                  </Button>
-                ) : null}
-              </div>
-              {lore.error ? <InlineErrorNotice message={lore.error} /> : null}
-            </div>
-          }
+          headerContent={lore.error ? <InlineErrorNotice message={lore.error} /> : undefined}
           emptyContent={
             <div className="px-2 py-8 text-center text-xs text-[var(--nova-text-faint)]">
               {t('loreWorkspace.emptyDirectory')}
@@ -200,8 +214,15 @@ export function LoreWorkspaceTab({
         collapseAt={720}
         mobilePaneScope="surface"
       >
-        {({ isMobile, openLeft }) =>
-          creating ? (
+        {({ isMobile, openLeft }) => (
+          <>
+          <LoreWorkspaceLibraryView key={projectId} projectId={projectId}
+            activeId={creating ? null : libraryDestination} items={lore.items} filteredItems={filteredItems}
+            filters={filters} onFiltersChange={setFilters} query={searchQuery} onQueryChange={setSearchQuery}
+            onSelect={id => void selectDestination(id)} onCreate={section => void startCreating(section)}
+            onReload={() => lore.reload(lore.activeId)} onFlush={flush} onIndexFlushHandlerChange={handleIndexFlush}
+            onOpenDirectory={isMobile ? openLeft : undefined} onOpenLibrary={onOpenLibrary} />
+          {creating ? (
             <LoreCreateEditor
               key={`${projectId}:${creating.id}`}
               projectId={projectId}
@@ -214,10 +235,11 @@ export function LoreWorkspaceTab({
               onCreated={(item) => {
                 setCreatedId(item.id)
                 setCreating(null)
+                setLibraryDestination(null)
                 lore.acceptCreatedItem(item)
               }}
             />
-          ) : lore.loading && !lore.draft ? (
+          ) : libraryDestination ? null : lore.loading && !lore.draft ? (
             <LoadingState label={t('common.loading')} className="h-full min-h-0" />
           ) : lore.error && lore.items.length === 0 ? (
             <div className="grid h-full place-content-center gap-3 px-6">
@@ -241,7 +263,7 @@ export function LoreWorkspaceTab({
               }
               highlightQuery={searchQuery}
               onDraftChange={lore.setDraft}
-              onSelectItem={lore.selectItem}
+              onSelectItem={id => void selectDestination(id)}
               onTagDraftChange={lore.setTagDraft}
               onPrepareSnapshot={lore.prepareSnapshot}
               onFlush={lore.flush}
@@ -277,8 +299,9 @@ export function LoreWorkspaceTab({
                 variant="page"
               />
             </div>
-          )
-        }
+          )}
+          </>
+        )}
       </AdaptiveSurface>
     </section>
   )
@@ -304,7 +327,6 @@ function loreDirectoryItem(
   return {
     id: item.id,
     title: item.name,
-    summary: item.brief_description || undefined,
     thumbnailUrl: imageSrc || null,
     disabled: item.enabled === false,
     searchText: `${(item.tags || []).join(' ')} ${(item.keywords || []).join(' ')} ${item.content || ''}`,

@@ -80,6 +80,7 @@ export function LoreItemCard({ projectId, item, cardSize, selected, onSelect, de
           </button>
         </CardTitle>
         {headerAction && <CardAction
+          data-index-control
           className="flex min-h-8 row-span-1 items-center justify-center self-center"
           onClick={event => event.stopPropagation()}
         >{headerAction}</CardAction>}
@@ -180,6 +181,7 @@ export function LoreCard({
             )
           ) : (
             <div
+              data-index-control
               className="flex min-w-max flex-1 items-center gap-0.5"
               onClick={(event) => event.stopPropagation()}
             >
