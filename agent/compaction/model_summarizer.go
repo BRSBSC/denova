@@ -93,7 +93,10 @@ func (s *modelSummarizer) Summarize(ctx context.Context, request SummaryRequest)
 			request.Messages[index] = primary[position]
 		}
 		prompt := summaryRequestMarker + "\n" + instruction + "\nSelected source: provider messages " + sourceRanges(positions) + " (one-based). Other messages are retained separately."
-		fork := snapshot.Append(agent.UserMessage(prompt)).WithOptions(agent.WithMaxTokens(output))
+		// Keep the model's own response cap. Providers that count reasoning toward
+		// it would otherwise spend a checkpoint-sized cap before writing any text;
+		// the checkpoint budget is enforced on the returned content instead.
+		fork := snapshot.Append(agent.UserMessage(prompt))
 		fits, err := summaryCallFits(fork, request, output, safety)
 		if err != nil {
 			return agent.CompactionCheckpoint{}, err
@@ -123,7 +126,15 @@ func (s *modelSummarizer) complete(ctx context.Context, snapshot *agent.ModelReq
 		return agent.CompactionCheckpoint{}, err
 	}
 	if message == nil || message.Role != agent.Assistant || strings.TrimSpace(message.Content) == "" || len(message.ToolCalls) > 0 {
-		return agent.CompactionCheckpoint{}, errors.New("Compaction model returned an invalid checkpoint")
+		if message == nil {
+			return agent.CompactionCheckpoint{}, errors.New("Compaction model returned an invalid checkpoint: no message")
+		}
+		finish := ""
+		if message.ResponseMeta != nil {
+			finish = message.ResponseMeta.FinishReason
+		}
+		return agent.CompactionCheckpoint{}, fmt.Errorf("Compaction model returned an invalid checkpoint: role=%s content_bytes=%d reasoning_bytes=%d tool_calls=%d finish_reason=%q",
+			message.Role, len(strings.TrimSpace(message.Content)), len(message.ReasoningContent), len(message.ToolCalls), finish)
 	}
 	content := strings.TrimSpace(message.Content)
 	if len(content) > request.SummaryLimitBytes || agent.EstimateTextTokens(content) > output {

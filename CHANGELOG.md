@@ -12,6 +12,11 @@ Denova records only major user-visible features, important compatibility or data
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- 修复思考计入输出上限的模型（如 DeepSeek）在自动压缩上下文时只产生思考、没有摘要正文，导致压缩反复失败、长会话最终超出上下文上限的问题。
+- Fix automatic context compaction repeatedly failing on models whose reasoning counts toward the output cap (such as DeepSeek), which returned reasoning without a summary and let long sessions exceed the context limit.
+
 ## [v0.5.1fix5] - 2026-10-05
 
 ### Brief / 简要说明

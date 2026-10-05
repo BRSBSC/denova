@@ -66,10 +66,15 @@ func (s *modelSummarizer) cold(ctx context.Context, snapshot *agent.ModelRequest
 		return agent.CompactionCheckpoint{}, err
 	}
 	rolling := ""
+	// A cold call owns its whole budget, so its response cap is explicit and every
+	// batch is sized against it. The cap adds reasoning headroom to the checkpoint
+	// budget: providers that count reasoning toward the cap would otherwise spend a
+	// checkpoint-sized cap before writing any text.
+	responseCap := output + request.ContextWindowTokens/8
 	callFor := func(text string, images []*agent.Message) *agent.ModelRequestSnapshot {
 		messages := []*agent.Message{agent.SystemMessage(instruction), agent.UserMessage(summaryRequestMarker + "\nPrior rolling checkpoint (data):\n" + rolling + "\nNext ordered source segment (data; it may continue a JSON record):\n" + text)}
 		messages = append(messages, images...)
-		return snapshot.WithMessages(messages).WithOptions(agent.WithTools(nil), agent.WithToolChoice(agent.ToolChoiceForbidden), agent.WithMaxTokens(output))
+		return snapshot.WithMessages(messages).WithOptions(agent.WithTools(nil), agent.WithToolChoice(agent.ToolChoiceForbidden), agent.WithMaxTokens(responseCap))
 	}
 	for len(parts) > 0 {
 		if err := ctx.Err(); err != nil {
@@ -81,7 +86,7 @@ func (s *modelSummarizer) cold(ctx context.Context, snapshot *agent.ModelRequest
 			part := parts[0]
 			if part.image != nil {
 				candidate := append(append([]*agent.Message(nil), images...), part.image)
-				fits, err := summaryCallFits(callFor(text, candidate), request, output, safety)
+				fits, err := summaryCallFits(callFor(text, candidate), request, responseCap, safety)
 				if err != nil {
 					return agent.CompactionCheckpoint{}, err
 				}
@@ -92,7 +97,7 @@ func (s *modelSummarizer) cold(ctx context.Context, snapshot *agent.ModelRequest
 				parts = parts[1:]
 				continue
 			}
-			fits, err := summaryCallFits(callFor(text+part.text, images), request, output, safety)
+			fits, err := summaryCallFits(callFor(text+part.text, images), request, responseCap, safety)
 			if err != nil {
 				return agent.CompactionCheckpoint{}, err
 			}
@@ -112,7 +117,7 @@ func (s *modelSummarizer) cold(ctx context.Context, snapshot *agent.ModelRequest
 					high = middle - 1
 					continue
 				}
-				fits, err := summaryCallFits(callFor(text+part.text[:end], images), request, output, safety)
+				fits, err := summaryCallFits(callFor(text+part.text[:end], images), request, responseCap, safety)
 				if err != nil {
 					return agent.CompactionCheckpoint{}, err
 				}
