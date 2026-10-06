@@ -3282,20 +3282,30 @@ html[data-nova-motion="off"] .nova-change-review-layer {
 .nova-story-artwork { container-type: inline-size; }
 .nova-stage-characters {
   position: absolute;
-  inset: 12% 0 0;
-  display: flex;
-  justify-content: center;
+  inset: 0;
 }
-.nova-stage-character { position: relative; height: 100%; min-width: 0; flex: 1; }
-.nova-stage-characters[data-single] .nova-stage-character { max-width: 70%; }
+.nova-stage-character {
+  position: absolute;
+  bottom: 0;
+  height: var(--character-height, 70%);
+  width: max-content;
+  max-width: 70%;
+  /* Distribute positions instead of dividing image widths: a crowd overlaps. */
+  left: calc(15% + var(--cast-position) * 70%);
+  translate: calc(var(--cast-position) * -100%);
+}
 @container (min-width: 768px) {
   .nova-stage-characters:not([data-layout="center"]) .nova-stage-character {
-    /* Preserve useful sprite widths when the text fills most of the stage. */
-    --side-width: clamp(22%, calc((100cqw - var(--nova-story-text-max-width, 896px)) / 2), 35%);
-    position: absolute;
-    width: calc(var(--side-width) / var(--side-count));
-    max-width: none;
+    --side-width: 45%;
+    max-width: var(--side-width);
   }
-  .nova-stage-character[data-side="left"] { left: calc(var(--side-index) * var(--side-width) / var(--side-count)); }
-  .nova-stage-character[data-side="right"] { right: calc((var(--side-count) - 1 - var(--side-index)) * var(--side-width) / var(--side-count)); }
+  .nova-stage-character[data-side="left"] {
+    left: calc(var(--side-position) * var(--side-width));
+    translate: calc(var(--side-position) * -100%);
+  }
+  .nova-stage-character[data-side="right"] {
+    left: auto;
+    right: calc((1 - var(--side-position)) * var(--side-width));
+    translate: calc((1 - var(--side-position)) * 100%);
+  }
 }

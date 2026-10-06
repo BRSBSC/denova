@@ -139,7 +139,9 @@ type Settings struct {
 	InteractiveStageLineHeight   *float64 `toml:"interactive_stage_line_height,omitempty" json:"interactive_stage_line_height,omitempty"`
 	// Character layout is a user display preference shared by all Projects.
 	InteractiveStageCharacterLayout string `toml:"interactive_stage_character_layout,omitempty" json:"interactive_stage_character_layout,omitempty"`
-	InteractiveStageTextMaxWidth    *int   `toml:"interactive_stage_text_max_width,omitempty" json:"interactive_stage_text_max_width,omitempty"`
+	// Character size is the fraction of stage height, independent of cast size.
+	InteractiveStageCharacterSize *float64 `toml:"interactive_stage_character_size,omitempty" json:"interactive_stage_character_size,omitempty"`
+	InteractiveStageTextMaxWidth  *int     `toml:"interactive_stage_text_max_width,omitempty" json:"interactive_stage_text_max_width,omitempty"`
 }
 
 func boolPtr(v bool) *bool        { return &v }
@@ -244,6 +246,7 @@ func DefaultSettings() Settings {
 		InteractiveStageScrimOpacity:    floatPtr(0.75),
 		InteractiveStageTextMaxWidth:    intPtr(896),
 		InteractiveStageCharacterLayout: "center",
+		InteractiveStageCharacterSize:   floatPtr(0.7),
 	}
 }
 
@@ -474,6 +477,9 @@ func Merge(parent, child Settings) Settings {
 	}
 	if child.InteractiveStageCharacterLayout != "" {
 		out.InteractiveStageCharacterLayout = child.InteractiveStageCharacterLayout
+	}
+	if child.InteractiveStageCharacterSize != nil {
+		out.InteractiveStageCharacterSize = child.InteractiveStageCharacterSize
 	}
 	return out
 }

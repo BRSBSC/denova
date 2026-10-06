@@ -8,7 +8,6 @@ import { InlineErrorNotice } from '@/components/common/inline-error-notice'
 import { MobileWorkspaceHeaderScope } from '@/components/layout/mobile-workspace-header'
 import { GameStoryContext, type GameChoice } from './game-story-context'
 import { InstalledGameStory } from './InstalledGameStory'
-import { PluginActionsButton } from './PluginWorkspace'
 import { BUILTIN_GAME_ID, management, localized, platformError, type CatalogEntry, type GamePreferences, type Instance } from './api'
 
 const instanceKey = (id: string) => 'game:' + id
@@ -104,7 +103,6 @@ export function GameStories({ projectId, active, builtinPicker, children }: {
       await refresh()
     },
   }}>
-    {projectId && <div className="flex shrink-0 justify-end border-b px-2"><PluginActionsButton projectId={projectId} context="game" /></div>}
     {error && <InlineErrorNotice className="m-3" message={platformError(error)} />}
     {selected && <InstalledGameStory key={selected.instanceId} instance={selected} item={installed.find(item => item.id === selected.gameId)} active={active} picker={picker} onRefresh={() => { void refresh() }} />}
     {/* Retained native controls must not escape the hidden subtree through the mobile header portal. */}

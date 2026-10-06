@@ -93,6 +93,7 @@ export interface Settings {
   interactive_stage_line_height?: number | null
   interactive_stage_text_max_width?: number | null
   interactive_stage_character_layout?: StageCharacterLayout | null
+  interactive_stage_character_size?: number | null
 }
 
 export interface LabSettings {

@@ -99,6 +99,9 @@ func ApplySettingsMergePatch(existing Settings, changes json.RawMessage) (Settin
 	default:
 		return Settings{}, fmt.Errorf("%w: invalid stage character layout %q", ErrInvalidSettingsPatch, next.InteractiveStageCharacterLayout)
 	}
+	if size := next.InteractiveStageCharacterSize; size != nil && (*size < 0.4 || *size > 1) {
+		return Settings{}, fmt.Errorf("%w: stage character size must be between 0.4 and 1", ErrInvalidSettingsPatch)
+	}
 	return next, nil
 }
 

@@ -101,7 +101,7 @@ export function NewStorySetupPanel({
   }, [conversationConfig.error])
 
   useEffect(() => {
-    if (story) return
+    if (story || !projectId) return
     let cancelled = false
     setDefaultsError(false)
     void fetchProjectSettings(projectId).then(snapshot => {

@@ -4,7 +4,7 @@ import { createAndOpenBook, createStartedStory } from '../support/api'
 for (const theme of ['dark', 'light']) {
   test(`user character layout persists across projects and adapts in ${theme}`, async ({ page, request }) => {
     test.setTimeout(120_000)
-    await request.patch('/api/settings', { data: { layer: 'user', changes: { theme, language: 'zh-CN', interactive_stage_character_layout: 'center', interactive_stage_scrim_opacity: 0.25 } } })
+    await request.patch('/api/settings', { data: { layer: 'user', changes: { theme, language: 'zh-CN', interactive_stage_character_layout: 'center', interactive_stage_character_size: null, interactive_stage_scrim_opacity: 0.25 } } })
     const book = await createAndOpenBook(request, `Character layout ${theme}`)
     await createStartedStory(request, '角色布局验证')
     let castCount = 3
@@ -26,10 +26,23 @@ for (const theme of ['dark', 'light']) {
     const layout = page.getByRole('group', { name: '角色布局', exact: true })
     await expect(layout).toHaveCount(1)
     await expect(layout.getByRole('radio')).toHaveCount(4)
+    const size = page.getByRole('slider', { name: '角色大小', exact: true })
+    await expect(size).toHaveAttribute('aria-valuetext', '70%')
+    const panel = page.locator('section').filter({ has: page.getByRole('heading', { name: '舞台演出', exact: true }) }).last()
+    await expect(panel.locator('[data-slot="field-description"]')).toHaveCount(0)
     const cast = page.locator('.nova-stage-characters')
     await expect(cast.locator('img')).toHaveCount(3)
+    // Measure the contained artwork, not its box: object-fit can hide shrinking.
+    const spriteHeights = () => cast.locator('img').evaluateAll(images => images.map(image => {
+      const sprite = image as HTMLImageElement
+      const box = sprite.getBoundingClientRect()
+      return Math.min(box.height, box.width * sprite.naturalHeight / sprite.naturalWidth)
+    }))
+    const stageHeight = (await cast.boundingBox())!.height
+    await expect.poll(spriteHeights).toEqual(Array(3).fill(stageHeight * 0.7).map(value => expect.closeTo(value, 0)))
     await layout.getByRole('radio', { name: '靠左', exact: true }).click()
     await expect(cast).toHaveAttribute('data-layout', 'left')
+    await expect.poll(spriteHeights).toEqual(Array(3).fill(stageHeight * 0.7).map(value => expect.closeTo(value, 0)))
     await layout.getByRole('radio', { name: '两侧', exact: true }).click()
     await expect(cast).toHaveAttribute('data-layout', 'sides')
     const settingsURL = `/api/projects/${book.projectId}/settings`
@@ -43,10 +56,31 @@ for (const theme of ['dark', 'light']) {
     const second = (await cast.locator('.nova-stage-character').nth(1).boundingBox())!
     expect(first.x + first.width).toBeLessThan(stage.x + stage.width / 2)
     expect(second.x).toBeGreaterThan(stage.x + stage.width / 2)
+    // Crowds keep the same size in every layout, and remain inside the stage.
+    for (const count of [6, 16]) {
+      castCount = count
+      await page.reload()
+      await expect(cast.locator('img')).toHaveCount(count)
+      for (const label of ['居中', '靠左', '靠右', '两侧']) {
+        await layout.getByRole('radio', { name: label, exact: true }).click()
+        await expect.poll(spriteHeights).toEqual(Array(count).fill(stageHeight * 0.7).map(value => expect.closeTo(value, 0)))
+        for (const sprite of await cast.locator('img').all()) {
+          const box = (await sprite.boundingBox())!
+          expect(box.x).toBeGreaterThanOrEqual(stage.x - 1)
+          expect(box.x + box.width).toBeLessThanOrEqual(stage.x + stage.width + 1)
+        }
+      }
+    }
+    castCount = 3
+    await page.reload()
+    await expect(cast.locator('img')).toHaveCount(3)
     await layout.scrollIntoViewIfNeeded()
     await page.screenshot({ path: test.info().outputPath(`characters-${theme}-wide.png`) })
     await page.setViewportSize({ width: 390, height: 844 })
-    await expect(cast.locator('.nova-stage-character').first()).toHaveCSS('position', 'relative')
+    await expect.poll(async () => {
+      const height = (await cast.boundingBox())!.height
+      return (await spriteHeights()).every(spriteHeight => spriteHeight >= height * 0.69)
+    }).toBe(true)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     await page.screenshot({ path: test.info().outputPath(`characters-${theme}-narrow.png`) })
     await page.getByRole('button', { name: '显示控制台', exact: true }).click()
@@ -54,6 +88,7 @@ for (const theme of ['dark', 'light']) {
     await consolePanel.getByRole('tab', { name: '控制', exact: true }).click()
     await layout.scrollIntoViewIfNeeded()
     await expect(layout.getByRole('radio', { name: '两侧', exact: true })).toBeVisible()
+    await expect(size).toBeVisible()
     await page.screenshot({ path: test.info().outputPath(`character-controls-${theme}-narrow.png`) })
     await page.setViewportSize({ width: 1800, height: 1000 })
     await expect(cast.locator('.nova-stage-character').first()).toHaveCSS('position', 'absolute')
@@ -61,6 +96,14 @@ for (const theme of ['dark', 'light']) {
     await page.reload()
     await expect(cast.locator('img')).toHaveCount(1)
     await expect(cast.locator('.nova-stage-character')).toHaveAttribute('data-side', 'right')
+    await size.press('Home')
+    await expect(size).toHaveAttribute('aria-valuetext', '40%')
+    await expect.poll(spriteHeights).toEqual([expect.closeTo(stageHeight * 0.4, 0)])
+    await size.press('End')
+    await expect(size).toHaveAttribute('aria-valuetext', '100%')
+    await expect.poll(spriteHeights).toEqual([expect.closeTo(stageHeight, 0)])
+    await page.reload()
+    await expect(size).toHaveAttribute('aria-valuetext', '100%')
     await layout.getByRole('radio', { name: '靠右', exact: true }).click()
     await expect(cast).toHaveAttribute('data-layout', 'right')
     castCount = 0
@@ -75,6 +118,7 @@ for (const theme of ['dark', 'light']) {
     await expect(cast).toHaveAttribute('data-layout', 'right')
     await page.getByRole('tab', { name: '控制', exact: true }).click()
     await expect(layout.getByRole('radio', { name: '靠右', exact: true })).toBeChecked()
+    await expect(size).toHaveAttribute('aria-valuetext', '100%')
     await layout.getByRole('radio', { name: '居中', exact: true }).click()
     await expect(cast).toHaveAttribute('data-layout', 'center')
     for (const projectId of [book.projectId, secondBook.projectId]) {
@@ -82,12 +126,16 @@ for (const theme of ['dark', 'light']) {
       expect(settings.user.interactive_stage_character_layout).toBe('center')
       expect(settings.effective.interactive_stage_character_layout).toBe('center')
       expect(settings.workspace.interactive_stage_character_layout).toBeUndefined()
+      expect(settings.user.interactive_stage_character_size).toBe(1)
+      expect(settings.effective.interactive_stage_character_size).toBe(1)
+      expect(settings.workspace.interactive_stage_character_size).toBeUndefined()
     }
     if (theme === 'light') {
       await request.patch('/api/settings', { data: { layer: 'user', changes: { language: 'en-US' } } })
       await page.reload()
       const englishLayout = page.getByRole('group', { name: 'Character layout', exact: true })
       await expect(englishLayout.getByRole('radio', { name: 'Center', exact: true })).toBeChecked()
+      await expect(page.getByRole('slider', { name: 'Character size', exact: true })).toHaveAttribute('aria-valuetext', '100%')
       await englishLayout.scrollIntoViewIfNeeded()
       await page.screenshot({ path: test.info().outputPath('character-controls-english.png') })
     }

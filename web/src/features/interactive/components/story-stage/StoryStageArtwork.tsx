@@ -16,12 +16,13 @@ interface StoryStageArtworkProps {
   settings?: StoryPresentationSettings
   textHidden: boolean
   characterLayout?: StageCharacterLayout
+  characterSize?: number
   scrimOpacity: number
 }
 
 // Key this component by project/story/branch. Only an immediate continuation at
 // the live head may retain a previously loaded image while its replacement loads.
-export function StoryStageArtwork({ projectId, turn, previousTurnId, latest, settings, textHidden, scrimOpacity, characterLayout = 'center' }: StoryStageArtworkProps) {
+export function StoryStageArtwork({ projectId, turn, previousTurnId, latest, settings, textHidden, scrimOpacity, characterLayout = 'center', characterSize = 0.7 }: StoryStageArtworkProps) {
   const scene = `${turn?.id || ''}:${turn?.version_idx ?? 0}`
   const [continuity, setContinuity] = useState({ scene, turnId: turn?.id, latest, epoch: 0 })
   if (continuity.scene !== scene || continuity.latest !== latest) {
@@ -37,14 +38,20 @@ export function StoryStageArtwork({ projectId, turn, previousTurnId, latest, set
   return (
     <div data-testid="story-stage-artwork" className="nova-story-artwork pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
       {background && <StageImage fallbackKey={`${continuity.epoch}:${backgroundSlot}`} projectId={projectId} material={background} layer="background" />}
-      <div className="nova-stage-characters" data-layout={characterLayout} data-single={characters.length === 1 || undefined}>
+      <div className="nova-stage-characters" data-layout={characterLayout} style={{ '--character-height': `${characterSize * 100}%` } as CSSProperties}>
         {characters.map((character, index) => {
           // Wide stages use stable list positions; narrow stages retain cast order.
           const side = characterLayout === 'sides' ? (characters.length === 1 || index % 2 === 1 ? 'right' : 'left') : characterLayout
-          const count = characterLayout === 'sides' ? Math.ceil(characters.length / 2) : characters.length
+          const count = characterLayout === 'sides'
+            ? (side === 'left' ? Math.ceil(characters.length / 2) : Math.max(1, Math.floor(characters.length / 2)))
+            : characters.length
+          const sideIndex = characterLayout === 'sides' ? Math.floor(index / 2) : index
           return (
             <div key={character.item_id} className="nova-stage-character" data-side={side}
-              style={{ '--side-count': count, '--side-index': characterLayout === 'sides' ? Math.floor(index / 2) : index } as CSSProperties}>
+              style={{
+                '--cast-position': characters.length === 1 ? 0.5 : index / (characters.length - 1),
+                '--side-position': count === 1 ? (side === 'right' ? 1 : 0) : sideIndex / (count - 1),
+              } as CSSProperties}>
               <StageImage fallbackKey={String(continuity.epoch)} projectId={projectId} material={character} layer="character" />
             </div>
           )
@@ -82,5 +89,5 @@ function StageImage({ projectId, material, layer, fallbackKey }: { projectId: st
   const className = 'absolute inset-0 h-full w-full animate-in fade-in duration-200 motion-reduce:animate-none'
   return layer === 'background'
     ? <CoverImage data-stage-layer={layer} src={loaded.src} alt={loaded.name} focus={loaded.src === src ? material.focus : loaded.focus} draggable={false} className={className} />
-    : <img data-stage-layer={layer} src={loaded.src} alt={loaded.name} draggable={false} className={`${className} object-contain object-bottom`} />
+    : <img data-stage-layer={layer} src={loaded.src} alt={loaded.name} draggable={false} className="h-full w-auto max-w-full object-contain object-bottom animate-in fade-in duration-200 motion-reduce:animate-none" />
 }

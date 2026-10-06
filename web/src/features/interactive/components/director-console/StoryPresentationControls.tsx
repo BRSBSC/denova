@@ -5,7 +5,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import type { StageCharacterLayout } from '@/features/settings/types'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
-import { Field, FieldDescription, FieldTitle } from '@/components/ui/field'
+import { Field, FieldTitle } from '@/components/ui/field'
 import { patchProjectSettings, patchSettings } from '@/features/settings/api'
 import { toast } from '@/lib/toast'
 import { visibleStoryPresentation } from '../../presentation'
@@ -26,7 +26,7 @@ interface StoryPresentationControlsProps {
 
 export function StoryPresentationControls({ projectId, value, disabled, onChange, currentTurn, onBackgroundChange, backgroundDisabled = false }: StoryPresentationControlsProps) {
   const { t } = useTranslation()
-  const { scrimOpacity, textMaxWidth, characterLayout } = useStagePreferences(projectId || '')
+  const { scrimOpacity, textMaxWidth, characterLayout, characterSize } = useStagePreferences(projectId || '')
   const [savingLayout, setSavingLayout] = useState(false)
   const saveLayout = async (layout: StageCharacterLayout) => {
     setSavingLayout(true)
@@ -44,11 +44,6 @@ export function StoryPresentationControls({ projectId, value, disabled, onChange
   }
   const [widthDraft, setWidthDraft] = useState<number>()
   const [savingWidth, setSavingWidth] = useState(false)
-  const [draft, setDraft] = useState<number>()
-  const latestEdit = useRef({ value: scrimOpacity, version: 0 })
-  const saveQueue = useRef(Promise.resolve())
-  const labelId = useId()
-  const descriptionId = useId()
   const [savingBackground, setSavingBackground] = useState(false)
   const changeCurrentBackground = async (background?: PresentationMaterial) => {
     if (!currentTurn || !onBackgroundChange) return
@@ -63,7 +58,6 @@ export function StoryPresentationControls({ projectId, value, disabled, onChange
     }
   }
   const settings = { background: true, characters: true, ...value }
-  const opacity = draft ?? scrimOpacity
   const saveTextMaxWidth = async (value: number) => {
     setWidthDraft(value)
     setSavingWidth(true)
@@ -81,34 +75,6 @@ export function StoryPresentationControls({ projectId, value, disabled, onChange
       setSavingWidth(false)
     }
   }
-  const changeOpacity = (value: number) => {
-    // Keyboard input may report the commit before the matching value change.
-    if (latestEdit.current.value !== value) {
-      latestEdit.current = { value, version: latestEdit.current.version + 1 }
-    }
-    setDraft(value)
-  }
-  const saveOpacity = (value: number) => {
-    changeOpacity(value)
-    const version = latestEdit.current.version
-    // Serialize committed values without blocking input or dropping them on unmount.
-    saveQueue.current = saveQueue.current.then(async () => {
-      try {
-        const changes = { interactive_stage_scrim_opacity: value }
-        // Prime the same snapshot that useStagePreferences observes before releasing the draft.
-        const saved = projectId
-          ? await patchProjectSettings(projectId, 'user', changes)
-          : await patchSettings('user', changes)
-        if (version === latestEdit.current.version) {
-          setDraft(projectId ? undefined : saved.effective.interactive_stage_scrim_opacity ?? value)
-        }
-      } catch (error) {
-        console.warn('[story-presentation] failed to save reading scrim opacity', error)
-        toast.error(t('storyStage.presentation.saveFailed'))
-        if (version === latestEdit.current.version) setDraft(undefined)
-      }
-    })
-  }
   return (
     <ControlSection icon={<Images className="size-4" />} title={t('storyStage.presentation.title')}>
       <StoryBackgroundSelect
@@ -120,10 +86,10 @@ export function StoryPresentationControls({ projectId, value, disabled, onChange
           else onChange({ ...settings, default_background: background })
         }}
       />
-      <TuningRow title={t('storyStage.presentation.background')} description={t('storyStage.presentation.backgroundHelp')}>
+      <TuningRow title={t('storyStage.presentation.background')}>
         <Switch aria-label={t('storyStage.presentation.background')} checked={settings.background} disabled={disabled} onCheckedChange={background => onChange({ ...settings, background })} />
       </TuningRow>
-      <TuningRow title={t('storyStage.presentation.characters')} description={t('storyStage.presentation.charactersHelp')}>
+      <TuningRow title={t('storyStage.presentation.characters')}>
         <Switch aria-label={t('storyStage.presentation.characters')} checked={settings.characters} disabled={disabled} onCheckedChange={characters => onChange({ ...settings, characters })} />
       </TuningRow>
       <Field className="director-control-row min-w-0 gap-2 px-2.5 py-2">
@@ -136,19 +102,65 @@ export function StoryPresentationControls({ projectId, value, disabled, onChange
             <ToggleGroupItem key={layout} value={layout}>{t(`storyStage.presentation.layout.${layout}`)}</ToggleGroupItem>
           ))}
         </ToggleGroup>
-        <FieldDescription>{t('storyStage.presentation.layoutHelp')}</FieldDescription>
       </Field>
-      <TuningRow title={t('storyStage.presentation.textMaxWidth')} description={t('storyStage.presentation.textMaxWidthHelp')}>
+      <StageDisplaySlider projectId={projectId} setting="interactive_stage_character_size" label={t('storyStage.presentation.characterSize')} value={characterSize} min={0.4} />
+      <TuningRow title={t('storyStage.presentation.textMaxWidth')}>
         <NumberSettingInput label={t('storyStage.presentation.textMaxWidth')} value={widthDraft ?? textMaxWidth} min={480} max={1600} disabled={savingWidth} onCommit={value => void saveTextMaxWidth(value)} />
       </TuningRow>
-      <Field className="director-control-row min-w-0 gap-2 px-2.5 py-2">
-        <div className="flex min-w-0 items-start justify-between gap-2">
-          <FieldTitle id={labelId} className="min-w-0 text-xs">{t('storyStage.presentation.scrim')}</FieldTitle>
-          <span className="w-9 shrink-0 text-right text-xs tabular-nums" aria-hidden="true">{Math.round(opacity * 100)}%</span>
-        </div>
-        <Slider aria-labelledby={labelId} aria-describedby={descriptionId} aria-valuetext={`${Math.round(opacity * 100)}%`} min={0} max={1} step={0.01} value={[opacity]} className="min-h-5" onValueChange={([value]) => changeOpacity(value)} onValueCommit={([value]) => saveOpacity(value)} />
-        <FieldDescription id={descriptionId} className="text-[10px] leading-4 text-wrap!">{t('storyStage.presentation.scrimHelp')}</FieldDescription>
-      </Field>
+      <StageDisplaySlider projectId={projectId} setting="interactive_stage_scrim_opacity" label={t('storyStage.presentation.scrim')} value={scrimOpacity} min={0} />
     </ControlSection>
+  )
+}
+
+// Both controls save user display preferences; they never change story state.
+function StageDisplaySlider({ projectId, setting, label, value, min }: {
+  projectId?: string
+  setting: 'interactive_stage_character_size' | 'interactive_stage_scrim_opacity'
+  label: string
+  value: number
+  min: number
+}) {
+  const { t } = useTranslation()
+  const labelId = useId()
+  const [draft, setDraft] = useState<number>()
+  const latestEdit = useRef({ value, version: 0 })
+  const saveQueue = useRef(Promise.resolve())
+  const change = (next: number) => {
+    // Keyboard input may report the commit before the matching value change.
+    if (latestEdit.current.value !== next) {
+      latestEdit.current = { value: next, version: latestEdit.current.version + 1 }
+    }
+    setDraft(next)
+  }
+  const save = (next: number) => {
+    change(next)
+    const version = latestEdit.current.version
+    // Serialize saves and retain newer edits when an older response arrives.
+    saveQueue.current = saveQueue.current.then(async () => {
+      try {
+        const changes = { [setting]: next }
+        const saved = projectId
+          ? await patchProjectSettings(projectId, 'user', changes)
+          : await patchSettings('user', changes)
+        console.info('[story-presentation] user display preference saved', { setting, value: next })
+        if (version === latestEdit.current.version) {
+          setDraft(projectId ? undefined : saved.effective[setting] ?? next)
+        }
+      } catch (error) {
+        console.warn('[story-presentation] failed to save user display preference', { setting, error })
+        toast.error(t('storyStage.presentation.saveFailed'))
+        if (version === latestEdit.current.version) setDraft(undefined)
+      }
+    })
+  }
+  const current = draft ?? value
+  return (
+    <Field className="director-control-row min-w-0 gap-2 px-2.5 py-2">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <FieldTitle id={labelId} className="min-w-0 text-xs">{label}</FieldTitle>
+        <span className="w-9 shrink-0 text-right text-xs tabular-nums" aria-hidden="true">{Math.round(current * 100)}%</span>
+      </div>
+      <Slider aria-labelledby={labelId} aria-valuetext={`${Math.round(current * 100)}%`} min={min} max={1} step={0.01} value={[current]} className="min-h-5" onValueChange={([next]) => change(next)} onValueCommit={([next]) => save(next)} />
+    </Field>
   )
 }

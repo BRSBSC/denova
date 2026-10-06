@@ -19,7 +19,6 @@ export function StoryBackgroundSelect({ projectId, value, disabled, onChange }: 
 }) {
   const { t } = useTranslation()
   const title = t('storyStage.presentation.currentBackground')
-  const description = t('storyStage.presentation.currentBackgroundHelp')
   const [open, setOpen] = useState(false)
   const [focusOpen, setFocusOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -54,7 +53,7 @@ export function StoryBackgroundSelect({ projectId, value, disabled, onChange }: 
   }
   return (
     <>
-      <TuningRow title={title} description={description}>
+      <TuningRow title={title}>
         <Button variant="outline" size="sm" disabled={disabled || !projectId} onClick={() => { setSearch(''); setOpen(true) }} aria-label={title} title={value?.name} className="max-w-40 min-w-0">
           <span className="truncate">{value?.name || t('storyStage.presentation.noBackground')}</span>
         </Button>

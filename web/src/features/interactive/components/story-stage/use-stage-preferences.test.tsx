@@ -51,7 +51,7 @@ describe('useStagePreferences', () => {
     })
 
     await waitFor(() => expect(result.current).toEqual({
-      lineHeight: 2, scrimOpacity: 0.6, textMaxWidth: 1000, characterLayout: 'sides',
+      lineHeight: 2, scrimOpacity: 0.6, textMaxWidth: 1000, characterLayout: 'sides', characterSize: 0.7,
     }))
     expect(settingsMock.fetchProjectSettings).toHaveBeenCalledExactlyOnceWith('project-1')
     expect(settingsMock.fetchSettings).not.toHaveBeenCalled()
@@ -62,7 +62,7 @@ describe('useStagePreferences', () => {
     rerender({ projectId: '' })
 
     await waitFor(() => expect(result.current).toEqual({
-      lineHeight: 1.5, scrimOpacity: 0.4, textMaxWidth: 800, characterLayout: 'left',
+      lineHeight: 1.5, scrimOpacity: 0.4, textMaxWidth: 800, characterLayout: 'left', characterSize: 0.7,
     }))
     expect(settingsMock.fetchSettings).toHaveBeenCalledTimes(1)
     expect(settingsMock.fetchProjectSettings).toHaveBeenCalledTimes(1)
