@@ -2,6 +2,7 @@ package sse
 
 import (
 	"testing"
+	"time"
 
 	novaApp "denova/internal/app"
 	apptask "denova/internal/app/task"
@@ -35,6 +36,34 @@ func TestCoalesceTaskEventsKeepsDifferentSourcesSeparate(t *testing.T) {
 
 	if coalesced := coalesceTaskEvents(events); len(coalesced) != 2 {
 		t.Fatalf("different display sources were merged: %#v", coalesced)
+	}
+}
+
+func TestWriteCoalescedTaskEventStreamBatchesProviderDeltasToRenderCadence(t *testing.T) {
+	events := make(chan apptask.Event)
+	go func() {
+		defer close(events)
+		for index, text := range []string{"一", "二", "三", "四", "五", "六"} {
+			events <- apptask.Event{Cursor: uint64(index + 1), Event: novaApp.AgentEvent{Type: "thinking", Data: map[string]any{"content": text, "run_id": "run-1"}}}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
+
+	var written []apptask.Event
+	if _, err := writeCoalescedTaskEventStream(events, func(event apptask.Event) error {
+		written = append(written, event)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	content := ""
+	for _, event := range written {
+		content += event.Event.DataString("content")
+	}
+	// Six provider deltas span roughly 120 ms. The browser repaints streamed text
+	// every 80 ms, so more than a few frames only adds per-frame client work.
+	if content != "一二三四五六" || len(written) > 3 || written[len(written)-1].Cursor != 6 {
+		t.Fatalf("written stream = %#v, want exact text in at most three frames", written)
 	}
 }
 

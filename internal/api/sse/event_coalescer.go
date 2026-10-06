@@ -10,8 +10,10 @@ import (
 
 // This is a transport flush window, not an Agent timeout. It bounds display
 // latency while collapsing provider character deltas before repeated SSE
-// metadata reaches the browser.
-const taskEventCoalesceWindow = 8 * time.Millisecond
+// metadata reaches the browser. It matches the web client's streaming render
+// interval: the client does work proportional to the whole live message for
+// every frame, so frames it cannot paint only cost main-thread time.
+const taskEventCoalesceWindow = 80 * time.Millisecond
 
 func coalesceTaskEvents(events []apptask.Event) []apptask.Event {
 	if len(events) < 2 {
