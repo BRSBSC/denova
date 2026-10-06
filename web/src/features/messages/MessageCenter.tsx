@@ -243,7 +243,7 @@ export function MessageCenterButton({ className = '', showLabel = false, unreadC
                       setOpen(false)
                     }}><ArrowUpRight />{t(activeItem.action_required ? 'messages.openAutomationAction' : 'messages.openAutomation')}</Button>
                   )}
-                  {activeItem.type === 'changelog' && <div className="mb-5"><GitHubStarPrompt /><DonationPrompt /></div>}
+                  {activeItem.type === 'changelog' && <div className="mb-5"><GitHubStarPrompt /></div>}
                   <MarkdownRenderer content={activeItem.body} />
                 </article>
               ) : <Empty className="h-full"><EmptyHeader><EmptyMedia variant="icon"><Bell /></EmptyMedia><EmptyTitle>{t('messages.selectEmpty')}</EmptyTitle></EmptyHeader></Empty>}
@@ -251,27 +251,6 @@ export function MessageCenterButton({ className = '', showLabel = false, unreadC
           </div>
         </SheetContent>
     </Sheet>
-  )
-}
-
-function DonationPrompt() {
-  const { t } = useTranslation()
-  return (
-    <section
-      className="mb-4 flex flex-col gap-3 rounded-[var(--nova-radius)] border border-[var(--nova-border)] bg-[color-mix(in_srgb,var(--nova-surface-2)_88%,transparent)] p-3 text-xs leading-5 text-[var(--nova-text-muted)] shadow-sm backdrop-blur sm:flex-row sm:items-center sm:justify-between"
-      aria-label={t('messages.donation.title')}
-    >
-      <div className="min-w-0">
-        <div className="text-sm font-medium text-[var(--nova-text)]">{t('messages.donation.title')}</div>
-        <p className="m-0 mt-1">{t('messages.donation.description')}</p>
-      </div>
-      <img
-        src="/donate.png"
-        alt={t('messages.donation.alt')}
-        loading="lazy"
-        className="h-auto max-h-24 w-auto max-w-[120px] shrink-0 self-center rounded-md border border-[var(--nova-border-soft)] bg-white p-1 sm:max-h-32"
-      />
-    </section>
   )
 }
 

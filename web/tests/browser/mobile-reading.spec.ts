@@ -61,10 +61,6 @@ for (const theme of ['dark', 'light']) {
     const contentTop = (await inbox.getByRole('heading', { name: '更新正文', exact: true }).boundingBox())!.y
     const supportTop = (await inbox.getByRole('region', { name: '给 Denova 点个 Star', exact: true }).boundingBox())!.y
     expect(supportTop).toBeLessThan(contentTop)
-    const donation = inbox.locator('img[src="/donate.png"]')
-    await expect(donation).toBeVisible()
-    const donationBox = (await donation.boundingBox())!
-    expect(donationBox.y + donationBox.height).toBeLessThan(contentTop)
     expect(await inbox.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     await page.screenshot({ path: test.info().outputPath(`inbox-detail-${theme}.png`) })
     // Desktop keeps side-by-side reading; the navigation shell changes at this breakpoint.
