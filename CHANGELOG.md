@@ -4,13 +4,30 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix6）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix7）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix6) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix7) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
 ## [Unreleased]
+
+## [v0.5.1fix7] - 2026-10-06
+
+### Brief / 简要说明
+
+#### 中文
+
+- 修复单轮运行很长时对话页面越来越卡直至无法操作的问题。
+
+#### English
+
+- Fix conversation pages slowing down until unusable during a very long single run.
+
+### Fixed / 修复
+
+- 修复单轮运行很长（大量思考与工具调用）时，写作与工作台对话页面越来越卡直至无法操作的问题；刷新页面也不再回到卡顿状态。
+- Fix the Writing and workbench conversation pages slowing down until unusable during a very long single run with heavy reasoning and many tool calls; reloading the page no longer returns to the stalled state.
 
 ## [v0.5.1fix6] - 2026-10-05
 

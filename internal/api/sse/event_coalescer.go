@@ -4,14 +4,17 @@ import (
 	"reflect"
 	"time"
 
+	agentrun "denova/internal/agents/run"
 	novaApp "denova/internal/app"
 	apptask "denova/internal/app/task"
 )
 
 // This is a transport flush window, not an Agent timeout. It bounds display
 // latency while collapsing provider character deltas before repeated SSE
-// metadata reaches the browser.
-const taskEventCoalesceWindow = 8 * time.Millisecond
+// metadata reaches the browser. It matches the web client's streaming render
+// interval: the client does work proportional to the whole live message for
+// every frame, so frames it cannot paint only cost main-thread time.
+const taskEventCoalesceWindow = 80 * time.Millisecond
 
 func coalesceTaskEvents(events []apptask.Event) []apptask.Event {
 	if len(events) < 2 {
@@ -46,10 +49,18 @@ func mergeTaskEvents(left, right apptask.Event) (apptask.Event, bool) {
 	if !leftOK || !rightOK {
 		return apptask.Event{}, false
 	}
+	// A later delta of the same segment only starts further in; the merged
+	// frame keeps the position of its first character.
+	offset, hasOffset := leftData[agentrun.DisplaySegmentOffsetKey]
+	delete(leftData, agentrun.DisplaySegmentOffsetKey)
+	delete(rightData, agentrun.DisplaySegmentOffsetKey)
 	delete(leftData, field)
 	delete(rightData, field)
 	if !reflect.DeepEqual(leftData, rightData) {
 		return apptask.Event{}, false
+	}
+	if hasOffset {
+		leftData[agentrun.DisplaySegmentOffsetKey] = offset
 	}
 	leftData[field] = leftText + rightText
 	return apptask.Event{

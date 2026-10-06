@@ -88,6 +88,8 @@ type displayTextSegment struct {
 	id        string
 	meta      agentEventMetadata
 	persisted bool
+	// utf16Units is the segment length in the web client's string unit.
+	utf16Units int
 }
 
 type displaySourceRecorder struct {
@@ -140,6 +142,7 @@ func (r *displayEventRecorder) Record(ev agentrun.Event) {
 			source.thinking.id = r.nextTextSegmentID(meta, "thinking")
 		}
 		setEventDataString(ev.Data, displaySegmentIDEventKey, source.thinking.id)
+		r.stampSegmentOffset(ev.Data, &source.thinking, content, true)
 		source.thinking.meta = meta
 		source.thinking.WriteString(content)
 		if strings.TrimSpace(source.thinking.String()) == "" {
@@ -176,6 +179,7 @@ func (r *displayEventRecorder) Record(ev agentrun.Event) {
 			}
 		}
 		setEventDataString(ev.Data, displaySegmentIDEventKey, source.assistant.id)
+		r.stampSegmentOffset(ev.Data, &source.assistant, content, !r.suppressRootAssistantSegments || meta.SubAgent)
 		if !meta.SubAgent {
 			setEventDataString(ev.Data, displayPhaseEventKey, session.DisplayPhaseCandidate)
 		}
@@ -580,6 +584,23 @@ func (r *displayEventRecorder) finalizeRootAssistantSegments(terminalPhase strin
 
 func resetAssistantSegment(source *displaySourceRecorder) {
 	source.assistant = displayTextSegment{}
+}
+
+// stampSegmentOffset marks where this delta starts inside its segment and then
+// advances the segment length. Only durable segments are stamped: the offset
+// promises that canonical history already holds everything before it.
+func (r *displayEventRecorder) stampSegmentOffset(data any, segment *displayTextSegment, content string, durable bool) {
+	if _, appends := r.appender.(displayEventContentAppender); appends && durable {
+		if typed, ok := data.(map[string]any); ok {
+			typed[agentrun.DisplaySegmentOffsetKey] = segment.utf16Units
+		}
+	}
+	for _, char := range content {
+		if char > 0xFFFF {
+			segment.utf16Units++
+		}
+		segment.utf16Units++
+	}
 }
 
 func (r *displayEventRecorder) nextTextSegmentID(meta agentEventMetadata, role string) string {

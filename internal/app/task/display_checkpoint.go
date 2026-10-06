@@ -269,7 +269,9 @@ func taskDisplayDataMap(value any) (map[string]any, bool) {
 func taskDisplayMergeIdentity(data map[string]any, contentField string) string {
 	identity := make(map[string]any, len(data))
 	for key, value := range data {
-		if key != contentField {
+		// The segment offset says where a delta starts, not what it belongs to:
+		// the merged event keeps the first delta's offset.
+		if key != contentField && key != agentrun.DisplaySegmentOffsetKey {
 			identity[key] = value
 		}
 	}

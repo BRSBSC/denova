@@ -1376,6 +1376,96 @@ describe('useAgentChat', () => {
     await waitFor(() => expect(result.current.isStreaming).toBe(false))
   })
 
+  it('silently re-anchors an over-budget live stream onto canonical history', async () => {
+    chatMock.status = 'streaming'
+    const canonicalMessages = [
+      {
+        id: 'history-user',
+        role: 'user' as const,
+        parts: [{ type: 'text' as const, text: '继续' }],
+      },
+    ]
+    vi.mocked(getMessagesPage).mockResolvedValue({
+      messages: canonicalMessages,
+      nextBefore: '0',
+      hasMore: false,
+      total: 1,
+    })
+    const { result, rerender } = renderHook(() => useAgentChat())
+    const transport = (chatMock.options as { transport: AgentChatTransport }).transport
+    const setTarget = vi.spyOn(transport, 'setActiveStreamTarget')
+    vi.mocked(getMessagesPage).mockClear()
+    chatMock.setMessages.mockClear()
+
+    act(() => {
+      chatMock.options?.onData?.({
+        type: 'data-agent-activity',
+        data: {
+          event: 'task_rehydrate_required',
+          code: 'agent_stream.rehydrate_required',
+          task_id: 'task-budget-90',
+          cursor: 90,
+          settled: false,
+          lossless: true,
+        },
+      })
+      chatMock.status = 'ready'
+      rerender()
+    })
+
+    await waitFor(() => expect(chatMock.resumeStream).toHaveBeenCalledTimes(1))
+    expect(setTarget).toHaveBeenCalledWith('task-budget-90', 90, { session_id: 'session-test' })
+    expect(vi.mocked(getMessagesPage).mock.invocationCallOrder[0]).toBeLessThan(chatMock.resumeStream.mock.invocationCallOrder[0])
+    expect(result.current.isStreaming).toBe(true)
+    const restored = chatMock.setMessages.mock.calls.reduce<Array<{ parts?: Array<{ type?: string }> }>>(
+      (messages, [update]) => (typeof update === 'function' ? update(messages) : update),
+      [],
+    )
+    // Nothing was omitted at an idle boundary, so no omission notice appears.
+    expect(restored.flatMap((message) => message.parts ?? []).some((part) => part.type === 'data-agent-system')).toBe(false)
+    expect(toastMock.error).not.toHaveBeenCalled()
+  })
+
+  it('resumes after the server cursor when an attach is answered with a re-anchor at once', async () => {
+    vi.mocked(getMessagesPage).mockResolvedValue({ messages: [], nextBefore: '0', hasMore: false, total: 0 })
+    vi.mocked(getActiveChatTask).mockResolvedValue({
+      active: true,
+      task_id: 'task-reload-152',
+      active_operation_id: 'operation-152',
+      queue: [],
+    })
+    // The attach made on page load stays unsettled while its only content, the
+    // re-anchor request, is already being handled.
+    let settleAttach: () => void = () => undefined
+    chatMock.resumeStream.mockImplementationOnce(() => new Promise<void>((resolve) => { settleAttach = resolve }))
+    const { result, rerender } = renderHook(() => useAgentChat())
+    const transport = (chatMock.options as { transport: AgentChatTransport }).transport
+    const setTarget = vi.spyOn(transport, 'setActiveStreamTarget')
+    await act(async () => result.current.resumeActiveChat())
+    await waitFor(() => expect(chatMock.resumeStream).toHaveBeenCalledTimes(1))
+
+    act(() => {
+      chatMock.options?.onData?.({
+        type: 'data-agent-activity',
+        data: {
+          event: 'task_rehydrate_required',
+          code: 'agent_stream.rehydrate_required',
+          task_id: 'task-reload-152',
+          cursor: 152,
+          settled: false,
+          lossless: true,
+        },
+      })
+      rerender()
+    })
+    await act(async () => settleAttach())
+
+    // The request must open its own connection instead of counting the
+    // cursor-less attach for the same Task as its resume.
+    await waitFor(() => expect(chatMock.resumeStream).toHaveBeenCalledTimes(2))
+    expect(setTarget).toHaveBeenCalledWith('task-reload-152', 152, { session_id: 'session-test' })
+  })
+
   it.each([
     {
       name: 'error',

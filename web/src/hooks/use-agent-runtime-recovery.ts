@@ -9,6 +9,9 @@ export interface WritingDisplayRehydrateRequest {
   taskID: string
   cursor: number
   settled: boolean
+  // The server ended an over-budget connection at an idle boundary: canonical
+  // history already holds everything before `cursor`, so nothing is omitted.
+  lossless: boolean
   status?: WritingTaskStatus
   terminalReason?: string
   terminalReasonTruncated?: boolean
@@ -67,6 +70,7 @@ export function useWritingAgentRuntimeRecovery({
   const displayRehydrateRef = useRef<WritingDisplayRehydrateRequest | null>(null)
   const displayRehydrateCompletedSignalRef = useRef(0)
   const displayRehydrateInFlightRef = useRef(false)
+  const displayRehydrateResumedSignalRef = useRef(0)
   const displayOmissionActiveRef = useRef(false)
   const wasStreamingRef = useRef(false)
   const transportResponseStreaming = transportStatus === 'streaming'
@@ -116,8 +120,10 @@ export function useWritingAgentRuntimeRecovery({
   }, [])
 
   const attachDisplayStream = useCallback(
-    async (failureContext: string, sessionID: string, taskID: string, beforeResume?: () => void): Promise<boolean> => {
-      const key = `${sessionID}:${taskID}`
+    async (failureContext: string, sessionID: string, taskID: string, beforeResume?: () => void, resumeCursor = 0): Promise<boolean> => {
+      // A resume after a server cursor is a different attachment from a plain
+      // attach of the same Task: it must wait for that one and then connect.
+      const key = `${sessionID}:${taskID}:${resumeCursor}`
       // resumeStream owns one AI SDK response until it settles. Repeated
       // inspections may arrive before React reports streaming; share that
       // attachment instead of racing two readers on the same Chat instance.
@@ -266,7 +272,7 @@ export function useWritingAgentRuntimeRecovery({
     wasStreamingRef.current = true
     retryNeededRef.current = false
     setRecoveryPending(true)
-    if (!request.settled) displayOmissionActiveRef.current = true
+    if (!request.settled && !request.lossless) displayOmissionActiveRef.current = true
 
     const finish = (completed: boolean) => {
       displayRehydrateInFlightRef.current = false
@@ -277,6 +283,9 @@ export function useWritingAgentRuntimeRecovery({
       }
       displayRehydrateCompletedSignalRef.current = request.signal
       if (displayRehydrateRef.current?.signal === request.signal) displayRehydrateRef.current = null
+      // A newer request arrived while this one's response was open (the server
+      // re-anchored again). Nothing else re-runs the effect once it settles.
+      if (displayRehydrateRef.current) setRecoveryAttempt((current) => current + 1)
     }
 
     if (request.settled) {
@@ -309,7 +318,8 @@ export function useWritingAgentRuntimeRecovery({
     const sessionID = activeSessionIdRef.current.trim()
     void attachDisplayStream('failed to canonically rehydrate and resume the same Writing Task', sessionID, request.taskID, () => {
       transport.setActiveStreamTarget(request.taskID, request.cursor, { session_id: sessionID })
-    }).then(finish)
+      displayRehydrateResumedSignalRef.current = request.signal
+    }, request.cursor).then(finish)
   }, [
     activeSessionId,
     attachDisplayStream,
@@ -370,7 +380,10 @@ export function useWritingAgentRuntimeRecovery({
   // response stream starts, the server has accepted the Run and `/active` can
   // bind operation-scoped controls to its exact identity.
   useEffect(() => {
-    if (displayRehydrateRef.current) return
+    // A rehydrate request owns the transition from its old connection to the
+    // resumed one. Once that response is requested it is an ordinary stream:
+    // its status changes must clear the pending state and settle the Run.
+    if (displayRehydrateRef.current && displayRehydrateRef.current.signal !== displayRehydrateResumedSignalRef.current) return
     if (transportStatus === 'submitted') {
       immediateRetryProjectionRef.current = ''
       retryNeededRef.current = false

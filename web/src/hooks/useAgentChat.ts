@@ -139,6 +139,7 @@ export function useAgentChat(options: ChatOptions = {}) {
               taskID,
               cursor,
               settled: data.settled === true,
+              lossless: data.lossless === true,
               status: writingTaskStatus(data.status),
               terminalReason: typeof data.terminal_reason === 'string' ? data.terminal_reason.trim() : undefined,
               terminalReasonTruncated: data.terminal_reason_truncated === true,

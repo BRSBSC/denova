@@ -892,6 +892,40 @@ describe('agent-ui', () => {
     expect(messages[0].parts).toEqual([expect.objectContaining({ type: 'reasoning', text: `${base}继续补充。` })])
   })
 
+  it('joins a history segment prefix with a live part that resumes in the middle of it', () => {
+    const merge = (type: 'reasoning' | 'text', historyText: string, liveText: string, offset: number) => normalizeAgentUIMessages([
+      {
+        id: `history-${type}`,
+        role: 'assistant',
+        metadata: { run_id: 'run-1', display_segment_id: 'segment-1' },
+        parts: [{ type, text: historyText }],
+      },
+      {
+        id: 'live',
+        role: 'assistant',
+        metadata: { run_id: 'run-1' },
+        parts: [{
+          type,
+          text: liveText,
+          state: 'streaming',
+          providerMetadata: { agent: { run_id: 'run-1', display_segment_id: 'segment-1', display_segment_offset: offset } },
+        }],
+      },
+    ] as AgentUIMessage[])
+
+    for (const type of ['reasoning', 'text'] as const) {
+      // History was loaded after the resume cursor, so it already overlaps the
+      // first live characters; the offset says exactly where the live part starts.
+      const overlapped = merge(type, '前半段思考，已经落盘。后', '后半段继续流式输出。', 11)
+      expect(overlapped).toHaveLength(1)
+      expect(overlapped[0].parts).toEqual([expect.objectContaining({ type, text: '前半段思考，已经落盘。后半段继续流式输出。', state: 'streaming' })])
+      // The emoji is two UTF-16 units, the unit the server counts in.
+      expect(merge(type, 'a😀b', 'bc', 3)[0].parts[0]).toMatchObject({ text: 'a😀bc' })
+    }
+    // A part that starts at the beginning of its segment still replaces history.
+    expect(merge('reasoning', '旧', '新的完整内容', 0)[0].parts[0]).toMatchObject({ text: '新的完整内容' })
+  })
+
   it('同一 run 中内容相同但稳定 ID 不同的正文和 reasoning 保持为独立分段', () => {
     const messages = normalizeAgentUIMessages([
       {

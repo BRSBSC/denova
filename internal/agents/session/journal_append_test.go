@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -651,5 +652,31 @@ func blockSessionJournal(t *testing.T, path string) func() {
 		if err := os.Rename(backup, path); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestHistoryPageIncludesStreamedDisplayContentStillBelowTheBatchBoundary(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetOrCreate("display-stream-page")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.AppendDisplayEvent(DisplayEvent{ID: "thinking-stream", Role: "thinking", Content: "prefix "}); err != nil {
+		t.Fatal(err)
+	}
+	// A client that swaps its live message for a history page in the middle of
+	// this segment needs every character that has already been streamed.
+	if err := sess.AppendDisplayEventContent("thinking-stream", "thinking", "buffered tail"); err != nil {
+		t.Fatal(err)
+	}
+	page, err := sess.ReadHistoryPage(context.Background(), -1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Entries) != 1 || page.Entries[0].Content != "prefix buffered tail" {
+		t.Fatalf("history page = %#v, want the unflushed streamed tail included", page.Entries)
 	}
 }

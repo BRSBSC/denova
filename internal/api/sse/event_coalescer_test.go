@@ -2,7 +2,9 @@ package sse
 
 import (
 	"testing"
+	"time"
 
+	agentrun "denova/internal/agents/run"
 	novaApp "denova/internal/app"
 	apptask "denova/internal/app/task"
 )
@@ -38,6 +40,34 @@ func TestCoalesceTaskEventsKeepsDifferentSourcesSeparate(t *testing.T) {
 	}
 }
 
+func TestWriteCoalescedTaskEventStreamBatchesProviderDeltasToRenderCadence(t *testing.T) {
+	events := make(chan apptask.Event)
+	go func() {
+		defer close(events)
+		for index, text := range []string{"一", "二", "三", "四", "五", "六"} {
+			events <- apptask.Event{Cursor: uint64(index + 1), Event: novaApp.AgentEvent{Type: "thinking", Data: map[string]any{"content": text, "run_id": "run-1"}}}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
+
+	var written []apptask.Event
+	if _, err := writeCoalescedTaskEventStream(events, func(event apptask.Event) error {
+		written = append(written, event)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	content := ""
+	for _, event := range written {
+		content += event.Event.DataString("content")
+	}
+	// Six provider deltas span roughly 120 ms. The browser repaints streamed text
+	// every 80 ms, so more than a few frames only adds per-frame client work.
+	if content != "一二三四五六" || len(written) > 3 || written[len(written)-1].Cursor != 6 {
+		t.Fatalf("written stream = %#v, want exact text in at most three frames", written)
+	}
+}
+
 func TestWriteCoalescedTaskEventStreamFlushesBeforeSemanticBoundary(t *testing.T) {
 	events := make(chan apptask.Event, 4)
 	events <- apptask.Event{Cursor: 1, Event: novaApp.AgentEvent{Type: "thinking", Data: map[string]any{"content": "保", "run_id": "run-1"}}}
@@ -58,5 +88,21 @@ func TestWriteCoalescedTaskEventStreamFlushesBeforeSemanticBoundary(t *testing.T
 	}
 	if len(written) != 2 || written[0].Cursor != 2 || written[0].Event.DataString("content") != "保留" || written[1].Event.Type != "done" {
 		t.Fatalf("written stream = %#v, want exact delta before done", written)
+	}
+}
+
+func TestCoalesceTaskEventsMergesDeltasStampedWithSegmentOffsets(t *testing.T) {
+	events := []apptask.Event{
+		{Cursor: 7, Event: novaApp.AgentEvent{Type: "thinking", Data: map[string]any{"content": "逐", "run_id": "run-1", agentrun.DisplaySegmentOffsetKey: 40}}},
+		{Cursor: 8, Event: novaApp.AgentEvent{Type: "thinking", Data: map[string]any{"content": "字", "run_id": "run-1", agentrun.DisplaySegmentOffsetKey: 41}}},
+	}
+
+	coalesced := coalesceTaskEvents(events)
+	if len(coalesced) != 1 || coalesced[0].Cursor != 8 || coalesced[0].Event.DataString("content") != "逐字" {
+		t.Fatalf("coalesced events = %#v, want one frame", coalesced)
+	}
+	// The merged frame starts where its first delta started.
+	if data, _ := coalesced[0].Event.Data.(map[string]any); data[agentrun.DisplaySegmentOffsetKey] != 40 {
+		t.Fatalf("merged frame offset = %#v, want 40", coalesced[0].Event.Data)
 	}
 }

@@ -31,6 +31,9 @@ func (s *Session) ReadHistoryPage(ctx context.Context, before, limit int) (Histo
 	if limit <= 0 {
 		return HistoryPage{}, fmt.Errorf("history page limit must be positive")
 	}
+	if err := s.flushPendingDisplayContent(ctx); err != nil {
+		return HistoryPage{}, fmt.Errorf("flush streamed display content before history page: %w", err)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.refreshCanonicalTailLocked(); err != nil {

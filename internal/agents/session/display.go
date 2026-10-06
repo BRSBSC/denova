@@ -472,6 +472,46 @@ func (s *Session) FlushDisplayEventContent(id, role string) error {
 	})
 }
 
+// flushPendingDisplayContent commits every streamed display tail that is still
+// below the batch boundary. History pages are read from the journal, and a
+// client may replace its live message with such a page in the middle of a
+// segment, so the page must hold everything that has already been streamed.
+func (s *Session) flushPendingDisplayContent(ctx context.Context) error {
+	pending := func(record *historyRecord) bool {
+		return record.kind == historyTypeDisplay && record.display != nil && record.displayContentPersistedBytes < len(record.display.Content)
+	}
+	hasPending := false
+	s.mu.Lock()
+	for i := range s.records {
+		if pending(&s.records[i]) {
+			hasPending = true
+			break
+		}
+	}
+	s.mu.Unlock()
+	if !hasPending {
+		return nil
+	}
+	return s.withCanonicalMutation(ctx, "flush pending display content", func() error {
+		now := time.Now().UTC()
+		for i := range s.records {
+			record := &s.records[i]
+			if !pending(record) {
+				continue
+			}
+			if err := s.appendJournalRecordLocked(displayPatchRecord{
+				Type: historyTypeDisplayPatch, TargetRecordID: record.journalID,
+				CreatedAt: now, ContentAppend: record.display.Content[record.displayContentPersistedBytes:],
+			}); err != nil {
+				return err
+			}
+			record.displayContentPersistedBytes = len(record.display.Content)
+			advanceUpdatedAt(s, now)
+		}
+		return nil
+	})
+}
+
 func findDisplayToolRecordIndex(records []historyRecord, id, name string) int {
 	if id != "" {
 		for i := len(records) - 1; i >= 0; i-- {

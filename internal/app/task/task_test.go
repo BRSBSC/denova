@@ -517,3 +517,38 @@ func TestNewRegisteredTaskPublishesBeforeRun(t *testing.T) {
 		t.Fatal("registered a different task")
 	}
 }
+
+func TestTaskDisplayCheckpointMergesDeltasStampedWithSegmentOffsets(t *testing.T) {
+	task, err := NewDeferred(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.retainedEventLimit = 2
+	task.retainedByteLimit = 1 << 20
+	task.Emit(agentrun.Event{Type: "agent_cycle_started", Data: map[string]any{"operation_id": "operation-1", "cycle": 1}})
+	offset := 0
+	for _, fragment := range []string{"一", "段", "思考"} {
+		task.Emit(agentrun.Event{Type: "thinking", Data: map[string]any{
+			"content": fragment, "run_id": "run-1", "display_segment_id": "segment-1", agentrun.DisplaySegmentOffsetKey: offset,
+		}})
+		offset += len([]rune(fragment))
+	}
+
+	replay, subscription, err := task.SubscribeDisplayAfter(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		task.RejectStart(errors.New("test complete"))
+		for range subscription.Events() {
+		}
+	}()
+	if replay.Checkpoint == nil || len(replay.Checkpoint.Events) != 2 {
+		t.Fatalf("checkpoint = %#v, want the cycle anchor and one merged segment", replay.Checkpoint)
+	}
+	thinking, _ := taskDisplayDataMap(replay.Checkpoint.Events[1].Data)
+	// The merged event still starts where its first delta started.
+	if thinking["content"] != "一段思考" || thinking[agentrun.DisplaySegmentOffsetKey] != 0 {
+		t.Fatalf("merged checkpoint thinking = %#v", thinking)
+	}
+}
