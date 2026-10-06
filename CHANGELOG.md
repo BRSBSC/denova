@@ -46,6 +46,8 @@ Denova records only major user-visible features, important compatibility or data
 - 修复远程 ZIP 与 Skill 下载绕过代理的问题，资源下载统一遵循环境变量和系统代理设置。
 - Fix remote ZIP and Skill downloads bypassing proxies; resource downloads consistently use environment and system proxy settings.
 
+- 修复删除项目唯一会话被拒绝后，Goal 和 Agent 恢复状态仍被清除的问题。
+- Fix rejected deletion of a project's only conversation clearing its Goal and Agent recovery state.
 - 修复子 Agent 刚启动时，相同命令重试可能被误判为输入冲突的问题。
 - Fix identical command retries being rejected as input conflicts while a child Agent is starting.
 - 修复外部运行时压缩上下文期间，状态查询可能连带阻塞其他会话控制操作的问题。

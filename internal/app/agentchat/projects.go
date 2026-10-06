@@ -2,6 +2,7 @@ package agentchat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -275,6 +276,9 @@ func (service *Service) RenameSession(projectID, sessionID, title string) error 
 // DeleteSession refuses to remove a running conversation and never re-points
 // the foreground Writing Session.
 func (service *Service) DeleteSession(projectID, sessionID string) error {
+	service.admission.Lock()
+	defer service.admission.Unlock()
+	ctx := context.Background()
 	binding, err := service.ResolveBinding(Binding{ProjectID: projectID, SessionID: sessionID})
 	if err != nil {
 		return err
@@ -282,16 +286,32 @@ func (service *Service) DeleteSession(projectID, sessionID string) error {
 	if err := service.requireIdle(binding); err != nil {
 		return err
 	}
-	project, err := service.projectRuntime(context.Background(), binding.ProjectID)
+	project, err := service.projectRuntime(ctx, binding.ProjectID)
 	if err != nil {
 		return err
 	}
-	if err := project.executionRuntime.DeleteProjectSessionBindings(context.Background(), binding.ProjectID, binding.SessionID); err != nil {
+	if err := project.store.CheckDelete(binding.SessionID); err != nil {
 		return err
 	}
-	if err := project.store.Delete(binding.SessionID); err != nil {
+	roots, err := project.executionRuntime.ProjectSessionBindings(ctx, binding.ProjectID, binding.SessionID)
+	if err != nil {
 		return err
+	}
+	if err := project.executionRuntime.CloseProjectSessionBindings(ctx, binding.ProjectID, binding.SessionID); err != nil {
+		return err
+	}
+	// The product journal is the deletion commit point. Never tombstone embedded
+	// Agent state or remove children before this durable conversation is removed.
+	err = project.store.Delete(binding.SessionID)
+	if err != nil && !errors.Is(err, session.ErrDeletionCleanup) {
+		return err
+	}
+	for _, root := range roots {
+		err = errors.Join(err, project.executionRuntime.DeleteSessionChildren(ctx, root))
 	}
 	service.starts.ReleaseScope(binding.ProjectID, binding.SessionID)
+	if err != nil {
+		slog.ErrorContext(ctx, "[app/agentchat] conversation deleted with cleanup errors", "project_id", binding.ProjectID, "session_id", binding.SessionID, "error", err)
+	}
 	return nil
 }

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 
 	agentruntime "denova/internal/agents/runtime"
+	"denova/internal/agents/session"
 	"denova/internal/api/agentui"
 	"denova/internal/api/sse"
 	appsvc "denova/internal/app"
@@ -242,7 +244,15 @@ func (h *Handlers) HandleAgentChatSessionDelete(_ context.Context, c *app.Reques
 		return
 	}
 	if err := h.app.AgentChat().DeleteSession(binding.ProjectID, req.SessionID); err != nil {
-		writeError(c, consts.StatusConflict, err.Error())
+		slog.ErrorContext(context.Background(), "[agent-chat] delete conversation failed", "project_id", binding.ProjectID, "session_id", req.SessionID, "error", err)
+		switch {
+		case errors.Is(err, session.ErrOnlySession):
+			writeErrorKey(c, consts.StatusConflict, "api.session.onlySession")
+		case errors.Is(err, agentruntime.ErrOperationActive):
+			writeErrorKey(c, consts.StatusConflict, "agentRuntime.busy")
+		default:
+			writeErrorKey(c, consts.StatusConflict, "api.session.deleteFailed")
+		}
 		return
 	}
 	writeJSON(c, consts.StatusOK, map[string]any{"session_id": req.SessionID, "deleted": true})
