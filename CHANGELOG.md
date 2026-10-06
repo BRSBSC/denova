@@ -43,6 +43,9 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Fixed / 修复
 
+- 修复 Native Agent 历史压缩后被严格聊天模板以 400 错误拒绝、无法继续执行的问题。
+- Fix Native Agent continuation after history compaction being rejected with HTTP 400 by strict chat templates.
+
 - 修复长篇游戏故事刷新时的历史加载变慢：先显示近期回合，上翻或跳转时自动补取历史，执行详情按需展开，完整故事与 Agent 上下文保持保留。
 - Fixed slow history loading when refreshing long Game stories: show recent turns first, load earlier history on scroll or navigation, and fetch execution details on expansion while preserving the complete story and Agent context.
 

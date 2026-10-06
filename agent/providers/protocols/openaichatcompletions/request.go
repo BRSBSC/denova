@@ -68,6 +68,13 @@ func requestMessages(messages []*agent.Message, compatibility Compatibility, con
 		if message == nil {
 			return nil, fmt.Errorf("openai request message %d: nil message", index)
 		}
+		// Strict templates accept one leading system message. Merge only the
+		// initial instruction block, preserving the order of later context.
+		if message.Role == agent.System && len(result) == 1 && result[0].OfSystem != nil {
+			content := result[0].OfSystem.Content.OfString.Value + "\n\n" + message.Content
+			result[0].OfSystem.Content.OfString = sdk.String(content)
+			continue
+		}
 		mapped, err := requestMessage(message, compatibility, config, imageCount)
 		if err != nil {
 			return nil, fmt.Errorf("openai request message %d: %w", index, err)

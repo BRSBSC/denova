@@ -333,6 +333,7 @@ func TestGenerateMapsCompleteRequestAndResponse(t *testing.T) {
 	}
 	message, err := bound.Generate(context.Background(), []*agent.Message{
 		{Role: agent.System, Content: "sys", Name: "director"},
+		agent.SystemMessage("additional instructions"),
 		{Role: agent.User, Content: "hello", Name: "writer"},
 		{
 			Role: agent.Assistant,
@@ -357,7 +358,7 @@ func TestGenerateMapsCompleteRequestAndResponse(t *testing.T) {
 	}
 	wantRequest := map[string]any{
 		"messages": []any{
-			map[string]any{"role": "system", "content": "sys", "name": "director"},
+			map[string]any{"role": "system", "content": "sys\n\nadditional instructions", "name": "director"},
 			map[string]any{"role": "user", "content": "hello", "name": "writer"},
 			map[string]any{
 				"role": "assistant",

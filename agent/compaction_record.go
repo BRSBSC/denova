@@ -211,7 +211,9 @@ func (archive *historyArchive) compactionIncrementalSource(
 }
 
 func compactionCheckpointMessage(state compactionRecord, summaryLimit int) *Message {
-	return SystemMessage(renderContextFragment(ContextFragment{
+	// Historical context stays at its replacement position without becoming
+	// system instructions or changing the preceding stable cache prefix.
+	return UserMessage(renderContextFragment(ContextFragment{
 		Source: "agent.compaction", Purpose: "replace compacted conversation history",
 		Resource: state.ID, Revision: fmt.Sprintf("%d", state.Revision),
 		Stability: ContextCheckpoint, Placement: ContextCompactionCheckpoint, Content: state.Summary, HardLimit: summaryLimit,
