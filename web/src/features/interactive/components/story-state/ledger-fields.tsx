@@ -55,10 +55,12 @@ function StatFieldBody({ item }: { item: LedgerFieldItem }) {
   const field = item.field
   const value = typeof item.value === 'number' ? item.value : 0
   const min = field?.min ?? 0
-  const max = field?.max ?? 100
-  const meter = field ? resolveNumberMeter(field, value) : null
-  const signed = meter?.zeroPercent !== undefined
-  const valueLabel = !meter || signed ? formatLedgerNumber(value) : `${formatLedgerNumber(value)} / ${formatLedgerNumber(max)}`
+  const max = item.capacity ?? field?.max ?? 100
+  const meter = field ? resolveNumberMeter(field, value, item.capacity) : null
+  const signed = meter !== null && meter.tone !== 'standard'
+  const valueLabel = item.capacity !== undefined || meter && !signed
+    ? `${formatLedgerNumber(value)} / ${formatLedgerNumber(max)}`
+    : formatLedgerNumber(value)
   return (
     <div>
       <div className="mb-1 flex min-w-0 items-baseline justify-between gap-2">
@@ -83,10 +85,9 @@ function StatFieldBody({ item }: { item: LedgerFieldItem }) {
           aria-valuetext={valueLabel}
           className="relative h-1.5 overflow-hidden rounded-full bg-[var(--nova-surface-3)]"
         >
-          <span className="absolute inset-y-0 w-px bg-[var(--nova-text-faint)]" style={{ left: `${meter.zeroPercent}%` }} aria-hidden="true" />
           <span
-            className={cn('absolute inset-y-0 rounded-full transition-[left,width] duration-300 motion-reduce:transition-none', meter.tone === 'negative' ? 'bg-[var(--story-state-negative)]' : 'bg-[var(--story-state-positive)]')}
-            style={{ left: `${meter.startPercent}%`, width: `${meter.widthPercent}%` }}
+            className={cn('absolute inset-y-0 left-0 rounded-full transition-[width] duration-300 motion-reduce:transition-none', meter.tone === 'negative' ? 'bg-[var(--story-state-negative)]' : 'bg-[var(--story-state-positive)]')}
+            style={{ width: `${meter.widthPercent}%` }}
             aria-hidden="true"
           />
         </div>

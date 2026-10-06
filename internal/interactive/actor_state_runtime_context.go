@@ -188,6 +188,9 @@ func actorStateRuntimeFieldMarkdown(field ActorStateField) string {
 	if field.Default != nil {
 		fmt.Fprintf(&sb, "; default=%s", actorStateRuntimeValue(field.Default))
 	}
+	if field.MaxField != "" {
+		fmt.Fprintf(&sb, "; capacity=the same Actor's %s field (initialize both; current must not exceed capacity)", actorStateRuntimeCode(field.MaxField))
+	}
 	if description := actorStateRuntimeText(field.Description); description != "" {
 		fmt.Fprintf(&sb, "\n  Field description: %s", description)
 	}

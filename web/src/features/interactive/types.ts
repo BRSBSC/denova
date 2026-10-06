@@ -287,6 +287,8 @@ export interface ActorStateField {
   default?: unknown
   min?: number
   max?: number
+  /** Numeric capacity Field ID in the same Actor/template; mutually exclusive with max. */
+  max_field?: string
   options?: string[]
   description?: string
   update_instruction?: string

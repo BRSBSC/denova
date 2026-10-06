@@ -265,7 +265,9 @@ func (s *Store) AppendTurnWithState(storyID string, req AppendTurnWithStateReque
 		actorOps = append(actorOps, compiled.ActorOps...)
 	}
 	if turn.RuleResolution != nil {
-		ruleOps, ruleActorOps := applyRuleStateConsumptionV2(state, actorState, turn.ID, turn.RuleResolution, director.Strategy.RuleStateConsumptionMode)
+		ruleState := cloneActorStateRoot(state)
+		applyStateDeltaToProjection(ruleState, StateDelta{Ops: ops, ActorOps: actorOps})
+		ruleOps, ruleActorOps := applyRuleStateConsumptionV2(ruleState, actorState, turn.ID, turn.RuleResolution, director.Strategy.RuleStateConsumptionMode)
 		ops = append(ops, ruleOps...)
 		actorOps = append(actorOps, ruleActorOps...)
 	}
@@ -284,6 +286,9 @@ func (s *Store) AppendTurnWithState(storyID string, req AppendTurnWithStateReque
 			if err := validateActorStateOp(op); err != nil {
 				return TurnEvent{}, nil, err
 			}
+		}
+		if err := validateActorResourcesAfterOps(actorState, state, ops, actorOps); err != nil {
+			return TurnEvent{}, nil, err
 		}
 		stateDelta := newStateDeltaWithActorOps(ops, actorOps)
 		turn.StateDelta = &stateDelta
