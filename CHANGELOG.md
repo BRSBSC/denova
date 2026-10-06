@@ -43,6 +43,9 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Fixed / 修复
 
+- 修复长篇游戏故事刷新时的历史加载变慢：先显示近期回合，上翻或跳转时自动补取历史，执行详情按需展开，完整故事与 Agent 上下文保持保留。
+- Fixed slow history loading when refreshing long Game stories: show recent turns first, load earlier history on scroll or navigation, and fetch execution details on expansion while preserving the complete story and Agent context.
+
 - 修复任务中断后恢复冲突导致 Agent 界面持续卡在重连状态的问题。
 - Fix recovery conflicts leaving the Agent interface stuck reconnecting after a task is interrupted.
 - 旧任务遗留的排队指令可在空闲或新任务运行时删除，写作指令可退回编辑，不影响新任务。

@@ -111,6 +111,7 @@ const storyStage = {
   'storyStage.turnNavigator.emptyUser': 'Empty user input',
   'storyStage.turnNavigator.autonomousContinuation': 'Autonomous continuation',
   'storyStage.turnNavigator.emptyAgent': 'No story prose yet',
+  'storyStage.turnNavigator.loadTurn': 'Load this earlier turn',
   'storyStage.turnNavigator.generating': 'Generating...',
   'storyStage.history.backToLatest': 'Back to latest story',
   'storyStage.mobile.history': 'History',

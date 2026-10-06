@@ -16,9 +16,10 @@ export function buildAgentChatListItems({ views, isStreaming, activeRunId, isExe
   const groupedSubAgentIndexes = new Set(subAgentGroups.flatMap(group => group.viewIndexes))
 
   function appendProcess(key: string, processViews: AgentMessageView[], active: boolean, sourceIndex: number, showTiming: boolean, owner?: { runId: string; navigationAnchor: string }) {
-    const running = active || processViews.some(view => view.streaming || view.status === 'running')
+    const deferred = processViews.some(view => view.metadata.execution_details_deferred)
+    const running = !deferred && (active || processViews.some(view => view.streaming || view.status === 'running'))
     const disclosure = disclosures[key]
-    const expanded = disclosure?.running === running ? disclosure.expanded : running && activeTraceDisplay === 'expanded'
+    const expanded = !deferred && (disclosure?.running === running ? disclosure.expanded : running && activeTraceDisplay === 'expanded')
     const runId = owner?.runId || processViews.findLast(view => view.metadata.run_id)?.metadata.run_id || ''
     const navigationAnchor = owner?.navigationAnchor || processViews.map(agentViewNavigationAnchor).findLast(Boolean) || ''
     items.push({ kind: 'process', key, views: processViews, runId, running, expanded, showTiming, navigationAnchor })

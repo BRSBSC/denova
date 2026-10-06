@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { CheckCheck, ChevronsDownUp, ChevronsUpDown, Folder, ImagePlus, ListChecks, MoreHorizontal, Plus, Search, Sparkles, Tags, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
+import { ScrollToTopButton } from '@/components/common/ScrollToTopButton'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -90,6 +91,7 @@ export function LoreLibrary({
   ) => Promise<boolean>
 }) {
   const { t } = useTranslation()
+  const scrollRef = useRef<HTMLDivElement>(null)
   const pendingCreation = useRef<KnowledgeSection | null>(null)
   const { sections: categorySections } = useLoreCategories(projectId)
   // Category card order is shared with the directory; tag and section order are overview preferences.
@@ -189,7 +191,8 @@ export function LoreLibrary({
   }
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto" data-testid="lore-library">
+    <div className="relative h-full min-h-0">
+    <div ref={scrollRef} className="h-full min-h-0 overflow-y-auto" data-testid="lore-library">
       <div className="mx-auto flex w-full min-w-0 max-w-[1600px] flex-col gap-6 p-4 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -459,6 +462,8 @@ export function LoreLibrary({
         tone="danger"
         onConfirm={deleteSelected}
       />
+    </div>
+    <ScrollToTopButton scrollRef={scrollRef} />
     </div>
   )
 }

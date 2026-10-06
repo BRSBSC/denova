@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Layers, PanelRightClose, PanelRightOpen, Plus } from 'lucide-react'
+import { ChevronDown, ChevronsDownUp, ChevronsUpDown, Layers, PanelRightClose, PanelRightOpen, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +9,7 @@ import { CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { ConfirmDialog } from '@/components/common/ConfirmDialog'
+import { ScrollToTopButton } from '@/components/common/ScrollToTopButton'
 import { InlineErrorNotice } from '@/components/common/inline-error-notice'
 import { LoadingState } from '@/components/common/LoadingState'
 import { AutosaveStatusIndicator } from '@/components/forms/autosave-status'
@@ -183,6 +184,7 @@ export function LoreIndexDocument({ projectId, items, headerActionsTarget, onSel
         minSize={compact ? (pane === 'document' ? '100%' : '0px') : '320px'} restorationKey={compact ? 'compact' : 'wide'}
         initialExpandSize={compact ? '100%' : resolvePanelInitialSize(wideLayout, 'lore-index-editor-pane', '52%')}
       >
+      <div className="relative h-full min-h-0 min-w-0">
       <div ref={editor} className="h-full min-h-0 min-w-0 overflow-y-auto" data-testid="lore-index-editor">
         <article className="mx-auto flex w-full min-w-0 max-w-4xl flex-col gap-5 p-3 @3xl:p-4">
           {!document.valid && <InlineErrorNotice message={t('lore.index.invalid')} />}
@@ -201,7 +203,10 @@ export function LoreIndexDocument({ projectId, items, headerActionsTarget, onSel
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2"><Layers className="size-4 text-muted-foreground" /><h2 className="text-sm font-medium">{t('lore.index.groups')}</h2><Badge variant="secondary">{groups.length}</Badge></div>
               <div className="ml-auto flex items-center gap-1">
-                {groups.length > 0 && <Button variant="ghost" size="sm" onClick={() => setExpandedGroups(new Set(allExpanded ? [] : groups.map(group => group.key)))}>{t(allExpanded ? 'lore.index.collapseAll' : 'lore.index.expandAll')}</Button>}
+                {groups.length > 0 && <Button type="button" variant="outline" size="sm" onClick={() => setExpandedGroups(new Set(allExpanded ? [] : groups.map(group => group.key)))}>
+                  {allExpanded ? <ChevronsDownUp data-icon="inline-start" /> : <ChevronsUpDown data-icon="inline-start" />}
+                  {t(allExpanded ? 'lore.index.collapseAll' : 'lore.index.expandAll')}
+                </Button>}
                 <Button size="sm" aria-label={t('lore.index.addSection')} title={t('lore.index.addSection')} onClick={addGroup}><Plus data-icon="inline-start" /><span className="hidden @sm:inline">{t('lore.index.addSection')}</span></Button>
               </div>
             </div>
@@ -232,6 +237,8 @@ export function LoreIndexDocument({ projectId, items, headerActionsTarget, onSel
             </LoreIndexSortArea>
           </section>
         </article>
+      </div>
+      <ScrollToTopButton scrollRef={editor} />
       </div>
       </CollapsibleResizablePanel>
       <CollapsiblePanelSeparator

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, LoaderCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Collapsible, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { agentSubAgentSessionKey, agentViewContent, isAgentSubAgentTimelineView, type AgentExecutionTiming, type AgentMessageView } from '@/lib/agent-message-view'
@@ -9,10 +9,24 @@ export function AgentExecutionProcess({ views, running, expanded, onExpandedChan
   views: AgentMessageView[]
   running: boolean
   expanded: boolean
-  onExpandedChange: (expanded: boolean) => void
+  onExpandedChange: (expanded: boolean) => void | Promise<void>
   timing?: AgentExecutionTiming
 }) {
   const { t } = useTranslation()
+  const [loading, setLoading] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const changeExpanded = async (next: boolean) => {
+    setLoading(true)
+    setFailed(false)
+    try {
+      await onExpandedChange(next)
+    } catch (error) {
+      console.error('[agent-execution] load execution details failed', error)
+      setFailed(true)
+    } finally {
+      setLoading(false)
+    }
+  }
   const progressCount = views.filter(view => !view.metadata.subagent && view.kind === 'assistant' && agentViewContent(view).trim()).length
   const toolCount = views.filter(view => view.kind === 'tool').length
   const subAgentCount = new Set(views.filter(isAgentSubAgentTimelineView).map(agentSubAgentSessionKey)).size
@@ -25,11 +39,13 @@ export function AgentExecutionProcess({ views, running, expanded, onExpandedChan
   ].filter(Boolean).join(' · ')
   return (
     <div className="flex justify-start" data-agent-execution-process>
-      <Collapsible open={expanded} onOpenChange={onExpandedChange} className="w-full">
-        <CollapsibleTrigger type="button" aria-controls={undefined}
+      <Collapsible open={expanded} onOpenChange={next => void changeExpanded(next)} className="w-full">
+        <CollapsibleTrigger type="button" aria-controls={undefined} disabled={loading} aria-busy={loading}
           className="group flex min-w-0 flex-wrap items-center gap-1 py-1 text-left text-xs text-[var(--nova-text-muted)] transition-colors hover:text-[var(--nova-text)]">
           {running ? <span aria-hidden="true" className="size-1.5 animate-pulse rounded-full bg-[var(--nova-text-muted)]" /> : null}
           <span>{label}</span>
+          {loading ? <LoaderCircle aria-label={t('common.loading')} className="size-3 animate-spin" /> : null}
+          {failed ? <span role="alert">{t('chat.history.loadExecutionFailed')}</span> : null}
           {duration ? <><span aria-hidden="true">·</span><span className="font-mono tabular-nums">{duration}</span></> : null}
           <ChevronRight aria-hidden="true" data-agent-execution-toggle-icon
             className={`size-3 opacity-60 transition-[transform,opacity] duration-[var(--nova-motion-fast)] ease-[var(--nova-panel-motion-ease)] group-hover:opacity-100 ${expanded ? 'rotate-90' : ''}`} />

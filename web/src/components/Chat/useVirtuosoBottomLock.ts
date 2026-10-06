@@ -251,7 +251,7 @@ export function useVirtuosoBottomLock({ resetKey, resetPosition = 'end', itemCou
     updateAwayFromBottom(scroller)
   }, [cancelScheduledScroll, currentScrollerElement, resetAfterContentInteraction, updateAwayFromBottom])
 
-  const scrollToIndex = useCallback((index: number, options?: { align?: 'start' | 'center' | 'end'; behavior?: 'auto' | 'smooth' }) => {
+  const scrollToIndex = useCallback((index: number, options?: { align?: 'start' | 'center' | 'end'; behavior?: 'auto' | 'smooth'; offset?: number }) => {
     if (itemCount <= 0) return
     resetAfterContentInteraction()
     lockedRef.current = false
@@ -262,6 +262,7 @@ export function useVirtuosoBottomLock({ resetKey, resetPosition = 'end', itemCou
       index: Math.max(0, Math.min(itemCount - 1, index)),
       align: options?.align || 'start',
       behavior: options?.behavior || 'smooth',
+      offset: options?.offset,
     })
     updateAwayFromBottom()
   }, [cancelScheduledScroll, itemCount, resetAfterContentInteraction, updateAwayFromBottom])

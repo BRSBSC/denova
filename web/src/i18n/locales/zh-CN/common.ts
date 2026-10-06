@@ -47,6 +47,7 @@ const common = {
   'common.expand': '展开',
   'common.expandAll': '展开全部',
   'common.collapseAll': '收起全部',
+  'common.backToTop': '回到顶部',
   'common.reorder': '拖拽排序',
   'common.reorderNamed': '拖拽排序 {{name}}',
   'common.reorderRole': '可排序',

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -135,7 +136,17 @@ func (h *Handlers) HandleInteractiveHistory(ctx context.Context, c *app.RequestC
 	writeJSON(c, consts.StatusOK, page)
 }
 
-const defaultInteractiveHistoryPageSize = 100
+const defaultInteractiveHistoryPageSize = 10
+
+func (h *Handlers) HandleInteractiveExecutionDetails(ctx context.Context, c *app.RequestContext) {
+	details, err := h.app.InteractiveExecutionDetails(c.Param("id"), c.Query("branch"), c.Query("cursor"))
+	if err != nil {
+		slog.WarnContext(ctx, "[interactive-history] load execution details failed", "story_id", c.Param("id"), "branch_id", c.Query("branch"), "error", err)
+		writeErrorKey(c, consts.StatusBadRequest, "api.interactive.executionDetailsFailed")
+		return
+	}
+	writeJSON(c, consts.StatusOK, details)
+}
 
 func (h *Handlers) HandleInteractiveRuleResolutionReroll(ctx context.Context, c *app.RequestContext) {
 	var body interactive.RuleResolutionRerollRequest

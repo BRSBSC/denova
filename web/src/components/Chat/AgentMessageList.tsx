@@ -55,6 +55,9 @@ interface MessageListProps {
   hasEarlierMessages?: boolean
   isLoadingEarlierMessages?: boolean
   onLoadEarlierMessages?: () => void | Promise<void>
+  /** Fetch older history when the user scrolls near the top of the window. */
+  autoLoadEarlierMessages?: boolean
+  onLoadExecutionDetails?: (navigationAnchor: string) => Promise<void>
   timelineAttachments?: AgentTimelineAttachment[]
   messageStyle?: CSSProperties
   /** 开启后，同一次运行的中间正文、thinking 与工具统一折叠，终态正文保持可见。 */
@@ -127,7 +130,7 @@ export function MessageList(props: MessageListProps) {
   return <VirtualizedMessageState key={props.scrollResetKey || 'default'}><MessageListContent {...props} /></VirtualizedMessageState>
 }
 
-function MessageListContent({ projectId, attachmentScope, messages, projection, isStreaming, activeRunId, visible = true, isExecutionActive = isStreaming, activityContent, highlightDialogue = false, scrollResetKey, bottomPaddingClassName = '', bottomPaddingPx, contentClassName, afterContent, afterContentKey, hasEarlierMessages = false, isLoadingEarlierMessages = false, onLoadEarlierMessages, timelineAttachments = [], messageStyle, collapseTraceGroups = false, activeTraceDisplay = 'expanded', canMutateMessage, onEditMessage, onEditAssistantReply, onCreateBranch, onRegenerateMessage, onSwitchMessageVersion, onOpenSubAgentSession, onInsertIllustration, onReadAloud, onGenerateInteractiveImage, generatingInteractiveImageTurnId, activeSubAgentSessionKey, onApprovePlan, onContinuePlan, onExitPlanMode, onResolveAsk, turnScrollRequest, onVisibleTurnAnchorChange }: MessageListProps) {
+function MessageListContent({ projectId, attachmentScope, messages, projection, isStreaming, activeRunId, visible = true, isExecutionActive = isStreaming, activityContent, highlightDialogue = false, scrollResetKey, bottomPaddingClassName = '', bottomPaddingPx, contentClassName, afterContent, afterContentKey, hasEarlierMessages = false, isLoadingEarlierMessages = false, onLoadEarlierMessages, autoLoadEarlierMessages = false, onLoadExecutionDetails, timelineAttachments = [], messageStyle, collapseTraceGroups = false, activeTraceDisplay = 'expanded', canMutateMessage, onEditMessage, onEditAssistantReply, onCreateBranch, onRegenerateMessage, onSwitchMessageVersion, onOpenSubAgentSession, onInsertIllustration, onReadAloud, onGenerateInteractiveImage, generatingInteractiveImageTurnId, activeSubAgentSessionKey, onApprovePlan, onContinuePlan, onExitPlanMode, onResolveAsk, turnScrollRequest, onVisibleTurnAnchorChange }: MessageListProps) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const renderedItemsRef = useRef<ListItem<AgentChatListItem>[]>([])
@@ -290,15 +293,48 @@ function MessageListContent({ projectId, attachmentScope, messages, projection, 
     notifyVisibleTurnAnchor(items)
   }, [notifyVisibleTurnAnchor])
 
+  const earlierRequest = useRef(false)
+  const historyScrollAnchor = useRef<{ key: string; firstKey: string; offset: number } | null>(null)
+  useLayoutEffect(() => {
+    const anchor = historyScrollAnchor.current
+    if (!anchor || anchor.firstKey === listItems[0]?.key) return
+    const index = listItems.findIndex(item => item.key === anchor.key)
+    if (index < 0) {
+      historyScrollAnchor.current = null
+      return
+    }
+    // firstItemIndex preserves identity, but newly measured row heights and a
+    // shrinking history header can change the estimated prepend distance.
+    const frame = requestAnimationFrame(() => {
+      const headerHeight = resolveMessageScroller()?.querySelector('.nova-message-list-header')?.getBoundingClientRect().height || 0
+      scrollLock.scrollToIndex(index, { align: 'start', behavior: 'auto', offset: headerHeight - anchor.offset })
+      historyScrollAnchor.current = null
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [listItems, resolveMessageScroller, scrollLock.scrollToIndex])
   const handleMessageScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     scrollLock.onScroll(event)
     notifyVisibleTurnAnchor(renderedItemsRef.current, event.currentTarget.scrollTop)
-  }, [notifyVisibleTurnAnchor, scrollLock.onScroll])
+    const shouldLoadEarlier = autoLoadEarlierMessages && initialPositionReady && event.currentTarget.scrollTop < 240 && hasEarlierMessages && !isLoadingEarlierMessages && !earlierRequest.current && onLoadEarlierMessages
+    if (shouldLoadEarlier || earlierRequest.current) {
+      const scroller = event.currentTarget
+      const top = scroller.getBoundingClientRect().top
+      const row = [...scroller.querySelectorAll<HTMLElement>('[data-nova-chat-row-key]')].find(row => row.getBoundingClientRect().bottom > top)
+      if (row && (!historyScrollAnchor.current || historyScrollAnchor.current.firstKey === listItems[0]?.key)) {
+        historyScrollAnchor.current = { key: row.dataset.novaChatRowKey!, firstKey: listItems[0]?.key || '', offset: (row.parentElement || row).getBoundingClientRect().top - top }
+      }
+    }
+    if (shouldLoadEarlier) {
+      earlierRequest.current = true
+      void Promise.resolve(onLoadEarlierMessages()).finally(() => { earlierRequest.current = false })
+    }
+  }, [autoLoadEarlierMessages, hasEarlierMessages, initialPositionReady, isLoadingEarlierMessages, listItems, notifyVisibleTurnAnchor, onLoadEarlierMessages, scrollLock.onScroll])
 
-  const onProcessExpandedChange = useCallback((key: string, running: boolean, expanded: boolean) => {
+  const onProcessExpandedChange = useCallback(async (key: string, running: boolean, expanded: boolean, navigationAnchor: string) => {
     scrollLock.releaseBottomLock()
+    if (expanded) await onLoadExecutionDetails?.(navigationAnchor)
     setDisclosures(current => ({ ...current, [key]: { running, expanded } }))
-  }, [scrollLock.releaseBottomLock])
+  }, [onLoadExecutionDetails, scrollLock.releaseBottomLock])
 
   const itemContent = useCallback((index: number, item?: AgentChatListItem) => {
     const resolvedItem = item || listItems[index - firstItemIndex]

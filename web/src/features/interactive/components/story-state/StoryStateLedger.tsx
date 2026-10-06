@@ -646,7 +646,9 @@ function turnStatusLabel(snapshot: Snapshot | null, t: ReturnType<typeof useTran
   const turnId = snapshot?.current_turn?.id
   const turns = snapshot?.turns || []
   const matchedIndex = turnId ? turns.findIndex((turn) => turn.id === turnId) : -1
-  const turn = matchedIndex >= 0 ? matchedIndex + 1 : Math.max(turns.length, turnId ? 1 : 0)
+  const turn = matchedIndex >= 0
+    ? (snapshot?.turn_start || 0) + matchedIndex + 1
+    : snapshot?.turn_count ?? Math.max(turns.length, turnId ? 1 : 0)
   if (snapshot?.current_turn?.state_status === 'pending') return t('storyStage.state.syncing', { turn })
   if (snapshot?.current_turn?.state_status === 'failed') return t('storyStage.state.failed', { turn })
   return t('storyStage.state.updatedTurn', { turn })

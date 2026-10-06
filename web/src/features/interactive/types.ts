@@ -379,6 +379,7 @@ export interface TurnEvent {
   user_context_only?: boolean
   narrative: string
   thinking?: string
+  execution_cursor?: string
   run_id?: string
   agent_kind?: string
   display_events?: TurnDisplayEvent[]

@@ -283,12 +283,15 @@ type TurnEvent struct {
 	Narrative         string `json:"narrative"`
 	NarrativeRevision string `json:"narrative_revision,omitempty"`
 	Thinking          string `json:"thinking,omitempty"`
-	RunID             string `json:"run_id,omitempty"`
-	AgentKind         string `json:"agent_kind,omitempty"`
-	AgentCommandID    string `json:"agent_command_id,omitempty"`
-	AgentOperationID  string `json:"agent_operation_id,omitempty"`
-	AgentCycle        int    `json:"agent_cycle,omitempty"`
-	AgentCommitHash   string `json:"agent_commit_hash,omitempty"`
+	// ExecutionCursor is a UI-only locator for deferred thinking and tool payloads.
+	// It is never written to the canonical journal or used as model context.
+	ExecutionCursor  string `json:"execution_cursor,omitempty"`
+	RunID            string `json:"run_id,omitempty"`
+	AgentKind        string `json:"agent_kind,omitempty"`
+	AgentCommandID   string `json:"agent_command_id,omitempty"`
+	AgentOperationID string `json:"agent_operation_id,omitempty"`
+	AgentCycle       int    `json:"agent_cycle,omitempty"`
+	AgentCommitHash  string `json:"agent_commit_hash,omitempty"`
 	// ProviderContinuation is hydrated from a private side event for model
 	// history only. It is deliberately absent from public Game JSON.
 	ProviderContinuation map[string]any `json:"-"`

@@ -29,7 +29,7 @@ export function AgentChatListRow({ projectId, item, nextItem, executionTimings, 
   nextItem?: AgentChatListItem
   isStreaming: boolean
   tailFollowActive: boolean
-  onProcessExpandedChange?: (key: string, running: boolean, expanded: boolean) => void
+  onProcessExpandedChange?: (key: string, running: boolean, expanded: boolean, navigationAnchor: string) => void | Promise<void>
   subAgentPresentation: 'card' | 'content'
   highlightDialogue: boolean
   messageStyle?: CSSProperties
@@ -130,7 +130,7 @@ export function AgentChatListRow({ projectId, item, nextItem, executionTimings, 
         <ContextClearDivider createdAt={item.createdAt} />
       ) : item.kind === 'process' ? (
         <AgentExecutionProcess views={item.views} running={item.running} expanded={item.expanded}
-          onExpandedChange={expanded => onProcessExpandedChange?.(item.key, item.running, expanded)}
+          onExpandedChange={expanded => onProcessExpandedChange?.(item.key, item.running, expanded, item.navigationAnchor)}
           timing={item.showTiming ? executionTimings.get(item.runId) : undefined} />
       ) : item.kind === 'run-actions' ? (
         <div className="flex flex-wrap items-center gap-2 px-1"><AgentRunActions projectId={projectId} runID={item.runId} /></div>

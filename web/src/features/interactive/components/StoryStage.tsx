@@ -89,9 +89,14 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
   })
   const snapshotKey = storyStageSnapshotKey(storyId, branchId, snapshot)
   const stageKey = `${workspace || 'current'}:${storyId || 'none'}:${branchId || snapshot?.branch_id || 'main'}`
-  const { displaySnapshot, historyWindow, prependPage: prependHistoryPage, resetToLatest: resetHistoryToLatest } = useStoryHistoryWindow(stageKey, snapshot)
+  const { displaySnapshot, historyWindow, prependPage: prependHistoryPage, resetToLatest: resetHistoryToLatest, loadExecutionDetails } = useStoryHistoryWindow(stageKey, snapshot)
   const speech = useStorySpeech({ owner: stageKey, story, snapshot: displaySnapshot, active })
   const [historyLoading, setHistoryLoading] = useState(false)
+  const historyStageRef = useRef(stageKey)
+  useEffect(() => {
+    historyStageRef.current = stageKey
+    setHistoryLoading(false)
+  }, [stageKey])
   const stageRun = useInteractiveStore((state) => state.storyStageRuns[stageKey] || EMPTY_STAGE_RUN)
   const setStoryStageRun = useInteractiveStore((state) => state.setStoryStageRun)
   const clearStoryStageRun = useInteractiveStore((state) => state.clearStoryStageRun)
@@ -289,19 +294,32 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
   const canUseHotChoices = hotChoices.length > 0 && !branchTerminal && !streaming && !editingTurn && Boolean(storyId)
   const showHotChoices = canUseHotChoices && hotChoicesExpanded
   const messageListBottomPadding = inputFloatHeight > 0 ? inputFloatHeight + 20 : undefined
-  const loadEarlierMessages = useCallback(async () => {
+  const loadHistoryThroughTurn = useCallback(async (targetIndex?: number) => {
     if (!storyId || !historyWindow.beforeCursor || historyLoading) return
     setHistoryLoading(true)
     try {
-      const page = await getInteractiveHistoryPage(storyId, branchId || snapshot?.branch_id || 'main', historyWindow.beforeCursor)
-      prependHistoryPage(page)
+      let cursor = historyWindow.beforeCursor
+      let turnStart = historyWindow.turnStart
+      do {
+        const page = await getInteractiveHistoryPage(storyId, branchId || snapshot?.branch_id || 'main', cursor)
+        if (historyStageRef.current !== stageKey) return
+        prependHistoryPage(page)
+        turnStart -= page.turns.length
+        if (targetIndex !== undefined && targetIndex >= turnStart) {
+          const turn = page.turns[targetIndex - turnStart]
+          if (turn) handleTurnNavigationSelect(turn.id)
+          break
+        }
+        cursor = page.before_cursor || ''
+      } while (targetIndex !== undefined && cursor)
     } catch (error) {
       console.error('[interactive-stage] load earlier story history failed', error)
       setStageLiveMessages((current) => [...current, errorMessage(error instanceof Error ? error.message : t('chat.history.loadEarlierFailed'))])
     } finally {
-      setHistoryLoading(false)
+      if (historyStageRef.current === stageKey) setHistoryLoading(false)
     }
-  }, [branchId, historyLoading, historyWindow.beforeCursor, prependHistoryPage, setStageLiveMessages, snapshot?.branch_id, storyId, t])
+  }, [branchId, handleTurnNavigationSelect, historyLoading, historyWindow.beforeCursor, historyWindow.turnStart, prependHistoryPage, setStageLiveMessages, snapshot?.branch_id, stageKey, storyId, t])
+  const loadEarlierMessages = useCallback(() => loadHistoryThroughTurn(), [loadHistoryThroughTurn])
   const latestTurnID = snapshot?.current_turn?.id || snapshot?.turns?.at(-1)?.id || ''
   const canMutateStoryView = useCallback((view: AgentMessageView) => {
     const turnID = view.metadata.turn_id
@@ -627,7 +645,7 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
         onCreate: () => { setPendingOpeningStoryId(''); setCreatingStory(true) },
         onDeleteStories: onStoryDelete, onRenameStory: onStoryRename,
       }}
-      history={{ items: turnNavigationItems, activeAnchorId: activeTurnAnchorId, onSelect: handleTurnNavigationSelect }}
+      history={{ items: turnNavigationItems, activeAnchorId: activeTurnAnchorId, onSelect: handleTurnNavigationSelect, earlierCount: displaySnapshot?.turn_start || 0, loadingEarlier: historyLoading, onSelectEarlier: loadHistoryThroughTurn }}
       directorPanelVisible={directorPanelVisible}
       onToggleDirectorPanel={onToggleDirectorPanel}
     />
@@ -646,7 +664,7 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
         <div className="nova-story-speech-playback shrink-0 px-3" style={{ visibility: artworkOnly ? 'hidden' : undefined }} inert={artworkOnly}><SpeechPlayback owner={stageKey} /></div>
 
         <div className="nova-story-stage-content flex min-h-0 flex-1 overflow-hidden" data-setup={storySetupVisible || undefined} data-artwork={hasStageArtwork ? 'true' : undefined} style={{ visibility: artworkOnly ? 'hidden' : undefined }} inert={artworkOnly} aria-hidden={artworkOnly || undefined}>
-          {!isMobile && <TurnNavigator items={turnNavigationItems} activeAnchorId={activeTurnAnchorId} onSelect={handleTurnNavigationSelect} />}
+          {!isMobile && <TurnNavigator items={turnNavigationItems} activeAnchorId={activeTurnAnchorId} onSelect={handleTurnNavigationSelect} earlierCount={displaySnapshot?.turn_start || 0} loadingEarlier={historyLoading} onSelectEarlier={loadHistoryThroughTurn} />}
           <section className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {historyWindow.stageKey === stageKey && !historyWindow.followLatest ? (
               <Button type="button" variant="secondary" size="sm" className="absolute right-4 top-3 z-30 shadow-md lg:top-12" onClick={resetHistoryToLatest}>
@@ -722,6 +740,8 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
                 hasEarlierMessages={historyWindow.stageKey === stageKey && historyWindow.hasMore}
                 isLoadingEarlierMessages={historyLoading}
                 onLoadEarlierMessages={loadEarlierMessages}
+                autoLoadEarlierMessages
+                onLoadExecutionDetails={loadExecutionDetails}
                 afterContent={historyWindow.followLatest && !streaming && storyStateModel.hasState && stateDisplayPreference !== 'director-only' ? (
                   <StoryStateLedger
                     snapshot={snapshot}

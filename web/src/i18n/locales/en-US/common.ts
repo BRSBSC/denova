@@ -47,6 +47,7 @@ const common = {
   'common.expand': 'Expand',
   'common.expandAll': 'Expand all',
   'common.collapseAll': 'Collapse all',
+  'common.backToTop': 'Back to top',
   'common.reorder': 'Reorder',
   'common.reorderNamed': 'Reorder {{name}}',
   'common.reorderRole': 'sortable',

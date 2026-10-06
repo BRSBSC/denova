@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Eye, FileCode2, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ThemedMarkdownRenderer } from '@/components/common/MarkdownRenderer'
 import { InlineErrorNotice } from '@/components/common/inline-error-notice'
+import { ScrollToTopButton } from '@/components/common/ScrollToTopButton'
 import { ContextCopyButton } from '@/components/Chat/ContextCopyButton'
 import { previewLoreIndex } from '@/lib/api-client/lore'
 import type { LoreIndexGuide, LoreIndexPreview as Preview, LoreItem } from '@/lib/api-client/types'
@@ -38,6 +39,7 @@ export function useLoreIndexPreview(projectId: string, guide: LoreIndexGuide | u
 
 export function LoreIndexPreview({ preview, pending, error }: ReturnType<typeof useLoreIndexPreview>) {
   const { t, i18n } = useTranslation()
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [format, setFormat] = useState('read')
   const markdown = preview?.markdown ?? ''
   const failed = error || preview?.over_budget
@@ -55,8 +57,11 @@ export function LoreIndexPreview({ preview, pending, error }: ReturnType<typeof 
         <ContextCopyButton content={failed ? '' : markdown} label={t('lore.index.copy')} copiedLabel={t('lore.index.copied')} failedLabel={t('lore.index.copyFailed')} />
       </div>
     </header>
-    <div className="min-h-0 flex-1 overflow-y-auto p-5" data-testid="lore-index-preview">
+    <div className="relative min-h-0 flex-1">
+    <div ref={scrollRef} className="h-full overflow-y-auto p-5" data-testid="lore-index-preview">
       {failed ? <InlineErrorNotice message={t(preview?.over_budget ? 'lore.index.overBudget' : 'lore.index.previewFailed')} /> : !preview ? <div className="flex flex-col gap-4"><Skeleton className="h-6 w-1/2" /><Skeleton className="h-24 w-full" /></div> : !markdown ? <p className="text-sm text-muted-foreground">{t('lore.index.previewEmpty')}</p> : format === 'source' ? <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">{markdown}</pre> : <ThemedMarkdownRenderer content={markdown} className="break-words text-sm [&_h1]:text-xl! [&_h2]:text-base! [&_h3]:text-sm! [&_p]:text-sm! [&_li]:text-sm! [&_blockquote]:text-muted-foreground!" />}
+    </div>
+    <ScrollToTopButton scrollRef={scrollRef} />
     </div>
   </aside>
 }

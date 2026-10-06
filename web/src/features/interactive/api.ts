@@ -60,9 +60,20 @@ export function getInteractiveSnapshot(storyId: string, branchId?: string): Prom
   return requestJSON<InteractiveSnapshotResponse>(`/api/interactive/stories/${encodeURIComponent(storyId)}/snapshot${query}`)
 }
 
-export function getInteractiveHistoryPage(storyId: string, branchId: string, before: string, limit = 100): Promise<StoryHistoryPage> {
+export function getInteractiveHistoryPage(storyId: string, branchId: string, before: string, limit = 10): Promise<StoryHistoryPage> {
   const query = new URLSearchParams({ branch: branchId, before, limit: String(limit) })
   return requestJSON(`/api/interactive/stories/${encodeURIComponent(storyId)}/history?${query.toString()}`)
+}
+
+export interface StoryExecutionDetails {
+  turn_id: string
+  thinking?: string
+  display_events?: import('./types').TurnDisplayEvent[]
+}
+
+export function getInteractiveExecutionDetails(storyId: string, branchId: string, cursor: string): Promise<StoryExecutionDetails> {
+  const query = new URLSearchParams({ branch: branchId, cursor })
+  return requestJSON(`/api/interactive/stories/${encodeURIComponent(storyId)}/history/execution?${query}`)
 }
 
 export function rerollInteractiveRuleResolution(storyId: string, resolutionId: string, input: RuleResolutionRerollInput = {}): Promise<RuleResolution> {
