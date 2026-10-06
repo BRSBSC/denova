@@ -46,7 +46,6 @@ import {
   type Installation,
   type Plan,
   type PlanRequest,
-  type UpdateItem,
   type Preview,
   type Source,
 } from './api'
@@ -119,6 +118,9 @@ export function ImportDialog({
   const pending = useRef<Promise<void> | undefined>(undefined)
   const downloadedPreview = useRef<Preview | undefined>(undefined)
   const [error, setError] = useState('')
+  const needsPlanReview = plan?.updates?.some(item => item.conflict &&
+    (resolutions[item.resource_id]?.[item.member_id || ''] || '') !== (item.resolution || ''),
+  ) ?? false
   const candidate = preview?.candidates.find(
     (c) => c.candidate_id === candidateID,
   )
@@ -528,11 +530,14 @@ export function ImportDialog({
         {plan && (
           <div className="space-y-3">
             <h3 className="font-medium">{plan.installation.package.name}</h3>
-            {installation && plan.updates ? <UpdateReview items={plan.updates} busy={busy} onResolve={(item: UpdateItem, choice: string) => {
-              const next = { ...resolutions, [item.resource_id]: { ...resolutions[item.resource_id], [item.member_id || '']: choice } }
-              void run(async () => {
-                const reviewed = await exchange<Plan>('/plans', { ...planRequest, resolutions: next })
-                setResolutions(next); setPlan(reviewed)
+            {installation && plan.updates ? <UpdateReview items={plan.updates} resolutions={resolutions} busy={busy} onResolve={(items, choice) => {
+              setResolutions(current => {
+                const next = structuredClone(current)
+                for (const item of items) {
+                  next[item.resource_id] ??= {}
+                  next[item.resource_id][item.member_id || ''] = choice
+                }
+                return next
               })
             }} /> : <ul className="divide-y rounded-lg border">
               {plan.items.map((item) => (
@@ -550,6 +555,7 @@ export function ImportDialog({
                 </li>
               ))}
             </ul>}
+            {needsPlanReview && <p role="status" className="text-sm text-muted-foreground">{t('market.update.choicesChanged')}</p>}
             <p className="text-xs text-muted-foreground break-all">
               {preview?.source.commit
                 ? t('market.import.commit', { commit: preview.source.commit })
@@ -625,6 +631,9 @@ export function ImportDialog({
                   }
                   const reviewed = await exchange<Plan>('/plans', request)
                   setPlanRequest(request); setResolutions({}); setPlan(reviewed)
+                } else if (needsPlanReview) {
+                  const reviewed = await exchange<Plan>('/plans', { ...planRequest, resolutions })
+                  setPlan(reviewed)
                 } else {
                   const installed = await exchange<Installation>(
                     `/plans/${plan.plan_id}/apply`,
@@ -652,7 +661,7 @@ export function ImportDialog({
               busy
                 ? !preview ? 'market.import.downloading' : 'market.working'
                 : plan
-                  ? installation ? 'market.update.apply' : 'market.import.install'
+                  ? needsPlanReview ? 'market.import.refreshPlan' : installation ? 'market.update.apply' : 'market.import.install'
                   : preview
                     ? creatingBook ? 'market.import.createAndReview' : 'market.import.review'
                     : source ? 'market.contents.retry' : 'market.import.preview',
