@@ -57,10 +57,9 @@ for (const theme of ['dark', 'light']) {
     expect(coverBounds.x + coverBounds.width).toBeLessThanOrEqual(firstSection.x)
     await expect.poll(() => ledger.getByRole('tabpanel').locator('.story-state-ledger__preview').evaluate(el => {
       const image = el.querySelector('aside img')!.getBoundingClientRect()
-      const sections = el.querySelectorAll('.story-state-ledger__section')
-      const first = sections[0].getBoundingClientRect()
-      const last = sections[sections.length - 1].getBoundingClientRect()
-      return Math.max(Math.abs(image.top - first.top), Math.abs(image.bottom - last.bottom))
+      // Groups can share a row; the cover follows the whole preview area.
+      const sections = [...el.querySelectorAll('.story-state-ledger__section')].map(section => section.getBoundingClientRect())
+      return Math.max(Math.abs(image.top - Math.min(...sections.map(section => section.top))), Math.abs(image.bottom - Math.max(...sections.map(section => section.bottom))))
     })).toBeLessThanOrEqual(1)
     expect(await ledger.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
     await stageCover.click()

@@ -1114,7 +1114,8 @@ html[data-nova-motion="off"] .shimmer {
   z-index: 10;
 }
 
-.nova-story-stage-content {
+/* Keep floating stage controls and sticky state navigation in the same stacking context. */
+.nova-story-stage-card {
   container-name: nova-story-stage;
   container-type: inline-size;
 }
@@ -2730,6 +2731,8 @@ html[data-nova-motion="off"] .nova-change-review-layer {
 
 /* Story state ledger: current committed state placed after the latest prose. */
 .story-state-ledger {
+  position: relative;
+  z-index: 2;
   --story-state-canvas: var(--nova-surface);
   --story-state-positive: var(--nova-success);
   --story-state-positive-soft: var(--nova-success-bg);
@@ -2747,6 +2750,33 @@ html[data-nova-motion="off"] .nova-change-review-layer {
 
 .story-state-ledger__tabs-scroll {
   scrollbar-width: none;
+}
+
+.story-state-ledger__navigation {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  border-radius: inherit;
+  background: var(--story-state-canvas);
+  box-shadow: 0 1px 0 var(--nova-border-soft);
+}
+
+/* Details keep the panel frame and navigation fixed while only the body scrolls. */
+.story-state-ledger > [data-presentation='details'] {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.story-state-ledger > [data-presentation='details'] > .story-state-ledger__navigation {
+  position: static;
+  padding-top: 6px;
+}
+
+.story-state-ledger > [data-presentation='details'] > .story-state-ledger__body {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .story-state-ledger__tabs-list {
@@ -2796,6 +2826,59 @@ html[data-nova-motion="off"] .nova-change-review-layer {
   flex-direction: column;
   gap: 8px;
   padding: 4px 10px 10px;
+}
+
+.story-state-ledger__group-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 8px;
+}
+
+.story-state-ledger__section {
+  flex: 1 1 28rem;
+  min-width: 0;
+  container: state-group / inline-size;
+}
+
+.story-state-ledger__section[data-compact] {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: 16px;
+  max-width: 100%;
+}
+
+.story-state-ledger__section[data-compact] > .story-state-ledger__section-header {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+}
+
+.story-state-ledger__section[data-compact] > .story-state-ledger__grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+}
+
+.story-state-ledger__section[data-compact] .story-state-ledger__field[data-renderer='inline'] {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.story-state-ledger__section[data-compact] .story-state-ledger__field[data-renderer='inline'] > div {
+  margin-bottom: 0;
+}
+
+@container state (max-width: 32rem) {
+  .story-state-ledger__section,
+  .story-state-ledger__section[data-compact] {
+    flex: 1 1 100%;
+  }
 }
 
 .story-state-ledger__action {
@@ -2881,25 +2964,34 @@ html[data-nova-motion="off"] .nova-change-review-layer {
   color: var(--nova-text);
 }
 
-/* Fit populated columns to the available width; column basis adapts per group kind. */
+/* Columns follow each group's width and field count; compact strips keep their inline flow. */
 .story-state-ledger__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 10px 20px;
 }
 
-.story-state-ledger__grid[data-group='overview'] {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+@container state-group (min-width: 24rem) {
+  .story-state-ledger__grid {
+    grid-template-columns: repeat(min(2, var(--story-state-field-columns)), minmax(0, 1fr));
+  }
 }
 
-.story-state-ledger__grid[data-group='details'] {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+@container state-group (min-width: 36rem) {
+  .story-state-ledger__grid {
+    grid-template-columns: repeat(var(--story-state-field-columns), minmax(0, 1fr));
+  }
 }
 
 .story-state-ledger__field {
   position: relative;
   min-width: 0;
   padding: 2px 0;
+}
+
+.story-state-ledger__section[data-compact] .story-state-ledger__field[data-renderer='stat'] {
+  flex: 0 1 10rem;
 }
 
 .story-state-ledger__field-label {

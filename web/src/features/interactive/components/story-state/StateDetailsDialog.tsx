@@ -44,13 +44,16 @@ export function StateDetailsDialog({ projectId, loreItems = [], protagonist, sna
       </DialogTrigger>
       <DialogContent className="director-console grid max-h-[85dvh] w-[calc(100vw-2rem)] max-w-6xl grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden bg-[var(--director-canvas)] p-0 text-[var(--nova-text)] max-sm:w-[calc(100vw-1rem)] max-md:max-h-[85dvh] max-md:overflow-hidden">
         <DialogHeader className="border-b border-[var(--nova-border)] bg-[var(--director-panel)] px-4 py-3 pr-12 text-left">
-          <DialogTitle className="text-sm">{t('directorPanel.overview.state.dialogTitle')}</DialogTitle>
+          <div className="flex min-w-0 items-baseline gap-2">
+            <DialogTitle className="text-sm">{t('directorPanel.overview.state.dialogTitle')}</DialogTitle>
+            <span className="truncate text-[11px] text-[var(--nova-text-faint)]">{t('storyStage.state.changesTitle', { count: model.changes.length })}</span>
+          </div>
           <DialogDescription className="text-[11px] text-[var(--nova-text-faint)]">
             {t('directorPanel.overview.state.dialogDescription', { summary })}
           </DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 overflow-y-auto p-3">
-          {error ? <InlineErrorNotice className="mb-3" message={error} /> : null}
+        <div className="flex min-h-0 flex-col p-3">
+          {error ? <InlineErrorNotice className="mb-3 shrink-0" message={error} /> : null}
           <StoryStateDetails snapshot={snapshot} actorLore={projectId ? {
             projectId,
             items: loreItems,

@@ -659,7 +659,7 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
   return (
     <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--nova-surface-2)]" style={{ '--nova-story-text-max-width': `${stagePreferences.textMaxWidth}px` } as CSSProperties}>
       {!storySetupVisible && <StoryStageArtwork key={`${projectId}:${stageKey}`} previousTurnId={previousPresentationTurnId} projectId={projectId} turn={presentationTurn} latest={historyWindow.followLatest && presentationTurn?.id === snapshot?.current_turn?.id} settings={story?.presentation_settings} textHidden={artworkOnly} scrimOpacity={stagePreferences.scrimOpacity} characterLayout={stagePreferences.characterLayout} />}
-      <div data-testid="story-stage-card" className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div data-testid="story-stage-card" className="nova-story-stage-card relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <StoryStageHeader isMobile={isMobile} controls={stageControls} />
         <div className="nova-story-speech-playback shrink-0 px-3" style={{ visibility: artworkOnly ? 'hidden' : undefined }} inert={artworkOnly}><SpeechPlayback owner={stageKey} /></div>
 

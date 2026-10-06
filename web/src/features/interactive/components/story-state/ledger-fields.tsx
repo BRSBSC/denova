@@ -6,6 +6,7 @@ import type { ClassifiedStateChange } from './changes'
 import type { LedgerFieldItem } from './model'
 import { humanizeStateKey } from './model'
 import { resolveNumberMeter } from './number-meter'
+import { useActorReferenceNames } from './actor-reference'
 
 /** Long text beyond this length is clamped with an inline expand toggle. */
 const BLOCK_CLAMP_LENGTH = 300
@@ -151,16 +152,20 @@ function BlockFieldBody({ value }: { value: unknown }) {
 
 function ListFieldBody({ value }: { value: unknown }) {
   const { t } = useTranslation()
+  const actorNames = useActorReferenceNames()
   if (!Array.isArray(value) || value.length === 0) {
     return <span className="text-xs text-[var(--nova-text-faint)]">{t('directorPanel.stateValue.empty')}</span>
   }
   return (
     <ul className="story-state-ledger__item-list">
-      {value.map((item, index) => (
-        <li key={index} className="story-state-ledger__item-row">
-          {item === null ? '—' : typeof item === 'object' ? JSON.stringify(item) : String(item)}
-        </li>
-      ))}
+      {value.map((item, index) => {
+        const displayed = typeof item === 'string' ? actorNames.get(item) ?? item : item
+        return (
+          <li key={index} className="story-state-ledger__item-row">
+            {displayed === null ? '—' : typeof displayed === 'object' ? JSON.stringify(displayed) : String(displayed)}
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -189,10 +194,11 @@ function ObjectEntryList({ value }: { value: Record<string, unknown> }) {
 }
 
 function ObjectValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
+  const actorNames = useActorReferenceNames()
   if (value === null || value === undefined || value === '') return <span className="text-[var(--nova-text-faint)]">—</span>
   if (typeof value === 'boolean') return <span>{value ? '✓' : '—'}</span>
   if (typeof value === 'number') return <span className="font-mono tabular-nums">{formatLedgerNumber(value)}</span>
-  if (typeof value === 'string') return <span className="break-words [overflow-wrap:anywhere]">{value}</span>
+  if (typeof value === 'string') return <span className="break-words [overflow-wrap:anywhere]">{actorNames.get(value) ?? value}</span>
   if (Array.isArray(value)) {
     if (value.length === 0) return <span className="text-[var(--nova-text-faint)]">—</span>
     return (
@@ -213,13 +219,14 @@ function ObjectValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
 }
 
 function NestedObjectList({ value, depth }: { value: Record<string, unknown>; depth: number }) {
+  const actorNames = useActorReferenceNames()
   const entries = Object.entries(value).filter(([, item]) => item !== undefined)
   if (entries.length === 0) return <span className="text-[var(--nova-text-faint)]">—</span>
   return (
     <ul className={cn('story-state-ledger__nested-object-list', depth > 0 && 'story-state-ledger__nested-object-list--nested')} data-depth={depth}>
       {entries.slice(0, OBJECT_ENTRY_LIMIT).map(([key, item]) => {
         const structured = Array.isArray(item) || isRecord(item)
-        const label = humanizeStateKey(key)
+        const label = actorNames.get(key) ?? humanizeStateKey(key)
         return (
           <li key={key} className={cn('story-state-ledger__nested-object-item', structured && 'story-state-ledger__nested-object-item--branch')}>
             <span className="story-state-ledger__nested-object-key">{label}:</span>
@@ -236,6 +243,7 @@ function NestedObjectList({ value, depth }: { value: Record<string, unknown>; de
 /** FieldChangeChip renders the compact per-field turn-change marker. */
 function FieldChangeChip({ change }: { change: ClassifiedStateChange | null }) {
   const { t } = useTranslation()
+  const actorNames = useActorReferenceNames()
   if (!change) return null
   if (change.kind === 'delta' && change.delta !== null) {
     return (
@@ -246,7 +254,7 @@ function FieldChangeChip({ change }: { change: ClassifiedStateChange | null }) {
   }
   if (change.kind === 'added' || change.kind === 'removed') {
     const sign = change.kind === 'added' ? '+' : '−'
-    const text = change.text ? truncateEnd(change.text, 16) : t('storyStage.state.change.oneItem')
+    const text = change.text ? truncateEnd(actorNames.get(change.text) ?? change.text, 16) : t('storyStage.state.change.oneItem')
     return (
       <span className={cn('story-state-ledger__change-chip', `story-state-ledger__change-chip--${change.tone}`)}>
         {sign}{text}
