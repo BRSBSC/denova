@@ -7,6 +7,7 @@ import (
 	sdk "github.com/openai/openai-go/v3"
 
 	"github.com/alfredxw/denova/agent/providers"
+	"github.com/alfredxw/denova/agent/providers/protocols/internal/openaiclient"
 )
 
 func adaptAPIError(err error) error {
@@ -19,7 +20,7 @@ func adaptAPIError(err error) error {
 	}
 	var sdkError *sdk.Error
 	if !errors.As(err, &sdkError) {
-		return err
+		return openaiclient.AdaptStreamError(err)
 	}
 	requestID := ""
 	if sdkError.Response != nil {

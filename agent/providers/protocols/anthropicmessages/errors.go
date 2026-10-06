@@ -2,6 +2,7 @@ package anthropicmessages
 
 import (
 	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -23,7 +24,9 @@ func adaptAPIError(err error) error {
 	}
 	return &providers.APIError{
 		StatusCode: sdkError.StatusCode,
-		Kind:       string(sdkError.Type()), RetryAfter: providers.RetryAfterDelay(sdkError.Response),
+		// The SDK reports stream error events with the accepted response status.
+		InStream: sdkError.StatusCode < http.StatusBadRequest,
+		Kind:     string(sdkError.Type()), RetryAfter: providers.RetryAfterDelay(sdkError.Response),
 		RequestID: sdkError.RequestID,
 		Message:   strings.TrimSpace(err.Error()),
 		Cause:     err,
