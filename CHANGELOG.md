@@ -16,6 +16,8 @@ Denova records only major user-visible features, important compatibility or data
 
 - 修复删除项目唯一会话被拒绝后，Goal 和 Agent 恢复状态仍被清除的问题。
 - Fix rejected deletion of a project's only conversation clearing its Goal and Agent recovery state.
+- 修复模型服务在流式输出中途报告临时错误时，任务直接失败而不自动重试的问题。
+- Fix runs failing instead of retrying when the model provider reports a transient error partway through a stream.
 
 ## [v0.5.1fix7] - 2026-10-06
 
