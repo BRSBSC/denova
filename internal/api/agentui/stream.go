@@ -27,6 +27,10 @@ type StreamEncoder struct {
 	textSeq       int
 	reasonIDs     map[string]string
 	reasonSeq     int
+	// Where each open part starts inside its display segment, or
+	// unknownSegmentOffset when the event stream did not say.
+	textStarts   map[string]int
+	reasonStarts map[string]int
 	toolSeq       int
 	toolInputs    map[string]string
 	startedTool   map[string]string
@@ -39,6 +43,8 @@ func NewStreamEncoder(w io.Writer, requestID string) *StreamEncoder {
 		requestID:     strings.TrimSpace(requestID),
 		textIDs:       make(map[string]string),
 		reasonIDs:     make(map[string]string),
+		textStarts:    make(map[string]int),
+		reasonStarts:  make(map[string]int),
 		toolInputs:    make(map[string]string),
 		startedTool:   make(map[string]string),
 		availableTool: make(map[string]bool),
@@ -61,12 +67,12 @@ func (e *StreamEncoder) WriteEvent(ev appsvc.AgentEvent) error {
 		if err := e.closeReasoning(contentSource); err != nil {
 			return err
 		}
-		return e.writeTextDelta(readString(data, "content"), meta, readString(data, "display_segment_id"), contentSource)
+		return e.writeTextDelta(readString(data, "content"), meta, readString(data, "display_segment_id"), contentSource, segmentOffset(data))
 	case "thinking":
 		if err := e.closeText(contentSource); err != nil {
 			return err
 		}
-		return e.writeReasoningDelta(readString(data, "content"), meta, readString(data, "display_segment_id"), contentSource)
+		return e.writeReasoningDelta(readString(data, "content"), meta, readString(data, "display_segment_id"), contentSource, segmentOffset(data))
 	case "tool_call":
 		if err := e.closeOpenContentFor(contentSource); err != nil {
 			return err
@@ -201,12 +207,23 @@ func (e *StreamEncoder) Finish(reason string) error {
 	return nil
 }
 
-// Idle reports whether the open stream has no content segment or tool call in
-// flight. Only at such a boundary does canonical history hold every part the
-// stream has rendered in its final form, so a client can swap its live message
-// for history without losing or duplicating output.
-func (e *StreamEncoder) Idle() bool {
-	return !e.finished && len(e.textIDs) == 0 && len(e.reasonIDs) == 0 && len(e.startedTool) == 0
+// Anchorable reports whether a client could replace everything this stream
+// has rendered with canonical history and continue from the next event without
+// losing output. An open content part is fine when its segment offsets are
+// known: history holds the prefix and the resumed part says where it starts.
+// An open tool call is not, because its input would have to be replayed.
+func (e *StreamEncoder) Anchorable() bool {
+	if e.finished || len(e.startedTool) != 0 {
+		return false
+	}
+	for _, starts := range []map[string]int{e.textStarts, e.reasonStarts} {
+		for _, start := range starts {
+			if start == unknownSegmentOffset {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (e *StreamEncoder) ensureStarted(ev appsvc.AgentEvent) error {
@@ -225,7 +242,7 @@ func (e *StreamEncoder) ensureStarted(ev appsvc.AgentEvent) error {
 	return e.writeChunk(start)
 }
 
-func (e *StreamEncoder) writeTextDelta(delta string, providerMetadata map[string]any, segmentID, source string) error {
+func (e *StreamEncoder) writeTextDelta(delta string, providerMetadata map[string]any, segmentID, source string, offset int) error {
 	if delta == "" {
 		return nil
 	}
@@ -241,6 +258,8 @@ func (e *StreamEncoder) writeTextDelta(delta string, providerMetadata map[string
 			e.textSeq++
 			e.textIDs[source] = fmt.Sprintf("text-%d", e.textSeq)
 		}
+		e.textStarts[source] = offset
+		providerMetadata = withSegmentStart(providerMetadata, offset)
 		start := map[string]any{"type": "text-start", "id": e.textIDs[source]}
 		if len(providerMetadata) > 0 {
 			start["providerMetadata"] = providerMetadata
@@ -249,6 +268,7 @@ func (e *StreamEncoder) writeTextDelta(delta string, providerMetadata map[string
 			return err
 		}
 	}
+	providerMetadata = withSegmentStart(providerMetadata, e.textStarts[source])
 	chunk := map[string]any{"type": "text-delta", "id": e.textIDs[source], "delta": delta}
 	if len(providerMetadata) > 0 {
 		chunk["providerMetadata"] = providerMetadata
@@ -256,7 +276,7 @@ func (e *StreamEncoder) writeTextDelta(delta string, providerMetadata map[string
 	return e.writeChunk(chunk)
 }
 
-func (e *StreamEncoder) writeReasoningDelta(delta string, providerMetadata map[string]any, segmentID, source string) error {
+func (e *StreamEncoder) writeReasoningDelta(delta string, providerMetadata map[string]any, segmentID, source string, offset int) error {
 	if delta == "" {
 		return nil
 	}
@@ -272,6 +292,8 @@ func (e *StreamEncoder) writeReasoningDelta(delta string, providerMetadata map[s
 			e.reasonSeq++
 			e.reasonIDs[source] = fmt.Sprintf("reasoning-%d", e.reasonSeq)
 		}
+		e.reasonStarts[source] = offset
+		providerMetadata = withSegmentStart(providerMetadata, offset)
 		start := map[string]any{"type": "reasoning-start", "id": e.reasonIDs[source]}
 		if len(providerMetadata) > 0 {
 			start["providerMetadata"] = providerMetadata
@@ -280,6 +302,7 @@ func (e *StreamEncoder) writeReasoningDelta(delta string, providerMetadata map[s
 			return err
 		}
 	}
+	providerMetadata = withSegmentStart(providerMetadata, e.reasonStarts[source])
 	chunk := map[string]any{"type": "reasoning-delta", "id": e.reasonIDs[source], "delta": delta}
 	if len(providerMetadata) > 0 {
 		chunk["providerMetadata"] = providerMetadata
@@ -317,6 +340,7 @@ func (e *StreamEncoder) closeText(source string) error {
 		return nil
 	}
 	delete(e.textIDs, source)
+	delete(e.textStarts, source)
 	return e.writeChunk(map[string]any{"type": "text-end", "id": id})
 }
 
@@ -326,7 +350,42 @@ func (e *StreamEncoder) closeReasoning(source string) error {
 		return nil
 	}
 	delete(e.reasonIDs, source)
+	delete(e.reasonStarts, source)
 	return e.writeChunk(map[string]any{"type": "reasoning-end", "id": id})
+}
+
+const unknownSegmentOffset = -1
+
+// segmentOffset reads where a delta starts inside its display segment.
+func segmentOffset(data map[string]any) int {
+	switch value := data[agentrun.DisplaySegmentOffsetKey].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return unknownSegmentOffset
+	}
+}
+
+// withSegmentStart tells the client that a part does not hold the beginning of
+// its segment. Every chunk of the part repeats the same start because the AI
+// SDK keeps the provider metadata of the latest chunk. The delta chunk that
+// follows a start chunk receives the already marked metadata unchanged.
+func withSegmentStart(providerMetadata map[string]any, start int) map[string]any {
+	if start <= 0 {
+		return providerMetadata
+	}
+	agent := map[string]any{}
+	if current, ok := providerMetadata["agent"].(map[string]any); ok {
+		for key, value := range current {
+			agent[key] = value
+		}
+	}
+	agent[agentrun.DisplaySegmentOffsetKey] = start
+	return map[string]any{"agent": agent}
 }
 
 func sortedContentSources(streams map[string]string) []string {

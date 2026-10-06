@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"time"
 
+	agentrun "denova/internal/agents/run"
 	novaApp "denova/internal/app"
 	apptask "denova/internal/app/task"
 )
@@ -48,10 +49,18 @@ func mergeTaskEvents(left, right apptask.Event) (apptask.Event, bool) {
 	if !leftOK || !rightOK {
 		return apptask.Event{}, false
 	}
+	// A later delta of the same segment only starts further in; the merged
+	// frame keeps the position of its first character.
+	offset, hasOffset := leftData[agentrun.DisplaySegmentOffsetKey]
+	delete(leftData, agentrun.DisplaySegmentOffsetKey)
+	delete(rightData, agentrun.DisplaySegmentOffsetKey)
 	delete(leftData, field)
 	delete(rightData, field)
 	if !reflect.DeepEqual(leftData, rightData) {
 		return apptask.Event{}, false
+	}
+	if hasOffset {
+		leftData[agentrun.DisplaySegmentOffsetKey] = offset
 	}
 	leftData[field] = leftText + rightText
 	return apptask.Event{

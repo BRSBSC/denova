@@ -11,6 +11,16 @@ import (
 // Other abort reasons remain operational failures and must not become resumable.
 const AbortReasonUserRequested = "user_requested"
 
+// DisplaySegmentOffsetKey names the display event field that says where a
+// "thinking" or "chunk" delta starts inside its display segment, counted in
+// UTF-16 code units (the web client's string unit). It is present only when the
+// segment's content is appended to canonical history as it streams. A client
+// that resumes a stream in the middle of a segment can then join the history
+// prefix and the live suffix exactly. Transports that merge adjacent deltas
+// must keep the first delta's offset and must not treat it as part of the
+// delta's identity.
+const DisplaySegmentOffsetKey = "display_segment_offset"
+
 // Event is the transport-independent output envelope of an Agent run.
 type Event struct {
 	Type string

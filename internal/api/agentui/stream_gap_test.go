@@ -85,23 +85,66 @@ func TestStreamEncoderKeepsContentOpenAcrossObserverGaps(t *testing.T) {
 	}
 }
 
-func TestStreamEncoderIsIdleOnlyBetweenCompletedParts(t *testing.T) {
+func TestStreamEncoderMarksAResumedSegmentWithItsStartOffset(t *testing.T) {
 	var out bytes.Buffer
-	encoder := NewStreamEncoder(&out, "idle-test")
+	encoder := NewStreamEncoder(&out, "offset-test")
+	write := func(segmentID, content string, offset int) {
+		t.Helper()
+		if err := encoder.WriteEvent(agentrun.Event{Type: "thinking", Data: map[string]any{
+			"run_id": "run", "display_segment_id": segmentID, "content": content, agentrun.DisplaySegmentOffsetKey: offset,
+		}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// This connection joins "resumed" 40 units in; "fresh" starts on it.
+	write("resumed", "ab", 40)
+	write("resumed", "cd", 42)
+	write("fresh", "ef", 0)
+	write("fresh", "gh", 2)
+	chunks, _ := parseUIStreamChunks(t, out.String())
+	seen := 0
+	for _, chunk := range chunks {
+		if chunk["type"] != "reasoning-start" && chunk["type"] != "reasoning-delta" {
+			continue
+		}
+		seen++
+		agent, _ := chunk["providerMetadata"].(map[string]any)["agent"].(map[string]any)
+		offset, stamped := agent[agentrun.DisplaySegmentOffsetKey]
+		// Every chunk of a part repeats where the part starts, never where the
+		// individual delta starts: the client keeps the latest part metadata.
+		if chunk["id"] == "resumed" && offset != float64(40) {
+			t.Fatalf("resumed chunk offset = %#v in %#v, want 40", offset, chunk)
+		}
+		if chunk["id"] == "fresh" && stamped {
+			t.Fatalf("a part that holds its whole segment must not carry an offset: %#v", chunk)
+		}
+	}
+	if seen != 6 {
+		t.Fatalf("reasoning chunks = %d, want two starts and four deltas", seen)
+	}
+}
+
+func TestStreamEncoderIsAnchorableUnlessAToolOrUnstampedSegmentIsOpen(t *testing.T) {
+	var out bytes.Buffer
+	encoder := NewStreamEncoder(&out, "anchor-test")
 	step := func(want bool, eventType string, data map[string]any) {
 		t.Helper()
 		if err := encoder.WriteEvent(agentrun.Event{Type: eventType, Data: data}); err != nil {
 			t.Fatal(err)
 		}
-		if got := encoder.Idle(); got != want {
-			t.Fatalf("Idle() after %s = %t, want %t", eventType, got, want)
+		if got := encoder.Anchorable(); got != want {
+			t.Fatalf("Anchorable() after %s %v = %t, want %t", eventType, data, got, want)
 		}
 	}
-	step(false, "thinking", map[string]any{"run_id": "run", "content": "plan"})
+	// An open segment is fine when history can supply everything before it.
+	step(true, "thinking", map[string]any{"run_id": "run", "display_segment_id": "s1", "content": "plan", agentrun.DisplaySegmentOffsetKey: 0})
 	step(false, "tool_call", map[string]any{"run_id": "run", "id": "call-1", "name": "read", "args": "{}"})
 	step(false, "tool_call", map[string]any{"run_id": "run", "id": "call-2", "name": "read", "args": "{}"})
 	step(false, "tool_result", map[string]any{"run_id": "run", "id": "call-1", "content": "one"})
 	step(true, "tool_result", map[string]any{"run_id": "run", "id": "call-2", "content": "two"})
-	step(false, "chunk", map[string]any{"run_id": "run", "content": "answer"})
+	step(true, "chunk", map[string]any{"run_id": "run", "display_segment_id": "s2", "content": "answer", agentrun.DisplaySegmentOffsetKey: 0})
+	// Without an offset the part cannot be rejoined to its history prefix.
+	step(false, "thinking", map[string]any{"run_id": "run", "content": "unstamped"})
+	step(true, "chunk", map[string]any{"run_id": "run", "display_segment_id": "s3", "content": "again", agentrun.DisplaySegmentOffsetKey: 0})
 	step(false, "done", map[string]any{})
 }

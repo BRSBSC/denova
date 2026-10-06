@@ -333,6 +333,27 @@ async function writeLiveBudgetCompletion(response, body) {
   finishCompletion(response)
 }
 
+// One tool-free response whose reasoning alone exceeds the UI stream's live
+// message budget, held open twice so a test can inspect the resumed display.
+async function writeLiveBudgetThinkingCompletion(response) {
+  response.writeHead(200, {
+    'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive',
+  })
+  writeCompletionFrame(response, completionFrame({ role: 'assistant', reasoning_content: 'ALPHA-START ' }))
+  // 1.6 MB: the budget is crossed with a third of the segment still to come,
+  // so the resumed connection always carries a live suffix of it.
+  const chunk = 'Budget reasoning with no tool boundary. '.repeat(200)
+  for (let frame = 0; frame < 200; frame += 1) {
+    writeCompletionFrame(response, completionFrame({ reasoning_content: chunk }))
+    if (frame % 10 === 0) await delay(5)
+  }
+  await waitForDelayedRelease('E2E_LIVE_BUDGET_THINKING')
+  writeCompletionFrame(response, completionFrame({ reasoning_content: 'OMEGA-END' }))
+  await waitForDelayedRelease('E2E_LIVE_BUDGET_THINKING_END')
+  for (const frame of textCompletionFrames('Live thinking budget complete.')) writeCompletionFrame(response, frame)
+  finishCompletion(response)
+}
+
 function writeGeneratedCompletion(response, content) {
   writeJSON(response, 200, {
     id: 'denova-e2e-response',
@@ -428,6 +449,11 @@ const server = createServer(async (request, response) => {
 
   if (requestIncludesMarker(body, 'E2E_THINKING_STRESS')) {
     await writeThinkingStressCompletion(response, body)
+    return
+  }
+
+  if (requestIncludesMarker(body, 'E2E_LIVE_BUDGET_THINKING')) {
+    await writeLiveBudgetThinkingCompletion(response)
     return
   }
 

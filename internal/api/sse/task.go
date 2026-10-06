@@ -124,8 +124,16 @@ func StreamTaskUI(ctx context.Context, c *app.RequestContext, task *apptask.Task
 		}()
 		slog.InfoContext(ctx, fmt.Sprintf("[agent-ui-sse] stream start task_id=%s after=%d replay=%d checkpoint=%t", task.ID(), after, len(replay.Events), replay.Checkpoint != nil))
 		writeUI := newUIWriteHandler(ctx, pw)
+		reanchor := func(phase string, item apptask.Event) {
+			err := writeUIReanchor(writeUI, task.ID(), item.Cursor)
+			slog.InfoContext(ctx, fmt.Sprintf("[agent-ui-sse] stream re-anchored to canonical history task_id=%s phase=%s cursor=%d bytes=%d err=%v", task.ID(), phase, item.Cursor, writeUI.written.bytes, err))
+		}
 
 		if replay.Checkpoint != nil {
+			if replay.Checkpoint.Complete && uiReplayExceedsLiveBudget(ctx, replay.Checkpoint.Events) {
+				reanchor("checkpoint", apptask.Event{Cursor: replay.Checkpoint.Cursor})
+				return
+			}
 			committed, err := writeUITaskCheckpoint(writeUI, *replay.Checkpoint)
 			if err != nil {
 				slog.InfoContext(ctx, fmt.Sprintf("[agent-ui-sse] stream interrupted task_id=%s phase=checkpoint cursor=%d err=%v", task.ID(), replay.Checkpoint.Cursor, err))
@@ -137,12 +145,16 @@ func StreamTaskUI(ctx context.Context, c *app.RequestContext, task *apptask.Task
 			}
 		}
 
-		reanchor := func(phase string, item apptask.Event) {
-			err := writeUIReanchor(writeUI, task.ID(), item.Cursor)
-			slog.InfoContext(ctx, fmt.Sprintf("[agent-ui-sse] stream re-anchored to canonical history task_id=%s phase=%s cursor=%d bytes=%d err=%v", task.ID(), phase, item.Cursor, writeUI.written.bytes, err))
+		retained := coalesceTaskEvents(replay.Events)
+		payloads := make([]novaApp.AgentEvent, len(retained))
+		for index, item := range retained {
+			payloads[index] = item.Event
 		}
-
-		for _, item := range coalesceTaskEvents(replay.Events) {
+		if len(retained) > 0 && uiReplayExceedsLiveBudget(ctx, payloads) {
+			reanchor("retained", retained[len(retained)-1])
+			return
+		}
+		for _, item := range retained {
 			if err := writeUI.HandleLive(item); err != nil {
 				if errors.Is(err, errUIStreamReanchor) {
 					reanchor("replay", item)
@@ -253,6 +265,21 @@ func writeUITaskCheckpoint(writeUI *uiWriteHandler, checkpoint apptask.DisplayCh
 	return true, nil
 }
 
+// uiReplayExceedsLiveBudget reports whether a replay would start the
+// connection over budget although history could take over at its end. The
+// caller then re-anchors at the replay's last cursor instead of sending output
+// the client would discard at once. The events are encoded into a discarding
+// writer because size and anchorability are properties of the encoded stream.
+func uiReplayExceedsLiveBudget(ctx context.Context, events []novaApp.AgentEvent) bool {
+	probe := newUIWriteHandler(ctx, io.Discard)
+	for _, event := range events {
+		if err := probe.Handle(apptask.Event{Event: event}); err != nil {
+			return false
+		}
+	}
+	return probe.written.bytes > probe.budget && probe.encoder.Anchorable()
+}
+
 func writeTaskCursorError(c *app.RequestContext, task *apptask.Task, err error) {
 	response := map[string]any{
 		"error":           "事件流游标已失效 / Event stream cursor is invalid",
@@ -301,8 +328,8 @@ func markReplayedGameTurn(event novaApp.AgentEvent) novaApp.AgentEvent {
 // accumulates. The browser folds a whole connection into a single assistant
 // message and copies and re-normalizes that message for every frame, so it
 // must not grow with the length of the run. Past the budget the stream hands
-// the client back to canonical history at the next idle boundary; a response
-// that never reaches one is still bounded by the display checkpoint limits.
+// the client back to canonical history as soon as the encoder is anchorable,
+// which only an open tool call or a segment without offsets postpones.
 const uiLiveMessageBudgetBytes = 1 << 20
 
 var errUIStreamReanchor = errors.New("UI stream reached its live message budget")
@@ -334,13 +361,13 @@ func newUIWriteHandler(ctx context.Context, w io.Writer) *uiWriteHandler {
 }
 
 // HandleLive writes one cursor-addressed event and returns errUIStreamReanchor
-// when the connection is over budget with nothing in flight. The caller then
-// ends the connection with writeUIReanchor at that event's cursor.
+// when the connection is over budget and history can take over. The caller
+// then ends the connection with writeUIReanchor at that event's cursor.
 func (h *uiWriteHandler) HandleLive(item apptask.Event) error {
 	if err := h.Handle(item); err != nil {
 		return err
 	}
-	if h.written.bytes > h.budget && h.encoder.Idle() {
+	if h.written.bytes > h.budget && h.encoder.Anchorable() {
 		return errUIStreamReanchor
 	}
 	return nil
@@ -348,8 +375,8 @@ func (h *uiWriteHandler) HandleLive(item apptask.Event) error {
 
 // writeUIReanchor asks the Writing client to replace its live message with
 // canonical history and resume the same Task strictly after cursor. Display
-// events are persisted before they are streamed, and the encoder was idle at
-// cursor, so nothing is omitted and no error is surfaced.
+// events are persisted before they are streamed and the encoder was anchorable
+// at cursor, so nothing is omitted and no error is surfaced.
 func writeUIReanchor(writeUI *uiWriteHandler, taskID string, cursor uint64) error {
 	if err := writeUI.Handle(apptask.Event{Event: novaApp.AgentEvent{Type: taskRehydrateRequiredEventType, Data: map[string]any{
 		"code":     "agent_stream.rehydrate_required",

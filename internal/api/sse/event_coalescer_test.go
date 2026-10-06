@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	agentrun "denova/internal/agents/run"
 	novaApp "denova/internal/app"
 	apptask "denova/internal/app/task"
 )
@@ -87,5 +88,21 @@ func TestWriteCoalescedTaskEventStreamFlushesBeforeSemanticBoundary(t *testing.T
 	}
 	if len(written) != 2 || written[0].Cursor != 2 || written[0].Event.DataString("content") != "保留" || written[1].Event.Type != "done" {
 		t.Fatalf("written stream = %#v, want exact delta before done", written)
+	}
+}
+
+func TestCoalesceTaskEventsMergesDeltasStampedWithSegmentOffsets(t *testing.T) {
+	events := []apptask.Event{
+		{Cursor: 7, Event: novaApp.AgentEvent{Type: "thinking", Data: map[string]any{"content": "逐", "run_id": "run-1", agentrun.DisplaySegmentOffsetKey: 40}}},
+		{Cursor: 8, Event: novaApp.AgentEvent{Type: "thinking", Data: map[string]any{"content": "字", "run_id": "run-1", agentrun.DisplaySegmentOffsetKey: 41}}},
+	}
+
+	coalesced := coalesceTaskEvents(events)
+	if len(coalesced) != 1 || coalesced[0].Cursor != 8 || coalesced[0].Event.DataString("content") != "逐字" {
+		t.Fatalf("coalesced events = %#v, want one frame", coalesced)
+	}
+	// The merged frame starts where its first delta started.
+	if data, _ := coalesced[0].Event.Data.(map[string]any); data[agentrun.DisplaySegmentOffsetKey] != 40 {
+		t.Fatalf("merged frame offset = %#v, want 40", coalesced[0].Event.Data)
 	}
 }

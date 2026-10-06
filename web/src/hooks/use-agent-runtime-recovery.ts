@@ -120,8 +120,10 @@ export function useWritingAgentRuntimeRecovery({
   }, [])
 
   const attachDisplayStream = useCallback(
-    async (failureContext: string, sessionID: string, taskID: string, beforeResume?: () => void): Promise<boolean> => {
-      const key = `${sessionID}:${taskID}`
+    async (failureContext: string, sessionID: string, taskID: string, beforeResume?: () => void, resumeCursor = 0): Promise<boolean> => {
+      // A resume after a server cursor is a different attachment from a plain
+      // attach of the same Task: it must wait for that one and then connect.
+      const key = `${sessionID}:${taskID}:${resumeCursor}`
       // resumeStream owns one AI SDK response until it settles. Repeated
       // inspections may arrive before React reports streaming; share that
       // attachment instead of racing two readers on the same Chat instance.
@@ -317,7 +319,7 @@ export function useWritingAgentRuntimeRecovery({
     void attachDisplayStream('failed to canonically rehydrate and resume the same Writing Task', sessionID, request.taskID, () => {
       transport.setActiveStreamTarget(request.taskID, request.cursor, { session_id: sessionID })
       displayRehydrateResumedSignalRef.current = request.signal
-    }).then(finish)
+    }, request.cursor).then(finish)
   }, [
     activeSessionId,
     attachDisplayStream,

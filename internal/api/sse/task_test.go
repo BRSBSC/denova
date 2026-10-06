@@ -233,7 +233,7 @@ func writeRawToolInputSSEEvents(t *testing.T, writeSSE func(apptask.Event) error
 	}
 }
 
-func TestUIWriteHandlerReanchorsOverBudgetOnlyAtAnIdleBoundary(t *testing.T) {
+func TestUIWriteHandlerDefersReanchorWhileHistoryCannotTakeOver(t *testing.T) {
 	var buf bytes.Buffer
 	handler := newUIWriteHandler(context.Background(), &buf)
 	handler.budget = 256
@@ -243,8 +243,8 @@ func TestUIWriteHandlerReanchorsOverBudgetOnlyAtAnIdleBoundary(t *testing.T) {
 		{Cursor: 3, Event: agentrun.Event{Type: "tool_result", Data: map[string]any{"run_id": "run", "id": "call-1", "content": "chapter"}}},
 	}
 	for _, item := range events[:2] {
-		// Over budget, but reasoning or a tool call is still open: canonical
-		// history cannot yet replace the live message without losing output.
+		// Over budget, but a reasoning part without segment offsets or a tool
+		// call is open: history cannot replace the live message without loss.
 		if err := handler.HandleLive(item); err != nil {
 			t.Fatalf("event %d: %v", item.Cursor, err)
 		}
@@ -274,5 +274,51 @@ func TestUIWriteHandlerKeepsStreamingWithinBudget(t *testing.T) {
 		}}); err != nil {
 			t.Fatalf("%s within budget: %v", eventType, err)
 		}
+	}
+}
+
+func TestUIWriteHandlerReanchorsOverBudgetInTheMiddleOfAStampedSegment(t *testing.T) {
+	var buf bytes.Buffer
+	handler := newUIWriteHandler(context.Background(), &buf)
+	handler.budget = 256
+	// No tool boundary ever arrives in a long tool-free response. History holds
+	// the segment prefix and later deltas say where they start, so the live
+	// message can be swapped out while the reasoning is still streaming.
+	err := handler.HandleLive(apptask.Event{Cursor: 9, Event: agentrun.Event{Type: "thinking", Data: map[string]any{
+		"run_id": "run", "display_segment_id": "segment-1", "content": strings.Repeat("思", 400), agentrun.DisplaySegmentOffsetKey: 0,
+	}}})
+	if !errors.Is(err, errUIStreamReanchor) {
+		t.Fatalf("stamped reasoning over budget = %v, want re-anchor", err)
+	}
+}
+
+func TestUIReplayOverBudgetReanchorsInsteadOfResendingIt(t *testing.T) {
+	thinking := func(content string, stamped bool) agentrun.Event {
+		data := map[string]any{"run_id": "run", "display_segment_id": "segment-1", "content": content}
+		if stamped {
+			data[agentrun.DisplaySegmentOffsetKey] = 0
+		}
+		return agentrun.Event{Type: "thinking", Data: data}
+	}
+	large := strings.Repeat("思", uiLiveMessageBudgetBytes/3+1)
+	for _, test := range []struct {
+		name   string
+		events []agentrun.Event
+		want   bool
+	}{
+		{name: "large and resumable mid-segment", events: []agentrun.Event{thinking(large, true)}, want: true},
+		{name: "small", events: []agentrun.Event{thinking("short", true)}, want: false},
+		{name: "large with an unstamped open segment", events: []agentrun.Event{thinking(large, false)}, want: false},
+		{name: "large with an open tool call", events: []agentrun.Event{
+			thinking(large, true),
+			{Type: "tool_call", Data: map[string]any{"run_id": "run", "id": "call-1", "name": "read", "args": "{}"}},
+		}, want: false},
+		{name: "large but already finished", events: []agentrun.Event{thinking(large, true), {Type: "done", Data: map[string]any{}}}, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := uiReplayExceedsLiveBudget(context.Background(), test.events); got != test.want {
+				t.Fatalf("uiReplayExceedsLiveBudget() = %t, want %t", got, test.want)
+			}
+		})
 	}
 }

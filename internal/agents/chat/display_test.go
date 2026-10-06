@@ -101,3 +101,32 @@ func TestDisplayEventRecorderKeepsInterleavedSubAgentTextInStableSegments(t *tes
 		}
 	}
 }
+
+func TestDisplayEventRecorderStampsEachDeltaWithItsUTF16SegmentOffset(t *testing.T) {
+	store, err := session.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetOrCreate("segment-offsets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := newDisplayEventRecorder(agentconversation.NewSessionConversation(sess), displayEventRecorderOptions{})
+	record := func(eventType, content string) any {
+		data := agentEventMetadata{RunID: "run-1", AgentKind: "ide", AgentName: "root", RootAgentName: "root"}.appendTo(map[string]any{"content": content})
+		recorder.Record(agentrun.Event{Type: eventType, Data: data})
+		return data[agentrun.DisplaySegmentOffsetKey]
+	}
+	// The web client measures strings in UTF-16 code units: the emoji is two.
+	for index, want := range []int{0, 2, 5} {
+		if got := record("thinking", []string{"思考", "a😀", "b"}[index]); got != want {
+			t.Fatalf("thinking delta %d offset = %v, want %d", index, got, want)
+		}
+	}
+	// A new segment starts counting again.
+	for index, want := range []int{0, 3} {
+		if got := record("chunk", []string{"正文一", "二"}[index]); got != want {
+			t.Fatalf("assistant delta %d offset = %v, want %d", index, got, want)
+		}
+	}
+}

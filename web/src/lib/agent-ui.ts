@@ -560,11 +560,25 @@ function mergeDuplicateAgentUIPart(existing: AgentUIMessage['parts'][number], in
     const existingStatus = readString(objectData(existingRaw.data).status)
     return dataPartStatusRank(incomingStatus) >= dataPartStatusRank(existingStatus) ? incoming : existing
   }
-  if ((type === 'text' || type === 'reasoning') && !readString(incomingRaw.id)) {
+  if (type === 'text' || type === 'reasoning') {
+    // The stream resumed in the middle of this segment. Canonical history holds
+    // everything before the resume point and may already overlap the first live
+    // characters; the live part says exactly where in the segment it starts.
+    const start = liveSegmentStart(incomingRaw)
+    const joined = start > 0
+      ? { ...incomingRaw, text: readString(existingRaw.text).slice(0, start) + readString(incomingRaw.text) }
+      : incomingRaw
     const existingID = readString(existingRaw.id)
-    if (existingID) return { ...incomingRaw, id: existingID } as AgentUIMessage['parts'][number]
+    if (!readString(joined.id) && existingID) return { ...joined, id: existingID } as AgentUIMessage['parts'][number]
+    return joined as AgentUIMessage['parts'][number]
   }
   return incoming
+}
+
+/** Where a live content part starts inside its display segment, in UTF-16 units. */
+function liveSegmentStart(raw: Record<string, unknown>) {
+  const start = objectData(objectData(raw.providerMetadata).agent).display_segment_offset
+  return typeof start === 'number' && Number.isSafeInteger(start) ? start : 0
 }
 
 function mergeAgentMessageMetadata(left?: AgentMessageMetadata, right?: AgentMessageMetadata): AgentMessageMetadata | undefined {
