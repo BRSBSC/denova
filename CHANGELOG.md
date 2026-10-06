@@ -43,6 +43,9 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Fixed / 修复
 
+- 修复 Gemini Agent 工具调用后的签名丢失问题，支持连续工具调用与暂停后恢复。
+- Fix lost Gemini signatures after Agent tool calls, preserving successive calls and paused-task recovery.
+
 - 修复 Native Agent 历史压缩后被严格聊天模板以 400 错误拒绝、无法继续执行的问题。
 - Fix Native Agent continuation after history compaction being rejected with HTTP 400 by strict chat templates.
 
