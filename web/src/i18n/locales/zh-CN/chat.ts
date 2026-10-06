@@ -132,6 +132,7 @@ const chat = {
   'chat.queue.label': '排队中的指令',
   'chat.queue.steer': '立即转向',
   'chat.queue.steerDescription': '停止当前步骤，立即处理这条排队指令',
+  'chat.queue.steerUnavailable': '只有当前任务的排队指令可以立即转向',
   'chat.queue.steering': '正在转向…',
   'chat.queue.delete': '删除排队指令',
   'chat.queue.more': '更多排队指令操作',

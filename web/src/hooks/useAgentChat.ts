@@ -213,6 +213,8 @@ export function useAgentChat(options: ChatOptions = {}) {
   const retryCommandIDsRef = useRef(new Map<string, string>())
   const initialStartCommandIDsRef = useRef(new Map<string, string>())
   const queuedComposerDraftsRef = useRef(new Map<string, QueuedComposerDraft>())
+  const commandBindingRef = useRef({ client, projectId, sessionID: '' })
+  commandBindingRef.current = { client, projectId, sessionID: client.fixedSessionId || activeSessionId }
   const projectedOperationIDRef = useRef('')
   const activePlanMode = planModeForSession(planModes, activeSessionId, defaultPlanMode)
 
@@ -598,14 +600,18 @@ export function useAgentChat(options: ChatOptions = {}) {
 
   const submitQueuedControl = useCallback(
     async (item: AgentRuntimeQueuedCommand, action: AgentQueuedCommandAction, reason?: string) => {
-      if (abortPending || commandSubmittingRef.current) return false
-      const operationID = runtimeProjection?.active_operation_id?.trim()
+      if (abortPending || commandSubmittingRef.current || sessionTransitionPendingRef.current) return false
+      const operationID = item.operation_id.trim()
       const targetSessionID = (client.fixedSessionId || activeSessionId).trim()
-      if ((!runtimeProjection?.active && runtimeProjection?.phase !== 'suspended') || !operationID || item.operation_id !== operationID) {
+      const bindingIsCurrent = () => {
+        const current = commandBindingRef.current
+        return current.client === client && current.projectId === projectId && current.sessionID === targetSessionID && !sessionTransitionPendingRef.current
+      }
+      if (action === 'steer_queued' && ((!runtimeProjection?.active && runtimeProjection?.phase !== 'suspended') || operationID !== runtimeProjection?.active_operation_id)) {
         toast.error(t('chat.runtime.operationUnavailable'))
         return false
       }
-      if (!runtimeProjection.queue?.some((candidate) => candidate.command_id === item.command_id)) {
+      if (!operationID || !runtimeProjection?.queue?.some((candidate) => candidate.command_id === item.command_id && candidate.operation_id === operationID)) {
         toast.error(t('chat.runtime.invalidCommand'))
         return false
       }
@@ -621,8 +627,9 @@ export function useAgentChat(options: ChatOptions = {}) {
       try {
         const receipt = await client.submitQueuedChatCommand(action, commandID, operationID, item.command_id, targetSessionID, reason)
         retryCommandIDsRef.current.delete(retryKey)
+        if (!bindingIsCurrent()) return false
         setRuntimeProjection((current) => {
-          if (!current || current.active_operation_id !== operationID) return current
+          if (!current || (action === 'steer_queued' && current.active_operation_id !== operationID)) return current
           const queue = action === 'cancel_queued'
             ? (current.queue || []).filter((candidate) => candidate.command_id !== item.command_id)
             : (current.queue || []).map((candidate) => candidate.command_id === item.command_id
@@ -630,8 +637,7 @@ export function useAgentChat(options: ChatOptions = {}) {
               : candidate)
           return {
             ...current,
-            cursor: receipt.cursor,
-            active_operation_id: receipt.operation_id,
+            cursor: Math.max(current.cursor || 0, receipt.cursor),
             ...(action === 'steer_queued' && current.phase !== 'suspended' ? {
               recovery_paused: false,
               runtime_recoverable: false,
@@ -640,10 +646,14 @@ export function useAgentChat(options: ChatOptions = {}) {
             queue,
           }
         })
-        if (runtimeProjection?.phase === 'suspended') setRuntimeProjection(await client.getActiveChatTask(targetSessionID))
+        if (action === 'steer_queued' && runtimeProjection?.phase === 'suspended') {
+          const projection = await client.getActiveChatTask(targetSessionID)
+          if (bindingIsCurrent()) setRuntimeProjection(projection)
+        }
         return true
       } catch (error) {
         if (isKnownAgentCommandOutcome(error)) retryCommandIDsRef.current.delete(retryKey)
+        if (!bindingIsCurrent()) return false
         toast.error(agentCommandErrorMessage(error, t))
         return false
       } finally {
@@ -652,7 +662,7 @@ export function useAgentChat(options: ChatOptions = {}) {
         setQueueActionPendingCommandID('')
       }
     },
-    [abortPending, activeSessionId, client, runtimeProjection, setRuntimeProjection, t],
+    [abortPending, activeSessionId, client, projectId, runtimeProjection, setRuntimeProjection, t],
   )
 
   const steerQueuedCommand = useCallback(

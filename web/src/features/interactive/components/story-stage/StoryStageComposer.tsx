@@ -211,7 +211,9 @@ export function StoryStageComposer({ layout, editor, story, runtime, dialogs, ac
         <AgentQueuedCommandList
           items={queue}
           pendingCommandID={queueActionPendingCommandID}
-          disabled={activeControlsDisabled || abortPending || commandSubmitting}
+          disabled={abortPending || commandSubmitting}
+          activeOperationID={streaming || recoveryPaused ? operationId : ''}
+          steerDisabled={activeControlsDisabled}
           onSteer={steerQueuedCommand}
           onDelete={deleteQueuedCommand}
         />

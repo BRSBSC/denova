@@ -43,6 +43,11 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Fixed / 修复
 
+- 修复任务中断后恢复冲突导致 Agent 界面持续卡在重连状态的问题。
+- Fix recovery conflicts leaving the Agent interface stuck reconnecting after a task is interrupted.
+- 旧任务遗留的排队指令可在空闲或新任务运行时删除，写作指令可退回编辑，不影响新任务。
+- Allow queued instructions from earlier tasks to be deleted while idle or running a new task, and returned to the writing editor without affecting the new task.
+
 - 修复远程 ZIP 与 Skill 下载绕过代理的问题，资源下载统一遵循环境变量和系统代理设置。
 - Fix remote ZIP and Skill downloads bypassing proxies; resource downloads consistently use environment and system proxy settings.
 
