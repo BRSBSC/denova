@@ -15,6 +15,9 @@ interface WritingAgentHistoryOptions {
  * Background refreshes cannot replace an active stream's newer approval events.
  * Authoritative reloads replace provisional stream state; pagination only
  * prepends a page when no newer authoritative reload has superseded it.
+ * A background refresh never fails an authoritative reload: it waits for the
+ * one in flight and then refreshes, and it ends quietly once a newer reload
+ * owns the display. Only a newer authoritative reload rejects an older one.
  */
 export function useWritingAgentHistory({ setMessages, client = writingAgentChatClient, transportStreaming = false }: WritingAgentHistoryOptions) {
   const transportStreamingRef = useRef(transportStreaming)
@@ -25,6 +28,7 @@ export function useWritingAgentHistory({ setMessages, client = writingAgentChatC
   const [hasEarlierMessages, setHasEarlierMessages] = useState(false)
   const [isLoadingEarlierHistory, setIsLoadingEarlierHistory] = useState(false)
   const historyRequestGenerationRef = useRef(0)
+  const authoritativeReloadRef = useRef<Promise<void> | null>(null)
   const sessionsRequestGenerationRef = useRef(0)
   const earlierHistoryRequestRef = useRef(0)
   const earlierHistoryLoadingRef = useRef(false)
@@ -65,6 +69,8 @@ export function useWritingAgentHistory({ setMessages, client = writingAgentChatC
       const page = await client.getMessagesPage(targetSessionId || undefined)
       if (mode === 'when-idle' && transportStreamingRef.current) return
       if (generation !== historyRequestGenerationRef.current) {
+        // The newer reload delivers fresher history than this refresh asked for.
+        if (mode === 'when-idle') return
         throw new Error('Writing history reload was superseded before it could become authoritative')
       }
 
@@ -80,13 +86,27 @@ export function useWritingAgentHistory({ setMessages, client = writingAgentChatC
   )
 
   const loadHistoryAuthoritative = useCallback(
-    (sessionId?: string) => loadHistoryPage(sessionId, 'authoritative'),
+    (sessionId?: string) => {
+      const reload = loadHistoryPage(sessionId, 'authoritative')
+      const settled: Promise<void> = reload.then(
+        () => undefined,
+        () => undefined,
+      ).then(() => {
+        if (authoritativeReloadRef.current === settled) authoritativeReloadRef.current = null
+      })
+      authoritativeReloadRef.current = settled
+      return reload
+    },
     [loadHistoryPage],
   )
 
   const loadHistory = useCallback(
     async (sessionId?: string) => {
       try {
+        // Run settlement and stream recovery depend on their authoritative
+        // reload completing. Start this refresh after it instead of racing it,
+        // so the caller still observes history at least as new as its request.
+        while (authoritativeReloadRef.current) await authoritativeReloadRef.current
         await loadHistoryPage(sessionId, 'when-idle')
       } catch (error) {
         console.error('Failed to load conversation history', error)

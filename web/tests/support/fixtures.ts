@@ -30,7 +30,6 @@ const knownExpectedBrowserDiagnostics = [
   // A missing optional Book cover is represented by this endpoint as 404.
   /^console\.error: Failed to load resource:.*404 \(Not Found\).*\/api\/books\/cover\?path=/,
   /^console\.error: Failed to load conversation history.*Failed to fetch/,
-  /^console\.error: Failed to load conversation history.*Writing history reload was superseded before it could become authoritative/,
 ]
 
 /** Every browser-backed test fails on uncaught errors, console errors, and unexpected 5xx responses. */

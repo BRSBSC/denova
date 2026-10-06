@@ -1286,6 +1286,36 @@ describe('useAgentChat', () => {
     expect(result.current.isStreaming).toBe(false)
   })
 
+  it('settles a finished run without recovery when an idle refresh overlaps its canonical reload', async () => {
+    chatMock.status = 'streaming'
+    vi.mocked(getActiveChatTask)
+      .mockResolvedValueOnce({ active: true, phase: 'running', task_id: 'task-1', active_operation_id: 'operation-1' })
+      .mockResolvedValue({ active: false, phase: 'idle' })
+    const { result, rerender } = renderHook(() => useAgentChat())
+    await waitFor(() => expect(result.current.runtimeProjection?.active_operation_id).toBe('operation-1'))
+    const emptyPage = { messages: [], nextBefore: '0', hasMore: false, total: 0 }
+    const canonical = deferred<Awaited<ReturnType<typeof getMessagesPage>>>()
+    vi.mocked(getMessagesPage).mockReset().mockReturnValueOnce(canonical.promise).mockResolvedValue(emptyPage)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    chatMock.status = 'ready'
+    rerender()
+    await waitFor(() => expect(getMessagesPage).toHaveBeenCalledTimes(1))
+    let refresh!: Promise<void>
+    act(() => {
+      refresh = result.current.loadHistory('session-test')
+    })
+    await act(async () => {
+      canonical.resolve(emptyPage)
+      await refresh
+    })
+
+    await waitFor(() => expect(result.current.isStreaming).toBe(false))
+    expect(getMessagesPage).toHaveBeenCalledTimes(2)
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('reloads canonical history and resumes the same Task after an incomplete display checkpoint', async () => {
     chatMock.status = 'streaming'
     const canonicalMessages = [

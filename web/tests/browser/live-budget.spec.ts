@@ -19,6 +19,12 @@ test('writing re-anchors each over-budget live stream onto canonical history', a
   page.on('request', (value) => {
     if (value.url().includes('/chat/stream')) streamRequests.push(value.url())
   })
+  // This megabyte-sized history is slow enough for a background refresh to
+  // overlap the canonical reload that settles the Run.
+  const recoveryWarnings: string[] = []
+  page.on('console', (message) => {
+    if (message.text().includes('failed to inspect or recover writing Agent runtime')) recoveryWarnings.push(message.text())
+  })
   const marker = 'E2E_LIVE_BUDGET'
   await composer.fill(marker)
   await page.locator('[data-action="send"]').filter({ visible: true }).click()
@@ -39,6 +45,7 @@ test('writing re-anchors each over-budget live stream onto canonical history', a
     expect(streamRequests.filter((url) => /[?&]after=\d+/.test(url))).toHaveLength(2)
     await expect(page.locator('[data-action="send"]').filter({ visible: true })).toBeVisible()
     await expect(page.getByText(/正在从持久化状态恢复/)).toHaveCount(0)
+    expect(recoveryWarnings).toEqual([])
     await page.screenshot({ path: test.info().outputPath('settled.png') })
   } finally {
     await releaseDelayedRequest(request, marker)
