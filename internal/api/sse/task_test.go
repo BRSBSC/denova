@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -229,5 +230,49 @@ func writeRawToolInputSSEEvents(t *testing.T, writeSSE func(apptask.Event) error
 		"content": "Updated file chapters/ch02.md",
 	}}); err != nil {
 		t.Fatalf("write tool_result failed: %v", err)
+	}
+}
+
+func TestUIWriteHandlerReanchorsOverBudgetOnlyAtAnIdleBoundary(t *testing.T) {
+	var buf bytes.Buffer
+	handler := newUIWriteHandler(context.Background(), &buf)
+	handler.budget = 256
+	events := []apptask.Event{
+		{Cursor: 1, Event: agentrun.Event{Type: "thinking", Data: map[string]any{"run_id": "run", "content": strings.Repeat("思", 400)}}},
+		{Cursor: 2, Event: agentrun.Event{Type: "tool_call", Data: map[string]any{"run_id": "run", "id": "call-1", "name": "read", "args": "{}"}}},
+		{Cursor: 3, Event: agentrun.Event{Type: "tool_result", Data: map[string]any{"run_id": "run", "id": "call-1", "content": "chapter"}}},
+	}
+	for _, item := range events[:2] {
+		// Over budget, but reasoning or a tool call is still open: canonical
+		// history cannot yet replace the live message without losing output.
+		if err := handler.HandleLive(item); err != nil {
+			t.Fatalf("event %d: %v", item.Cursor, err)
+		}
+	}
+	if err := handler.HandleLive(events[2]); !errors.Is(err, errUIStreamReanchor) {
+		t.Fatalf("completed tool batch over budget = %v, want re-anchor", err)
+	}
+	if err := writeUIReanchor(handler, "writing-task-3", events[2].Cursor); err != nil {
+		t.Fatal(err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, `"event":"task_rehydrate_required"`) || !strings.Contains(got, `"task_id":"writing-task-3"`) ||
+		!strings.Contains(got, `"cursor":3`) || !strings.Contains(got, `"lossless":true`) || !strings.Contains(got, `"settled":false`) {
+		t.Fatalf("re-anchor frame lost the Task suffix identity: %q", got)
+	}
+	if !strings.Contains(got, `"type":"finish"`) || strings.Contains(got, `"type":"error"`) || strings.Contains(got, `"type":"tool-output-error"`) {
+		t.Fatalf("re-anchor must end the connection cleanly: %q", got)
+	}
+}
+
+func TestUIWriteHandlerKeepsStreamingWithinBudget(t *testing.T) {
+	var buf bytes.Buffer
+	handler := newUIWriteHandler(context.Background(), &buf)
+	for cursor, eventType := range []string{"tool_call", "tool_result"} {
+		if err := handler.HandleLive(apptask.Event{Cursor: uint64(cursor + 1), Event: agentrun.Event{
+			Type: eventType, Data: map[string]any{"run_id": "run", "id": "call-1", "name": "read", "args": "{}", "content": "chapter"},
+		}}); err != nil {
+			t.Fatalf("%s within budget: %v", eventType, err)
+		}
 	}
 }

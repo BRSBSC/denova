@@ -201,6 +201,14 @@ func (e *StreamEncoder) Finish(reason string) error {
 	return nil
 }
 
+// Idle reports whether the open stream has no content segment or tool call in
+// flight. Only at such a boundary does canonical history hold every part the
+// stream has rendered in its final form, so a client can swap its live message
+// for history without losing or duplicating output.
+func (e *StreamEncoder) Idle() bool {
+	return !e.finished && len(e.textIDs) == 0 && len(e.reasonIDs) == 0 && len(e.startedTool) == 0
+}
+
 func (e *StreamEncoder) ensureStarted(ev appsvc.AgentEvent) error {
 	if e.started {
 		return nil

@@ -308,6 +308,31 @@ async function writeThinkingStressCompletion(response, body) {
   finishCompletion(response)
 }
 
+async function writeLiveBudgetCompletion(response, body) {
+  response.writeHead(200, {
+    'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive',
+  })
+  const results = (body.messages ?? []).filter(message => message.role === 'tool').length
+  if (results < 2) {
+    writeCompletionFrame(response, completionFrame({ role: 'assistant' }))
+    // About 1.2 MiB of reasoning per round: each round pushes the UI stream past
+    // its live message budget before the tool batch gives it an idle boundary.
+    const chunk = `Budget reasoning before tool boundary ${results + 1}. `.repeat(190)
+    for (let frame = 0; frame < 150; frame += 1) {
+      writeCompletionFrame(response, completionFrame({ reasoning_content: chunk }))
+      if (frame % 10 === 0) await delay(5)
+    }
+    const call = toolCompletionFrames('read', JSON.stringify({ path: `e2e-live-budget-missing-${results + 1}.md` }), `call-live-budget-${results + 1}`)
+    for (const frame of call) writeCompletionFrame(response, frame)
+    finishCompletion(response)
+    return
+  }
+  writeCompletionFrame(response, completionFrame({ role: 'assistant', reasoning_content: 'Reasoning after the tool boundaries.' }))
+  await waitForDelayedRelease('E2E_LIVE_BUDGET')
+  for (const frame of textCompletionFrames('Live budget complete.')) writeCompletionFrame(response, frame)
+  finishCompletion(response)
+}
+
 function writeGeneratedCompletion(response, content) {
   writeJSON(response, 200, {
     id: 'denova-e2e-response',
@@ -403,6 +428,11 @@ const server = createServer(async (request, response) => {
 
   if (requestIncludesMarker(body, 'E2E_THINKING_STRESS')) {
     await writeThinkingStressCompletion(response, body)
+    return
+  }
+
+  if (requestIncludesMarker(body, 'E2E_LIVE_BUDGET')) {
+    await writeLiveBudgetCompletion(response, body)
     return
   }
 

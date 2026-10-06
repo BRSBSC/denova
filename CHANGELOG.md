@@ -12,6 +12,11 @@ Denova records only major user-visible features, important compatibility or data
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- 修复单轮运行很长（大量思考与工具调用）时，写作与工作台对话页面越来越卡直至无法操作的问题；刷新页面也不再回到卡顿状态。
+- Fix the Writing and workbench conversation pages slowing down until unusable during a very long single run with heavy reasoning and many tool calls; reloading the page no longer returns to the stalled state.
+
 ## [v0.5.1fix6] - 2026-10-05
 
 ### Brief / 简要说明

@@ -84,3 +84,24 @@ func TestStreamEncoderKeepsContentOpenAcrossObserverGaps(t *testing.T) {
 		})
 	}
 }
+
+func TestStreamEncoderIsIdleOnlyBetweenCompletedParts(t *testing.T) {
+	var out bytes.Buffer
+	encoder := NewStreamEncoder(&out, "idle-test")
+	step := func(want bool, eventType string, data map[string]any) {
+		t.Helper()
+		if err := encoder.WriteEvent(agentrun.Event{Type: eventType, Data: data}); err != nil {
+			t.Fatal(err)
+		}
+		if got := encoder.Idle(); got != want {
+			t.Fatalf("Idle() after %s = %t, want %t", eventType, got, want)
+		}
+	}
+	step(false, "thinking", map[string]any{"run_id": "run", "content": "plan"})
+	step(false, "tool_call", map[string]any{"run_id": "run", "id": "call-1", "name": "read", "args": "{}"})
+	step(false, "tool_call", map[string]any{"run_id": "run", "id": "call-2", "name": "read", "args": "{}"})
+	step(false, "tool_result", map[string]any{"run_id": "run", "id": "call-1", "content": "one"})
+	step(true, "tool_result", map[string]any{"run_id": "run", "id": "call-2", "content": "two"})
+	step(false, "chunk", map[string]any{"run_id": "run", "content": "answer"})
+	step(false, "done", map[string]any{})
+}

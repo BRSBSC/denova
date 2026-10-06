@@ -1376,6 +1376,56 @@ describe('useAgentChat', () => {
     await waitFor(() => expect(result.current.isStreaming).toBe(false))
   })
 
+  it('silently re-anchors an over-budget live stream onto canonical history', async () => {
+    chatMock.status = 'streaming'
+    const canonicalMessages = [
+      {
+        id: 'history-user',
+        role: 'user' as const,
+        parts: [{ type: 'text' as const, text: '继续' }],
+      },
+    ]
+    vi.mocked(getMessagesPage).mockResolvedValue({
+      messages: canonicalMessages,
+      nextBefore: '0',
+      hasMore: false,
+      total: 1,
+    })
+    const { result, rerender } = renderHook(() => useAgentChat())
+    const transport = (chatMock.options as { transport: AgentChatTransport }).transport
+    const setTarget = vi.spyOn(transport, 'setActiveStreamTarget')
+    vi.mocked(getMessagesPage).mockClear()
+    chatMock.setMessages.mockClear()
+
+    act(() => {
+      chatMock.options?.onData?.({
+        type: 'data-agent-activity',
+        data: {
+          event: 'task_rehydrate_required',
+          code: 'agent_stream.rehydrate_required',
+          task_id: 'task-budget-90',
+          cursor: 90,
+          settled: false,
+          lossless: true,
+        },
+      })
+      chatMock.status = 'ready'
+      rerender()
+    })
+
+    await waitFor(() => expect(chatMock.resumeStream).toHaveBeenCalledTimes(1))
+    expect(setTarget).toHaveBeenCalledWith('task-budget-90', 90, { session_id: 'session-test' })
+    expect(vi.mocked(getMessagesPage).mock.invocationCallOrder[0]).toBeLessThan(chatMock.resumeStream.mock.invocationCallOrder[0])
+    expect(result.current.isStreaming).toBe(true)
+    const restored = chatMock.setMessages.mock.calls.reduce<Array<{ parts?: Array<{ type?: string }> }>>(
+      (messages, [update]) => (typeof update === 'function' ? update(messages) : update),
+      [],
+    )
+    // Nothing was omitted at an idle boundary, so no omission notice appears.
+    expect(restored.flatMap((message) => message.parts ?? []).some((part) => part.type === 'data-agent-system')).toBe(false)
+    expect(toastMock.error).not.toHaveBeenCalled()
+  })
+
   it.each([
     {
       name: 'error',
