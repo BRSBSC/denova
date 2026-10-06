@@ -20,6 +20,13 @@ import (
 
 const maxResidentSessions = 32
 
+var (
+	ErrOnlySession = errors.New("cannot delete the only conversation")
+	// ErrDeletionCleanup means the canonical journal was removed, but cleanup
+	// failed. Callers must not present this as a refused conversation deletion.
+	ErrDeletionCleanup = errors.New("conversation deleted with cleanup errors")
+)
+
 // Store 管理会话的 JSONL 文件持久化。
 type Store struct {
 	dir      string
@@ -234,7 +241,29 @@ func (s *Store) Rename(id, title string) error {
 	return sess.Rename(title)
 }
 
-// Delete 删除指定会话文件。
+// CheckDelete performs read-only admission checks. Delete repeats these checks
+// under the Store lock; callers must exclude competing product admissions.
+func (s *Store) CheckDelete(id string) error {
+	if err := validateSessionID(id); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.checkDeleteLocked()
+}
+
+func (s *Store) checkDeleteLocked() error {
+	count, err := s.countLocked()
+	if err != nil {
+		return err
+	}
+	if count <= 1 {
+		return ErrOnlySession
+	}
+	return nil
+}
+
+// Delete removes the canonical journal before cleaning up its derived files.
 func (s *Store) Delete(id string) error {
 	if err := validateSessionID(id); err != nil {
 		return err
@@ -242,21 +271,18 @@ func (s *Store) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	count, err := s.countLocked()
-	if err != nil {
+	if err := s.checkDeleteLocked(); err != nil {
 		return err
 	}
-	if count <= 1 {
-		return fmt.Errorf("不能删除当前唯一会话")
-	}
 	if err := s.closeCachedLocked(id); err != nil {
-		return fmt.Errorf("关闭待删除会话失败: %w", err)
+		return fmt.Errorf("close conversation before deletion: %w", err)
 	}
-	if err := removeSessionJournal(s.sessionPath(id)); err != nil {
-		return fmt.Errorf("删除会话失败: %w", err)
+	err := removeSessionJournal(s.sessionPath(id))
+	if err != nil && !errors.Is(err, ErrDeletionCleanup) {
+		return fmt.Errorf("delete conversation: %w", err)
 	}
 	delete(s.metadata, id)
-	return nil
+	return err
 }
 
 // DeleteByPrefix 删除 ID 匹配指定前缀的会话文件，用于删除互动故事线时级联清理会话。
@@ -320,25 +346,32 @@ func removeSessionJournal(path string) (resultErr error) {
 	if err != nil {
 		return err
 	}
-	defer func() { resultErr = errors.Join(resultErr, release()) }()
+	removed := false
+	defer func() {
+		resultErr = errors.Join(resultErr, release())
+		if removed && resultErr != nil {
+			resultErr = fmt.Errorf("%w: %w", ErrDeletionCleanup, resultErr)
+		}
+	}()
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	removed = true
 	if err := os.Remove(conversationjournal.SidecarPath(path)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("删除会话索引失败: %w", err)
+		resultErr = errors.Join(resultErr, fmt.Errorf("delete conversation index: %w", err))
 	}
 	if err := os.RemoveAll(sessionToolArtifactDirectory(path)); err != nil {
-		return fmt.Errorf("删除会话工具产物失败: %w", err)
+		resultErr = errors.Join(resultErr, fmt.Errorf("delete conversation tool artifacts: %w", err))
 	}
 	sessionID := strings.TrimSuffix(filepath.Base(path), ".jsonl")
 	stateRoot := filepath.Dir(filepath.Dir(path))
 	if err := agentattachment.RemoveScope(stateRoot, agentattachment.SessionScope(sessionID)); err != nil {
-		return fmt.Errorf("delete Session attachments: %w", err)
+		resultErr = errors.Join(resultErr, fmt.Errorf("delete conversation attachments: %w", err))
 	}
 	if err := syncParentDirectory(path); err != nil {
-		return fmt.Errorf("同步会话删除目录失败: %w", err)
+		resultErr = errors.Join(resultErr, fmt.Errorf("sync conversation deletion directory: %w", err))
 	}
-	return nil
+	return resultErr
 }
 
 // ActiveID 返回最近激活会话 ID。

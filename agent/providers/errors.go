@@ -16,6 +16,10 @@ type APIError struct {
 	StatusCode int
 	Code       string
 	Kind       string
+	// InStream marks a failure reported by an event inside an already accepted
+	// stream. No rejecting status exists, so it is an interrupted response and
+	// retryable unless Code or Kind names a permanent cause.
+	InStream   bool
 	RetryAfter time.Duration
 	RequestID  string
 	Message    string
@@ -29,7 +33,7 @@ func (err *APIError) Retryable() bool {
 	}
 	for _, value := range []string{err.Code, err.Kind} {
 		switch strings.ToLower(value) {
-		case "insufficient_quota", "billing_hard_limit_reached", "credit_balance_too_low", "authentication_error", "permission_error", "invalid_api_key", "invalid_request_error":
+		case "insufficient_quota", "billing_hard_limit_reached", "credit_balance_too_low", "authentication_error", "permission_error", "invalid_api_key", "invalid_request_error", "content_filter", "context_length_exceeded":
 			return false
 		}
 	}
@@ -39,7 +43,7 @@ func (err *APIError) Retryable() bool {
 			return true
 		}
 	}
-	return err.StatusCode == http.StatusRequestTimeout || err.StatusCode == http.StatusConflict ||
+	return err.InStream || err.StatusCode == http.StatusRequestTimeout || err.StatusCode == http.StatusConflict ||
 		err.StatusCode == http.StatusTooManyRequests || err.StatusCode >= http.StatusInternalServerError
 }
 

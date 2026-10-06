@@ -265,6 +265,7 @@ func (state *streamState) convert(event responses.ResponseStreamEventUnion) (*ag
 		}
 		return nil, &providers.APIError{
 			RequestID: responseRequestID(state.rawResponse),
+			Code:      event.Code,
 			Message:   strings.TrimSpace(message),
 		}
 	case "response.in_progress", "response.queued",
