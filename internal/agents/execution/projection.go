@@ -99,12 +99,27 @@ func (s *Runtime) CloseProjectSessionBindings(ctx context.Context, projectID, se
 	return s.closeRuntimeBindings(ctx, selector)
 }
 
-func (s *Runtime) DeleteProjectSessionBindings(ctx context.Context, projectID, sessionID string) error {
+// ProjectSessionBindings snapshots all root streams in a product conversation.
+// Hold product admission until the journal and these roots' children are deleted.
+func (s *Runtime) ProjectSessionBindings(ctx context.Context, projectID, sessionID string) ([]agent.SessionKey, error) {
+	if s == nil || s.public == nil || s.public.agent == nil {
+		return nil, ErrRuntimeProjectionUnavailable
+	}
 	selector, err := agentrun.ProjectSessionBindingSelector(projectID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return s.public.agent.ListSessions(ctx, selector)
+}
+
+// DeleteSessionChildren removes a root's entire persistent child tree without
+// mutating its product-owned journal. The root may already have been deleted.
+func (s *Runtime) DeleteSessionChildren(ctx context.Context, root agent.SessionKey) error {
+	attributes, err := agent.ChildSessionAttributes(root)
 	if err != nil {
 		return err
 	}
-	return s.deleteRuntimeBindings(ctx, selector)
+	return s.deleteRuntimeBindings(ctx, agent.SessionSelector{Attributes: attributes})
 }
 
 // CloseProjectBindings evicts all runtime actors owned by a Project.

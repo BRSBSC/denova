@@ -12,6 +12,11 @@ Denova records only major user-visible features, important compatibility or data
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- 修复删除项目唯一会话被拒绝后，Goal 和 Agent 恢复状态仍被清除的问题。
+- Fix rejected deletion of a project's only conversation clearing its Goal and Agent recovery state.
+
 ## [v0.5.1fix7] - 2026-10-06
 
 ### Brief / 简要说明
