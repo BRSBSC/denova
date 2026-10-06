@@ -4,13 +4,27 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix7）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix8）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix7) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix8) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
 ## [Unreleased]
+
+## [v0.5.1fix8] - 2026-10-07
+
+### Brief / 简要说明
+
+#### 中文
+
+- 模型服务在流式输出中途报告临时错误时自动重试，不再直接中断任务。
+- 修复删除项目唯一会话被拒绝后仍清除 Goal 和 Agent 恢复状态的问题。
+
+#### English
+
+- Retry automatically when the model provider reports a transient error partway through a stream instead of ending the run.
+- Fix rejected deletion of a project's only conversation clearing its Goal and Agent recovery state.
 
 ### Fixed / 修复
 
