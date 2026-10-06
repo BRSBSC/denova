@@ -93,8 +93,10 @@ type agentExecution struct {
 	// generation so a cursor from before a restart cannot look current.
 	generation string
 	events     []streamEvent
-	next       uint64
-	mu         sync.Mutex
+	// Pending questions are an event projection; the Agent journal owns answers.
+	interactions []agent.InteractionRequest
+	next         uint64
+	mu           sync.Mutex
 }
 
 func (m *Manager) ConfigureAgents(store *canonicalstore.Store, resolver ModelResolver) {

@@ -155,9 +155,11 @@ for (const theme of ['dark', 'light']) {
     await page.setViewportSize({ width: 320, height: 844 })
     await section.getByRole('button', { name: '关联资料', exact: true }).scrollIntoViewIfNeeded()
     await expect(picker.getByRole('button', { name: '关联所选', exact: true })).toBeInViewport()
-    const pickerBox = (await picker.boundingBox())!
-    expect(pickerBox.x).toBeGreaterThanOrEqual(0)
-    expect(pickerBox.x + pickerBox.width).toBeLessThanOrEqual(320)
+    await expect.poll(async () => (await picker.boundingBox())!.x).toBeGreaterThanOrEqual(0)
+    await expect.poll(async () => {
+      const box = (await picker.boundingBox())!
+      return box.x + box.width
+    }).toBeLessThanOrEqual(320)
     await page.screenshot({ path: testInfo.outputPath(`index-${theme}-multiselect-320.png`) })
     await page.setViewportSize({ width: 1680, height: 1000 })
     if (theme === 'dark') {

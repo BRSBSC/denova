@@ -54,8 +54,10 @@ for (const theme of ['dark', 'light']) {
     await expect(horizontal).toBeEnabled()
     const source = focusDialog.getByRole('button', { name: '选择焦点（可使用滑块通过键盘调整）', exact: true })
     const bounds = (await source.boundingBox())!
-    await source.click({ position: { x: bounds.width / 4, y: bounds.height * 0.75 } })
-    await expect(horizontal).toHaveAttribute('aria-valuenow', '25')
+    const x = Math.round(bounds.x + bounds.width / 4)
+    const y = Math.round(bounds.y + bounds.height * 0.75)
+    await page.mouse.click(x, y)
+    await expect(horizontal).toHaveAttribute('aria-valuenow', String(Math.round((x - bounds.x) / bounds.width * 100)))
     await horizontal.focus()
     await horizontal.press('End')
     await focusDialog.getByRole('slider', { name: '纵向焦点', exact: true }).press('Home')

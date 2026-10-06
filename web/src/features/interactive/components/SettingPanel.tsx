@@ -584,12 +584,11 @@ function LoreSettingPanel({
     return () => window.removeEventListener('nova:workspace-change', onWorkspaceChange)
   }, [activeId, activeMode, isCreatorActive, projectId, reconcileCreatorFile, reconcileOpeningPresetFile])
 
-  const refreshItems = useCallback(async (nextActiveId?: string) => {
+  const refreshItems = useCallback(async () => {
     const data = await getProjectLoreItems(projectId)
     setItems(data)
     // Preserve an existing selection, including the overview, after background updates.
     setActiveId((current) => {
-      if (nextActiveId && data.some((item) => item.id === nextActiveId)) return nextActiveId
       if (current === LORE_OVERVIEW_ID || current === LORE_INDEX_ID || current === CREATOR_ENTRY_ID || current === INTERACTIVE_OPENING_PRESET_ENTRY_ID) return current
       if (current && data.some((item) => item.id === current)) return current
       return LORE_OVERVIEW_ID
@@ -600,7 +599,8 @@ function LoreSettingPanel({
     const onLoreUpdated = (event: Event) => {
       const detail = (event as CustomEvent<LoreUpdatedDetail>).detail
       if (detail?.projectId !== projectId) return
-      void refreshItems(detail.source === 'materials' || detail.source === 'lore-index' ? undefined : detail.ids?.[0])
+      // Mutation notifications refresh data; explicit navigation owns selection.
+      void refreshItems()
     }
     const onWorkspaceChange = (event: Event) => {
       const detail = (event as CustomEvent<WorkspaceChangeEvent>).detail

@@ -269,4 +269,4 @@ Lore 和开场按条目判断；预设、风格、Skill 与扩展按完整资源
 
 索引仓库的 `npm test` 校验自身示例的类型覆盖、文本统计和故事分支；不下载或执行第三方条目。Denova 的 `TestIndexExamplesValidation` 在提供 `DENOVA_INDEX_EXAMPLES_DIR` 时验证示例预览、安装、导出回读，并通过平台调用文本统计工具。
 
-`resource-market-examples.spec.ts` 在提供 `DENOVA_MARKET_GAME_ZIP` 时验证雾中灯渡的导入、创建故事、分支、存档重载、中英文与深浅主题、宽窄屏。两项联合测试使用隔离数据，普通测试运行不依赖另一个仓库。具体命令见索引仓库 README。
+原先依赖外部 `lantern-crossing` 归档的验收测试已移除，该示例不再由索引仓库维护。插件与游戏的导入、启用、交互、存档恢复、本地化和布局由当前仓库内的确定性 fixture 与平台端到端测试验证，普通测试不依赖另一个仓库。

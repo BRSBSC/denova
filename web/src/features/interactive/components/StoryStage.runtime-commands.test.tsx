@@ -31,6 +31,7 @@ const {
 } = testMocks
 
 vi.mock('@/features/settings/api', () => ({
+  fetchProjectSettings: vi.fn().mockResolvedValue({ effective: {} }),
   fetchSettings: vi.fn().mockResolvedValue({ effective: {} }),
 }))
 
@@ -132,7 +133,7 @@ describe('StoryStage active runtime commands', () => {
         message: 'Continue.',
         resume_interruption_id: 'turn-interruption-7',
       })))
-      expect(screen.getByText('继续生成')).toBeInTheDocument()
+      expect(await screen.findByText('继续生成')).toBeInTheDocument()
     } finally {
       unmount()
       stream.close()

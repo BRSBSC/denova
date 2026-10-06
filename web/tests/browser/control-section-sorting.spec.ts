@@ -51,10 +51,14 @@ for (const { theme, width } of [{ theme: 'dark', width: 1440 }, { theme: 'light'
     await expect(agentHeader).toHaveAttribute('aria-expanded', 'false')
 
     // A collapsed card must not stretch over an expanded target during keyboard sorting.
+    await expect(checks).toHaveCSS('transform', 'none')
+    await expect(agent).toHaveCSS('transform', 'none')
     const collapsedHeight = (await agent.boundingBox())!.height
     await agentHeader.focus()
     await page.keyboard.press('Space')
     await expect(agentHeader).toHaveAttribute('aria-pressed', 'true')
+    // KeyboardSensor attaches its document listener in the next browser task.
+    await page.evaluate(() => new Promise<void>(resolve => setTimeout(resolve, 0)))
     await page.keyboard.press('ArrowUp')
     await expect(page.getByRole('status').filter({ hasText: '移动至第 1 位' })).toHaveCount(1)
     await expect.poll(async () => (await agent.boundingBox())!.height).toBeCloseTo(collapsedHeight, 0)

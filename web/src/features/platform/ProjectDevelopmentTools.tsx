@@ -12,7 +12,7 @@ import { InlineErrorNotice } from '@/components/common/inline-error-notice'
 import type { EditorFlushHandler } from '@/components/Editor/useEditorDraftPersistence'
 import { APIError } from '@/lib/api-client/client'
 import { BuildTerminal } from './BuildTerminal'
-import { GamePlayer } from './GamePlayer'
+import { GamePlayer, type GamePlayerHandle } from './GamePlayer'
 import { DevelopmentPreviewDialog } from './DevelopmentPreviewDialog'
 import { SourceManifestEditor } from './SourceManifestEditor'
 import { useDevelopmentContext, useProjectDevelopment } from './development-context'
@@ -54,6 +54,7 @@ function SourceDevelopmentActions({ source, visible, refreshSignal, beforeAction
   const client = useQueryClient()
   const [candidate, setCandidate] = useState<Candidate | null>(null)
   const [player, setPlayer] = useState<RuntimeSnapshot | null>(null)
+  const playerHandle = useRef<GamePlayerHandle>(null)
   const [manifestAction, setManifestAction] = useState<'edit' | 'publish' | null>(null)
   const [testsOpen, setTestsOpen] = useState(false)
   const [build, setBuild] = useState<{ directory: string; command: { command: string; args: string[] } } | null>(null)
@@ -161,10 +162,10 @@ function SourceDevelopmentActions({ source, visible, refreshSignal, beforeAction
     {candidate && <DevelopmentPreviewDialog key={candidate.candidateId} projectId={source.projectId} open={visible} candidate={candidate} onClose={() => setCandidate(null)}
       onFeedback={recordFeedback} onPlay={runtime => { setPlayer(runtime); refresh() }} />}
     {build && visible && <BuildTerminal {...build} projectId={source.projectId} onOutput={receiveBuildOutput} onClose={() => setBuild(null)} />}
-    <Dialog open={visible && !!player} onOpenChange={open => { if (!open) void run('Stop preview', async () => { if (player) await management(`/runtimes/${player.id}/stop`, 'POST', {}); setPlayer(null) }) }}>
+    <Dialog open={visible && !!player} onOpenChange={open => { if (!open) void playerHandle.current?.requestExit() }}>
       <DialogContent className="flex h-[85dvh] max-w-[calc(100vw-2rem)] flex-col sm:max-w-5xl">
         <DialogHeader><DialogTitle>{t('platform.preview')}</DialogTitle><DialogDescription>{t('platform.previewDescription')}</DialogDescription></DialogHeader>
-        {player && <GamePlayer variant={source.kind === 'plugin' ? 'plugin' : 'game'} key={player.id} runtime={player} visible={visible} onExit={() => setPlayer(null)} onOpenInstance={async instance => {
+        {player && <GamePlayer ref={playerHandle} variant={source.kind === 'plugin' ? 'plugin' : 'game'} key={player.id} runtime={player} visible={visible} onExit={() => setPlayer(null)} onOpenInstance={async instance => {
           const next = await management<RuntimeSnapshot>(`/instances/${instance.instanceId}/open`, 'POST', { locale: i18n.language, theme: resolvedTheme })
           setPlayer(next)
           refresh()

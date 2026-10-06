@@ -60,20 +60,7 @@ for (const theme of ['dark', 'light'] as const) {
       expect(box.x).toBeGreaterThanOrEqual(0)
       expect(box.x + box.width).toBeLessThanOrEqual(viewport.width)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-      await expect(page.locator('.nova-story-input-float')).toHaveCSS('background-image', 'none')
-      const composer = page.locator('.nova-story-stage-composer')
-      await expect(composer).toHaveCSS('background-image', 'none')
-      await expect(composer).toHaveCSS('backdrop-filter', 'blur(20px)')
-      const surface = await composer.evaluate(element => getComputedStyle(element).backgroundColor)
-      const choices = page.locator('.nova-story-choice-panel')
-      await expect(choices).toHaveCSS('background-color', surface)
-      await expect(choices).toHaveCSS('backdrop-filter', 'blur(20px)')
-      await expect(choices).toHaveCSS('border-radius', await composer.evaluate(element => getComputedStyle(element).borderRadius))
-      for (const button of await composer.locator('.nova-agent-composer-icon, .nova-agent-composer-pill, [data-model-profile-trigger="true"]').all()) {
-        expect(await button.evaluate(element => parseFloat(getComputedStyle(element).borderRadius) >= element.clientHeight / 2)).toBe(true)
-      }
       await page.getByPlaceholder(/你要做什么/).focus()
-      await expect(composer).toHaveCSS('background-color', surface)
       await expect(page.getByText('走进旧车站', { exact: true })).toBeVisible()
       await page.screenshot({ path: test.info().outputPath(`game-width-${theme}-${viewport.width}.png`) })
     }

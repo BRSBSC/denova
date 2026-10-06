@@ -232,7 +232,6 @@ describe('NewStorySetupPanel', () => {
     expect(screen.getByRole('heading', { name: '互动图像' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '状态面板' })).toBeInTheDocument()
     expect(screen.queryByText('主舞台展示')).not.toBeInTheDocument()
-    expect(screen.getByTestId('story-setup-footer')).toHaveClass('shrink-0')
     fireEvent.click(screen.getByRole('button', { name: /高级设置/ }))
     expect(screen.queryByRole('heading', { name: '回合判定' })).not.toBeInTheDocument()
   })

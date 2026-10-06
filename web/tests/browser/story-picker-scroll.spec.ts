@@ -1,6 +1,6 @@
 import { expect, test } from '../support/fixtures'
 import { createAndOpenBook } from '../support/api'
-import type { Instance, RuntimeSnapshot } from '../../src/features/platform/api'
+import type { CatalogEntry, Instance, RuntimeSnapshot } from '../../src/features/platform/api'
 
 for (const theme of ['dark', 'light'] as const) {
   test(`story picker scrolls inside the game menu in ${theme}`, async ({ page, request }) => {
@@ -22,10 +22,24 @@ for (const theme of ['dark', 'light'] as const) {
       },
     }
     const settings = await (await request.get('/api/settings')).json()
+    const game: CatalogEntry = {
+      kind: 'game', id: 'scroll-game', enabled: true, currentRelease: 'release', grants: [],
+      releases: [{
+        ref: { package: { kind: 'game', id: 'scroll-game' }, releaseId: 'release' },
+        digest: 'scroll-fixture', installedAt: instances[0].createdAt,
+        manifest: {
+          id: 'scroll-game', version: '1.0.0', apiMajor: 1, minHostVersion: '0.6.0',
+          name: { 'zh-CN': '滚动测试游戏', 'en-US': 'Scroll fixture game' },
+          permissions: { required: [], optional: [] },
+          game: { viewId: 'game', storage: { kind: 'self' } },
+        },
+      }],
+    }
     await page.route(/\/api\/(?:projects\/[^/]+\/)?settings$/, route => route.fulfill({
       json: { ...settings, effective: { ...settings.effective, theme } },
     }))
     await page.route('**/api/platform/manage/instances', route => route.fulfill({ json: instances }))
+    await page.route('**/api/platform/manage/catalog', route => route.fulfill({ json: [game] }))
     await page.route('**/api/platform/manage/instances/*/open', route => route.fulfill({ json: runtime }))
     await page.route('**/api/platform/manage/runtimes', route => route.fulfill({ json: [runtime] }))
     await page.route('**/scroll-game-frame', route => route.fulfill({ contentType: 'text/html', body: '<main>Game</main>' }))

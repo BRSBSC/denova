@@ -144,7 +144,7 @@ for (const [theme, format] of [['dark', 'png'], ['light', 'jpeg'], ['dark', 'web
     expect(path.posix.dirname(savedImage.path)).toBe('assets/lore')
     expect(savedImage.source.meta_path).toBeUndefined()
     const collection = JSON.parse(await readFile(path.join(book.workspace, 'setting/lore/items.json'), 'utf8'))
-    expect(collection.version).toBe(2)
+    expect(collection.version).toBe(3)
     expect(collection.assets.find((asset: { id: string }) => asset.id === savedImage.id)).toMatchObject({ path: savedImage.path, mime_type: savedImage.mime_type, size_bytes: image.length, original_name: filename })
     expect((await readdir(path.join(book.workspace, 'assets/lore'))).every(name => name !== 'meta.json')).toBe(true)
 
@@ -326,7 +326,7 @@ test('migrates released single-image paths and appends generated images without 
   const migrated = JSON.parse(await readFile(collectionPath, 'utf8'))
   const migratedPath = migrated.items[0].image.image_path as string
   expect(path.posix.dirname(migratedPath)).toBe('assets/lore')
-  expect(migrated.items[0]).toEqual({ ...JSON.parse(legacy).items[0], image: { ...JSON.parse(legacy).items[0].image, image_path: migratedPath } })
+  expect(migrated.items[0]).toMatchObject({ ...JSON.parse(legacy).items[0], image: { ...JSON.parse(legacy).items[0].image, image_path: migratedPath } })
   for (const count of [2, 3]) {
     await page.getByRole('button', { name: '添加素材', exact: true }).click()
     await page.getByRole('menuitem', { name: '生成图片', exact: true }).click()

@@ -41,10 +41,12 @@ func (e *agentExecution) consume(event agent.Event) {
 		data = map[string]string{"delta": payload.Delta}
 	case agent.InteractionRequested:
 		e.receipt.Result.Status = "waiting"
+		e.interactions = append(e.interactions, payload.Request)
 		kind = "interaction"
 		data = payload.Request
 	case agent.InteractionResolved:
 		e.receipt.Result.Status = "running"
+		e.interactions = slices.DeleteFunc(e.interactions, func(request agent.InteractionRequest) bool { return request.ID == payload.ID })
 	default:
 		return
 	}
@@ -67,6 +69,7 @@ func (e *agentExecution) finish(status string, runErr error) {
 	default:
 	}
 	defer close(e.done)
+	e.interactions = nil
 	e.receipt.Result.Status = status
 	if runErr != nil {
 		_, e.receipt.Result.Error = ErrorResponse(runErr)
@@ -319,6 +322,7 @@ func serveAgentEvents(w http.ResponseWriter, request *http.Request, execution *a
 	}
 	lastID := request.Header.Get("Last-Event-ID")
 	var after uint64
+	var interactions []agent.InteractionRequest
 	if execution != nil {
 		execution.mu.Lock()
 		if lastID != "" {
@@ -332,6 +336,7 @@ func serveAgentEvents(w http.ResponseWriter, request *http.Request, execution *a
 		}
 		result = execution.receipt.Result
 		after = execution.next
+		interactions = slices.Clone(execution.interactions)
 		execution.mu.Unlock()
 	} else if lastID != "" {
 		writeError(w, failure("CURSOR_EXPIRED", "Request a new snapshot after restart"))
@@ -354,6 +359,13 @@ func serveAgentEvents(w http.ResponseWriter, request *http.Request, execution *a
 	}
 	if send("snapshot", cursor, map[string]any{"snapshot": result, "cursor": cursor}) != nil || execution == nil {
 		return
+	}
+	// A question may precede attachment. Replay the pending projection alongside
+	// this snapshot, then follow only events after its captured cursor.
+	for _, interaction := range interactions {
+		if send("interaction", cursor, interaction) != nil {
+			return
+		}
 	}
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()

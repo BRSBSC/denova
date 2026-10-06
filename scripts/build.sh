@@ -5,7 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "${ROOT_DIR}"
 
 OUTPUT_DIR="output"
-VERSION="${DENOVA_VERSION:-${NOVA_VERSION:-$(node -p "require('./web/package.json').version" 2>/dev/null || echo dev)}}"
+# Source builds use the development contract; release packaging injects its tag.
+VERSION="${DENOVA_VERSION:-${NOVA_VERSION:-dev}}"
 
 echo "==> 清理 output 目录"
 rm -rf "${OUTPUT_DIR}"

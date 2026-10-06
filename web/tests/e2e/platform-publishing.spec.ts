@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { expect, test } from '../support/fixtures'
 
@@ -8,7 +9,7 @@ for (const kind of ['plugin', 'game'] as const) {
     const chinese = kind === 'game'
     const language = chinese ? 'zh-CN' : 'en-US'
     const theme = chinese ? 'dark' : 'light'
-    const name = `Local Publish ${kind}`
+    const name = `Local Publish ${kind} ${randomUUID().slice(0, 8)}`
     await request.patch('/api/settings', { data: { layer: 'user', changes: { language, theme } } })
     await page.addInitScript(({ language, theme }) => {
       localStorage.setItem('nova:mode', 'extensions')
@@ -32,7 +33,10 @@ for (const kind of ['plugin', 'game'] as const) {
     if (kind === 'plugin') {
       const frame = page.frameLocator('iframe[title="Plugin view"]')
       await frame.getByLabel('Text', { exact: true }).fill('Starter 🧩')
+      const saved = page.waitForResponse(response => response.request().method() === 'PUT' && new URL(response.url()).pathname.endsWith('/assets/document'))
       await frame.getByRole('button', { name: 'Save draft', exact: true }).click()
+      expect((await saved).ok()).toBe(true)
+      await expect(frame.getByRole('button', { name: 'Save draft', exact: true })).toBeEnabled()
       await expect(frame.getByRole('status')).toHaveText('Done')
       await preview.getByRole('button', { name: 'Close', exact: true }).first().click()
     } else {
@@ -42,6 +46,7 @@ for (const kind of ['plugin', 'game'] as const) {
       await preview.getByRole('button', { name: '关闭', exact: true }).click()
     }
     await expect(preview).not.toBeVisible()
+    await expect(page.locator('iframe')).toHaveCount(0)
 
     const projects = await (await request.get('/api/agent-chat/projects')).json()
     const project = projects.projects.find((item: { name: string }) => item.name === name)

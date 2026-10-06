@@ -80,8 +80,11 @@ func TestIndexExamplesValidation(t *testing.T) {
 			if _, err := next.Preview(ctx, Source{Kind: "file", Filename: "roundtrip.zip"}, exported); err != nil {
 				t.Fatal(err)
 			}
-			if entry.Name() == "text-statistics" {
-				runtime, err := s.platform.ActivatePlugin(ctx, platform.ActivatePlugin{PluginID: "index.text-statistics", ReleaseID: candidate.Resources[0].Extension.Digest, Scope: platform.Scope{Kind: "project", ProjectID: book.ID}, OpenOptions: platform.OpenOptions{ParentOrigin: "http://127.0.0.1:15173"}})
+			for _, resource := range candidate.Resources {
+				if resource.Extension == nil || resource.Extension.Manifest.ID != "index.text-statistics" {
+					continue
+				}
+				runtime, err := s.platform.ActivatePlugin(ctx, platform.ActivatePlugin{PluginID: "index.text-statistics", ReleaseID: resource.Extension.Digest, Scope: platform.Scope{Kind: "project", ProjectID: book.ID}, OpenOptions: platform.OpenOptions{ParentOrigin: "http://127.0.0.1:15173"}})
 				if err != nil {
 					t.Fatal(err)
 				}

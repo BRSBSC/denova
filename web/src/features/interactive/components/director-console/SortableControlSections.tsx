@@ -1,14 +1,14 @@
 import { Children, createContext, isValidElement, useContext, useState, type ReactNode } from 'react'
-import { DndContext, KeyboardSensor, PointerSensor, closestCenter, pointerWithin, useSensor, useSensors, type CollisionDetection } from '@dnd-kit/core'
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, pointerWithin, rectIntersection, useSensor, useSensors, type CollisionDetection } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useTranslation } from 'react-i18next'
 
 /** Pointer sorting follows the title under the cursor, independent of expanded card height.
- * Keyboard sorting has no pointer and retains dnd-kit's rectangle-based target selection.
+ * Keyboard sorting uses overlap so a short card can enter a tall card without reaching its center.
  */
 export const controlSectionCollision: CollisionDetection = (args) => {
-  const hits = pointerWithin(args)
+  const hits = args.pointerCoordinates ? pointerWithin(args) : rectIntersection(args)
   return hits.length ? hits : closestCenter(args)
 }
 

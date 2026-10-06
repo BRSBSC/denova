@@ -2,10 +2,12 @@ import { screen, waitFor } from '@testing-library/react'
 import { useState, type ComponentProps } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { VirtuosoMockContext } from 'react-virtuoso'
-import { expect, type Mock } from 'vitest'
+import { afterEach, expect, vi, type Mock } from 'vitest'
 import { StoryStage as ProjectStoryStage } from '../StoryStage'
 import { mergeInteractiveTurnPersistedSnapshot, useInteractiveStore } from '../../stores/interactive-store'
 import type { InteractiveTurnPersistedEvent, Snapshot, StorySummary, TurnEvent } from '../../types'
+
+afterEach(() => vi.restoreAllMocks())
 
 export interface StoryStageTestMocks {
   generateInteractiveImageMock: Mock
@@ -32,6 +34,20 @@ export function resetStoryStageTestHarness({
   updateInteractiveTurnNarrativeMock,
   useSkillCommandsMock,
 }: StoryStageTestMocks) {
+  // Virtuoso's initial scroll checks DOM visibility even with VirtuosoMockContext.
+  // jsdom has no layout; real scrolling and geometry remain covered by browser tests.
+  for (const property of ['offsetHeight', 'clientHeight', 'scrollHeight'] as const) {
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, property)?.get
+      ?? Object.getOwnPropertyDescriptor(Element.prototype, property)!.get!
+    vi.spyOn(HTMLElement.prototype, property, 'get').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-virtuoso-scroller') ? 1200 : original.call(this)
+    })
+  }
+  const originalRect = HTMLElement.prototype.getBoundingClientRect
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const rect = originalRect.call(this)
+    return this.hasAttribute('data-virtuoso-scroller') ? { ...rect, height: 1200, bottom: rect.top + 1200 } : rect
+  })
   window.localStorage.clear()
   useInteractiveStore.setState({ storyStageRuns: {} })
   generateInteractiveImageMock.mockReset()

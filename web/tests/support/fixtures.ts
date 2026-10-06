@@ -148,9 +148,9 @@ export const test = base.extend<E2EFixtures>({
 
 function sharedSettings(settings: Settings): Settings {
   // Host authentication is intentionally outside this snapshot.
-  // These are the public defaults changed by cross-surface browser journeys.
-  const keys = ['language', 'theme', 'agent_runtimes', 'agent_models', 'model_endpoints', 'model_profiles', 'terminal_shell'] as const
-  return Object.fromEntries(keys.filter(key => settings[key] !== undefined).map(key => [key, settings[key]]))
+  // Restore every mutable default, including media, tools and context policies.
+  const hostKeys = new Set(['remote_access_username', 'remote_access_password', 'remote_access_password_set', 'allow_lan_access', 'backend_port', 'frontend_port'])
+  return Object.fromEntries(Object.entries(settings).filter(([key]) => !hostKeys.has(key)))
 }
 
 function matches(pattern: RegExp, value: string): boolean {

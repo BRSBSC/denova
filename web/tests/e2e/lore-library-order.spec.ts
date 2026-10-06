@@ -12,6 +12,11 @@ async function drag(page: Page, source: Locator, target: Locator, screenshotPath
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 15 })
   if (screenshotPath) await page.screenshot({ path: screenshotPath })
   await page.mouse.up()
+  await expect(source.locator('..')).not.toHaveAttribute('aria-pressed', 'true')
+  // Wait for the drop transition before the next click or sorting operation.
+  await expect(source.locator('..')).toHaveCSS('transform', 'none')
+  // DndKit retains its document click suppression for 50 ms after pointer-up.
+  await page.waitForTimeout(50)
 }
 
 for (const mode of ['writing', 'game'] as const) {

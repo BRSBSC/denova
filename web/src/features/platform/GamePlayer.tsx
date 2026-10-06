@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react'
 import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from 'next-themes'
@@ -9,8 +9,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { InlineErrorNotice } from '@/components/common/inline-error-notice'
 import { management, platformError, type Instance, type RuntimeSnapshot } from './api'
 
+/** Host close controls must use the same save guard and runtime disposal as the view. */
+export interface GamePlayerHandle {
+  requestExit: () => Promise<void>
+}
+
 /** Only the selected cross-origin frame receives this instance's credential. */
 export function GamePlayer({
+  ref,
   runtime,
   title,
   visible,
@@ -20,6 +26,7 @@ export function GamePlayer({
   variant = 'game',
   onStop,
 }: {
+  ref?: Ref<GamePlayerHandle>
   runtime: RuntimeSnapshot
   title?: string
   visible: boolean
@@ -59,18 +66,17 @@ export function GamePlayer({
           frame.current?.contentWindow?.postMessage({ type: 'denova:prepare-exit', requestId: id }, new URL(runtime.viewUrl!).origin)
         })
         if (!ready) { setError(t(variant === 'plugin' ? 'platform.plugins.exitNotReady' : 'platform.exitNotReady')); return }
-        // The frame confirmed its durable cursor. Dispose optional material
-        // requests before revoking their runtime; a stop failure can rehydrate it.
-        flushSync(() => setFrameMounted(false))
       }
-      // Views without a save handshake remain mounted until stopping succeeds.
+      // After save guards permit exit, cancel frame requests before revoking
+      // their runtime. A failed stop rehydrates the view and reports the error.
+      flushSync(() => setFrameMounted(false))
       if (onStop) await onStop()
       else await management(`/runtimes/${runtime.id}/stop`, 'POST', {})
-      flushSync(() => setFrameMounted(false))
       onExit()
     } catch (error) { setFrameMounted(true); setError(platformError(error)) }
     finally { exiting.current = false; setBusy(false) }
   }, [runtime.id, runtime.viewUrl, onExit, onStop, variant, t])
+  useImperativeHandle(ref, () => ({ requestExit: () => exit() }), [exit])
   useEffect(() => {
     if (!runtime.viewUrl) return
     const origin = new URL(runtime.viewUrl).origin

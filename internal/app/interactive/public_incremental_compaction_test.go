@@ -110,6 +110,7 @@ func TestProductsCompactRepeatedlyWithinOneRunAndColdReopen(t *testing.T) {
 	for _, kind := range []string{agentrun.AgentKindIDE, agentrun.AgentKindInteractiveStory} {
 		for _, maintenance := range []string{"summary_only", "elision_then_summary"} {
 			t.Run(kind+"/"+maintenance, func(t *testing.T) {
+				t.Parallel()
 				ctx := t.Context()
 				workspace, dataDir := t.TempDir(), t.TempDir()
 				registry := project.NewRegistry(dataDir)

@@ -24,7 +24,7 @@ import (
 	agentpermission "github.com/alfredxw/denova/agent/permission"
 )
 
-const automaticGameCheckpoint = "The traveler followed the river through ninety rainy nights and promised to return to the village."
+const automaticGameCheckpoint = "The traveler followed the river through twenty-four rainy nights and promised to return to the village."
 
 // Only model output is simulated: admission, automatic pressure planning,
 // checkpoint generation/validation, tool commits, and journal recovery are real.
@@ -35,7 +35,7 @@ type automaticGameCheckpointModel struct {
 }
 
 func (model *automaticGameCheckpointModel) Generate(_ context.Context, messages []*agent.Message, _ ...agent.ModelOption) (*agent.Message, error) {
-	if err := modelio.ValidateInput(config.AgentKindInteractiveStory, providers.ModelConfig{}, messages, nil, 4<<20, 128_000); err != nil {
+	if err := modelio.ValidateInput(config.AgentKindInteractiveStory, providers.ModelConfig{}, messages, nil, 4<<20, 32_000); err != nil {
 		return nil, err
 	}
 	if len(messages) > 0 && strings.HasPrefix(messages[len(messages)-1].Content, "[Runtime context compaction request]") {
@@ -84,7 +84,7 @@ func TestGameAutomaticCompactionSurvivesConsecutiveTurnsAndRestart(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for turn := range 90 {
+	for turn := range 24 {
 		if _, err := store.AppendTurn(story.ID, interactive.AppendTurnRequest{
 			BranchID: "main", User: fmt.Sprintf("Follow the river on night %d", turn+1),
 			Narrative: fmt.Sprintf("Historical night %d: %s", turn+1, strings.Repeat("雨", 1024)),
@@ -109,10 +109,10 @@ func TestGameAutomaticCompactionSurvivesConsecutiveTurnsAndRestart(t *testing.T)
 	}
 	runtime := newRuntime()
 	t.Cleanup(func() { _ = runtime.Close(ctx) })
-	cfg := &config.Config{Workspace: workspace, OpenAIContextWindowTokens: 128_000}
+	cfg := &config.Config{Workspace: workspace, OpenAIContextWindowTokens: 32_000}
 	model := &automaticGameCheckpointModel{history: publicGameHistoryModel{narrative: "The traveler reached the next bridge."}}
 	identity := agent.CapabilityIdentity{Kind: "test.automatic-game-checkpoint", Version: 1}
-	manager, err := agentcompaction.NewAgentManagerForModel(cfg, config.AgentKindInteractiveStory, 128_000)
+	manager, err := agentcompaction.NewAgentManagerForModel(cfg, config.AgentKindInteractiveStory, 32_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,8 +136,8 @@ func TestGameAutomaticCompactionSurvivesConsecutiveTurnsAndRestart(t *testing.T)
 	options := publicGameOptions(workspace, story.ID, "main")
 	options.ProjectID = record.ID
 	var checkpointID string
-	for turn := 91; turn <= 95; turn++ {
-		if turn == 93 {
+	for turn := 25; turn <= 29; turn++ {
+		if turn == 27 {
 			if err := runtime.Close(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -178,16 +178,16 @@ func TestGameAutomaticCompactionSurvivesConsecutiveTurnsAndRestart(t *testing.T)
 			if status.Compaction.TokensAfter <= 0 || status.Compaction.TokensAfter > recoveryTarget {
 				t.Fatalf("automatic compaction did not restore context headroom: projected=%d target=%d", status.Compaction.TokensAfter, recoveryTarget)
 			}
-			t.Logf("Compacted 90-turn history: projected_tokens_after=%d recovery_target=%d", status.Compaction.TokensAfter, recoveryTarget)
+			t.Logf("Compacted 24-turn history: projected_tokens_after=%d recovery_target=%d", status.Compaction.TokensAfter, recoveryTarget)
 		} else if status.Compaction.ID != checkpointID {
 			t.Fatalf("turn %d replaced checkpoint %s with %s", turn, checkpointID, status.Compaction.ID)
 		}
 	}
 	after, err := store.Snapshot(story.ID, "main")
-	if err != nil || len(after.Turns) != 95 {
+	if err != nil || len(after.Turns) != 29 {
 		t.Fatalf("game continuation lost turns: count=%d error=%v", len(after.Turns), err)
 	}
-	if !reflect.DeepEqual(before.Turns, after.Turns[:90]) {
+	if !reflect.DeepEqual(before.Turns, after.Turns[:24]) {
 		t.Fatal("automatic compaction changed canonical story history")
 	}
 }

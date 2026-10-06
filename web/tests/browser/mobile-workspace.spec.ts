@@ -142,7 +142,7 @@ for (const theme of ['dark', 'light']) {
         const bounds = await page.locator(selector).boundingBox()
         expect(bounds!.height, `${selector} must leave room for the conversation`).toBeLessThanOrEqual(49)
       }
-      for (const label of ['导航菜单', '选择故事线', '显示游戏控制台']) {
+      for (const label of ['导航菜单', '选择故事线', '显示控制台']) {
         const bounds = await page.getByRole('button', { name: label, exact: true }).boundingBox()
         expect(bounds!.height).toBeGreaterThanOrEqual(44)
         expect(bounds!.width).toBeGreaterThanOrEqual(44)
@@ -177,8 +177,8 @@ for (const theme of ['dark', 'light']) {
     await dialog.getByLabel('剧情线名称').fill('手机支线')
     await dialog.getByRole('button', { name: '创建并切换', exact: true }).click()
     await expect.poll(async () => getStoryBranches(request, story.id)).toContainEqual(expect.objectContaining({ title: '手机支线', current: true }))
-    await page.getByRole('button', { name: '显示游戏控制台', exact: true }).click()
-    const consoleSheet = page.getByRole('dialog', { name: '故事控制台', exact: true })
+    await page.getByRole('button', { name: '显示控制台', exact: true }).click()
+    const consoleSheet = page.getByRole('dialog', { name: '控制台', exact: true })
     await expect(consoleSheet).toBeVisible()
     await expect(consoleSheet).toHaveAttribute('data-side', 'right')
     await expect(consoleSheet.getByRole('button', { name: '关闭', exact: true })).toBeFocused()
@@ -191,7 +191,7 @@ for (const theme of ['dark', 'light']) {
     await expect(page.getByText('当前节点', { exact: true })).toHaveCount(1)
     await capture(page, `branches-${theme}-390`)
     await page.getByRole('button', { name: '返回剧情', exact: true }).click()
-    await page.getByRole('button', { name: '显示游戏控制台', exact: true }).click()
+    await page.getByRole('button', { name: '显示控制台', exact: true }).click()
     await page.keyboard.press('Escape')
     await expect(consoleSheet).toBeHidden()
     await page.setViewportSize({ width: 1440, height: 1000 })
@@ -341,7 +341,7 @@ test('mobile edge gestures open the navigation and console without taking vertic
   await expect(navigation).toBeHidden()
   await page.getByPlaceholder(/你要做什么/).fill('剧情输入草稿')
   await swipe(page, [378, 220], [270, 225])
-  const consoleSheet = page.getByRole('dialog', { name: '故事控制台', exact: true })
+  const consoleSheet = page.getByRole('dialog', { name: '控制台', exact: true })
   await expect(consoleSheet).toBeVisible()
   await expect(consoleSheet).toHaveAttribute('data-side', 'right')
   await swipe(page, [170, 24], [290, 24])

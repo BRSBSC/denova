@@ -59,8 +59,10 @@ test('creator package round trip preserves consent, conflicts, backups and local
   expect(applied.ok(), await applied.text()).toBe(true)
   const installed = await applied.json()
   expect((await readProjectFile(request, target.projectId, 'CREATOR.md')).content).toBe(content)
-  // Updating unchanged instructions still requires explicit replacement consent.
-  expect((await request.post('/api/resource-exchange/plans', { data: { ...data, installation_id: installed.installation_id } })).status()).toBe(409)
+  // Rechecking unchanged installed instructions is safe without replacement consent.
+  const unchanged = await request.post('/api/resource-exchange/plans', { data: { ...data, installation_id: installed.installation_id } })
+  expect(unchanged.ok(), await unchanged.text()).toBe(true)
+  expect((await readProjectFile(request, target.projectId, 'CREATOR.md')).content).toBe(content)
 
   const restoreResponse = await request.post(`/api/resource-exchange/backups/${next.plan_id}/restore-plan`, { data: {} })
   expect(restoreResponse.ok(), await restoreResponse.text()).toBe(true)

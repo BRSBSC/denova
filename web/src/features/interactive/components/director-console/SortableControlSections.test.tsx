@@ -64,4 +64,11 @@ describe('expanded control section collision', () => {
   it('retains geometry-based sorting for keyboard moves without a pointer', () => {
     expect(controlSectionCollision({ ...args, pointerCoordinates: null, collisionRect: target })[0].id).toBe('agent')
   })
+
+  it('moves a collapsed card upward into the bottom of an expanded keyboard target', () => {
+    expect(controlSectionCollision({ ...args, pointerCoordinates: null,
+      collisionRect: rect(397, 38),
+      droppableRects: new Map([['agent', target], ['checks', rect(443, 38)]]),
+    })[0].id).toBe('agent')
+  })
 })

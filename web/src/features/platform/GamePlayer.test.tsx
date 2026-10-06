@@ -77,6 +77,18 @@ it('keeps story controls inside an optional overlay while the game remains mount
 })
 
 describe('game exit handshake', () => {
+  it.each(['game', 'plugin'] as const)('disposes a clean %s frame before revoking its runtime', async variant => {
+    const onExit = vi.fn()
+    vi.mocked(management).mockImplementation(async () => {
+      expect(screen.queryByTitle(variant === 'plugin' ? 'platform.plugins.frame' : 'platform.gameFrame')).toBeNull()
+      return undefined as never
+    })
+    render(<GamePlayer variant={variant} runtime={runtime('preview')} visible onExit={onExit} />)
+    fireEvent.click(screen.getByRole('button', { name: variant === 'plugin' ? 'platform.plugins.panelMenu' : 'platform.storyMenu' }))
+    fireEvent.click(screen.getByText(variant === 'plugin' ? 'platform.plugins.closePanel' : 'platform.exitGame'))
+    await waitFor(() => expect(onExit).toHaveBeenCalledTimes(1))
+  })
+
   it('waits for the selected frame to save and stop, ignores unrelated acknowledgements, then exits once', async () => {
     vi.mocked(management).mockResolvedValue(undefined)
     const onExit = vi.fn()
@@ -111,13 +123,16 @@ describe('game exit handshake', () => {
     expect(onExit).not.toHaveBeenCalled()
   })
 
-  it('keeps the document mounted if native stop fails', async () => {
+  it('rehydrates the view and reports a failed native stop without exiting', async () => {
     vi.mocked(management).mockRejectedValue(new Error('Stop failed'))
-    render(<GamePlayer runtime={runtime('installed')} visible onExit={vi.fn()} />)
+    const onExit = vi.fn()
+    render(<GamePlayer runtime={runtime('installed')} visible onExit={onExit} />)
     const frame = screen.getByTitle('platform.gameFrame')
     fireEvent.click(screen.getByRole('button', { name: 'platform.storyMenu' }))
     fireEvent.click(screen.getByText('platform.exitGame'))
     await screen.findByText('handoff failed')
-    expect(screen.getByTitle('platform.gameFrame')).toBe(frame)
+    expect(screen.getByTitle('platform.gameFrame')).toBeVisible()
+    expect(screen.getByTitle('platform.gameFrame')).not.toBe(frame)
+    expect(onExit).not.toHaveBeenCalled()
   })
 })

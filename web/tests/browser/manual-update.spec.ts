@@ -110,7 +110,9 @@ test('manual update stays tucked away and stages an upload before explicit resta
 })
 
 test('automatic download still stages its streamed result after a failed attempt', async ({ page, request }) => {
-  await createAndOpenBook(request, 'Downloaded Update Browser Book')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  const book = await createAndOpenBook(request, 'Downloaded Update Browser Book')
+  await page.route('**/api/update/status', route => route.fulfill({ json: { phase: 'idle', current_version: '0.4.5' } }))
   await page.route('**/api/update/check', route => route.fulfill({ json: {
     current_version: '0.4.5', latest_version: '0.5.0', update_available: true, can_install: true, platform: 'windows-x64',
   } }))
@@ -123,9 +125,11 @@ test('automatic download still stages its streamed result after a failed attempt
     return route.fulfill({ contentType: 'text/event-stream', body: 'event: update_progress\ndata: {"phase":"downloading","percent":50}\n\n' + result })
   })
   await page.goto('/')
+  await expect(page.getByRole('button', { name: `切换书籍，当前：${book.title}`, exact: true })).toBeVisible()
   await page.getByLabel('工作台侧边栏').getByRole('button', { name: '设置', exact: true }).click()
   await page.getByRole('button', { name: '应用更新', exact: true }).click()
   await page.getByRole('button', { name: '检查更新', exact: true }).click()
+  await expect(page.getByText('最新版本：0.5.0', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '安装更新', exact: true }).click()
   await expect(page.getByText('下载失败，请重试。', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '安装更新', exact: true }).click()
