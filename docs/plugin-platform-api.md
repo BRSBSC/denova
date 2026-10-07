@@ -45,7 +45,7 @@ apiMajor 必须为 1，清单还须提供严格语义版本 minHostVersion；本
 
 宿主只加载清单中声明的 view。页面向可信父窗口发送 `{ type: 'denova:ready', nonce }`，验证 `denova:bootstrap` 的来源、父窗口和 nonce 后读取 context/connection；业务调用走 HTTP。`denova:appearance` 更新语言与主题，`denova:visibility` 表示显示或收起。`denova:state` 携带布尔 busy/dirty，使宿主在关闭前提示；`denova:exit` 请求关闭。可选 prepare-exit/exit-ready 握手用于退出保存，超时或拒绝后用户仍可强制关闭。宿主只接受对应 iframe 的消息，不开放任意事件总线。
 
-SDK 与类型在 `extensionassets/sdk/client.mjs`、`client.d.mts`，原始协议示例在 `examples/plugins/relationship-map`。贡献声明、表单及正式入口见[插件开发手册](plugin-developer-guide.md)。
+SDK 与类型在 `internal/platform/assets/sdk/client.mjs`、`client.d.mts`，通用插件骨架在 `internal/platform/assets/starters/plugin`。贡献声明、表单及正式入口见[插件开发手册](plugin-developer-guide.md)。
 
 ## 资料库与图像资源
 

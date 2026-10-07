@@ -97,7 +97,7 @@ flowchart LR
 | `internal/platform` | 清单与引用校验、贡献目录、依赖解析、授权、作用域、运行和资源回收；不包含插件业务 |
 | `internal/app/platform` | 根据绑定的 Project/Session/Story 连接既有领域服务；负责领域原有提交与恢复约束 |
 | `web/src/features/platform` 及已有页面挂载处 | 渲染菜单、命令表单、通用面板、配置与错误；不导入插件组件 |
-| `extensionassets/sdk` | 可选的公共协议封装和类型；不掌握宿主内部状态 |
+| `internal/platform/assets/sdk` | 可选的公共协议封装和类型；不掌握宿主内部状态 |
 
 继续只有 Plugin 与 Game 两种包身份。工具型、界面型与组合型只是 Plugin 的贡献组合，不增加 UIPlugin、AppInstance 或新的安装/存储体系。Game 的视图与实例入口保留，不被通用面板取代。
 
@@ -225,7 +225,7 @@ Plugin 的文本助手继续使用 `builtin/assistant`，不另建文本调用�
 
 所有受管内容继续使用稳定 ProjectID、不可变 `store_dir` 和规范相对路径。移动 `.denova`、项目改名或重新关联 External Project 不能产生新的作品身份或第二份事实源。
 
-最近正式 Release 基线为 [v0.5.1](https://github.com/alfredxw/denova/releases/tag/v0.5.1)，该 tag 尚无当前 `internal/platform` 与 `extensionassets`。不维护未发布清单、API 或内部数据中间格式的兼容。本方案不改变 v0.5.1 作品正文与 journal 格式，因此不预设用户内容迁移。
+最近正式 Release 基线为 [v0.5.1](https://github.com/alfredxw/denova/releases/tag/v0.5.1)，该 tag 尚无当前 `internal/platform` 与 `internal/platform/assets`。不维护未发布清单、API 或内部数据中间格式的兼容。本方案不改变 v0.5.1 作品正文与 journal 格式，因此不预设用户内容迁移。
 
 实施若发现确需改变最近 Release 的用户数据，必须列出具体字段/路径、先备份的前向转换和失败重试办法；不得顺带重分配 Store、增加双写或通用路径兼容层。
 
@@ -312,7 +312,9 @@ Plugin 的文本助手继续使用 `builtin/assistant`，不另建文本调用�
 
 ## 9. 工作区实现与验收记录（2026-10-01）
 
-本节记录当前工作区实现，不代表已经发布 v0.6.0。实际验证环境为 Windows 原生、PowerShell 7、Go 1.26.6、Node 24.15、pnpm 11.24、Chromium。完整打包使用 Git Bash 调用仓库 Windows 发布脚本，不将 Git Bash 记作 WSL 验证。
+本节记录 2026-10-01 的工作区实现与验收，不代表已经发布 v0.6.0。实际验证环境为 Windows 原生、PowerShell 7、Go 1.26.6、Node 24.15、pnpm 11.24、Chromium。完整打包使用 Git Bash 调用仓库 Windows 发布脚本，不将 Git Bash 记作 WSL 验证。
+
+2026-10-07 整理：关系图与素材工作台演示包已移除，宿主面板与内容流转测试改用通用插件骨架；素材工作台专属 E2E 已删除。下述涉及这两个演示包的验收结果仅作为历史记录，不代表当前仍保留对应回归覆盖。创建模板和 SDK 现位于 `internal/platform/assets`。
 
 ### 9.1 实现结果
 
@@ -323,7 +325,7 @@ Plugin 的文本助手继续使用 `builtin/assistant`，不另建文本调用�
 - 项目 JSON/媒体复用既有内容 API，新增同插件内容 ZIP 导出与空目标导入。没有增加正文写回、编辑器扩展、第二套执行器或恢复 journal。
 - 两个独立界面示例、组合型开发骨架、SDK 类型、OpenAPI 和开发文档同步交付。纯静态面板不依赖 Node；有后端的包要求 Node 22 或以上。
 
-实现入口见 [贡献发现与准入](../internal/platform/plugin_contributions.go)、[消费者生命周期](../internal/platform/runtime_consumers.go)、[项目配置](../internal/platform/project_configuration.go)、[公共能力](../internal/platform/capabilities.go)、[内容导入导出](../internal/platform/project_content_archive.go) 和 [正式面板容器](../web/src/features/platform/PluginWorkspace.tsx)。可独立复制安装的包见[示例说明](../examples/plugins/README.md)。
+实现入口见 [贡献发现与准入](../internal/platform/plugin_contributions.go)、[消费者生命周期](../internal/platform/runtime_consumers.go)、[项目配置](../internal/platform/project_configuration.go)、[公共能力](../internal/platform/capabilities.go)、[内容导入导出](../internal/platform/project_content_archive.go) 和 [正式面板容器](../web/src/features/platform/PluginWorkspace.tsx)。当前开发骨架与参考实现见[插件开发手册](plugin-developer-guide.md)。
 
 ### 9.2 逐项证据
 

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"denova/extensionassets"
 	"denova/internal/platform"
+	"denova/internal/platform/assets"
 	"denova/internal/project"
 )
 
@@ -43,7 +43,7 @@ func TestCreativeToolkitInstallationAndPermissions(t *testing.T) {
 	if err := os.CopyFS(source, os.DirFS("package")); err != nil {
 		t.Fatal(err)
 	}
-	runtimeSource, err := extensionassets.Files().ReadFile("sdk/runtime.mjs")
+	runtimeSource, err := assets.Files().ReadFile("sdk/runtime.mjs")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"denova/extensionassets"
+	"denova/internal/platform/assets"
 	"denova/internal/portablepath"
 	"github.com/google/uuid"
 )
@@ -186,7 +186,7 @@ func (m *Manager) CreateDevelopment(request CreateDevelopment) (Development, err
 		return Development{}, failure("DOCUMENT_CONFLICT", "Development directory must be empty")
 	}
 	starterRoot := "starters/" + string(request.Kind)
-	starterFiles := extensionassets.Files()
+	starterFiles := assets.Files()
 	err = fs.WalkDir(starterFiles, starterRoot, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err

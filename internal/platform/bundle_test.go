@@ -7,7 +7,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"denova/extensionassets"
+	"denova/internal/platform/assets"
 )
 
 func TestBundledPackageUsesNormalValidationAndExport(t *testing.T) {
@@ -22,7 +22,7 @@ func TestBundledPackageUsesNormalValidationAndExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, err := extensionassets.Files().ReadFile("sdk/client.mjs")
+	client, err := assets.Files().ReadFile("sdk/client.mjs")
 	if err != nil || !bytes.Equal(candidate.files["client.mjs"], client) {
 		t.Fatalf("shared browser client missing: %v", err)
 	}

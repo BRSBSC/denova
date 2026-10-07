@@ -1,6 +1,6 @@
-// Package extensionassets owns the distributed extension scaffolds and SDK files.
+// Package assets owns the distributed extension scaffolds and SDK files.
 // It contains no host runtime or extension installation policy.
-package extensionassets
+package assets
 
 import "embed"
 

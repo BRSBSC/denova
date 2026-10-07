@@ -6,18 +6,16 @@
 
 扩展页管理已安装的插件与游戏；工作台承接源码开发。插件可以组合 Agent 工具、用户命令和独立面板；游戏交付有独立存档生命周期的作品。Skills 与公开 Agents 继续由各自页面管理。插件不能访问当前正文、选区、编辑器内部或任意宿主组件。
 
-## 扩展示例
+## 开发骨架与参考实现
 
 完整示例源码供开发参考，不作为创建选项，默认不安装、不启用。创建源码项目、检查打包和准备隔离预览均不会将示例加入已安装扩展，也不会改变默认游戏；安装后才成为可用扩展。
 
 | 示例源码目录 | 示例 | 演示能力 |
 | --- | --- | --- |
-| `creative-toolkit` | 创作工具箱 | 文本统计与批量整理、独立笔记、资料库、图像模型槽、工具集、设置与权限 |
-| `examples/plugins/relationship-map` | 人物关系图 | 原始 HTTP、无后端、资料读取、关系编辑、并发保护的项目内容 |
-| `examples/plugins/asset-board` | 素材工作台 | 可选 SDK、无后端、模型选择、任务取消、文本与媒体保存 |
-| `extensionassets/starters/plugin` | 通用组合骨架 | 命令参数表单、面板保存草稿、独立 Agent 工具读取同一份项目内容 |
+| `internal/extensions/creative-toolkit/package` | 创作工具箱 | 文本统计与批量整理、独立笔记、资料库、图像模型槽、工具集、设置与权限 |
+| `internal/platform/assets/starters/plugin` | 通用组合骨架 | 命令参数表单、面板保存草稿、独立 Agent 工具读取同一份项目内容 |
 
-两个界面示例可直接复制到仓库之外再安装；无需安装依赖或修改宿主。具体步骤见[示例说明](../examples/plugins/README.md)。
+「创建插件」会自动复制通用骨架和共享 SDK。手动复制骨架时，还需从 `internal/platform/assets/sdk` 复制 `runtime.mjs`、`client.mjs`、`client.d.mts`；Node 后端要求 22 或以上。
 
 ## 声明命令、面板和 Agent 工具
 
@@ -80,7 +78,7 @@ Project 界面修改模型、发行设置或依赖后，已有运行继续使用
 
 创作工具箱源码位于 `internal/extensions/creative-toolkit/package`。
 
-专属行为测试 `tools.test.mjs` 和公开平台 API 集成测试 `integration_test.go` 位于同级扩展目录。复制包到独立开发项目时，还需从 `extensionassets/sdk/` 复制 `runtime.mjs`；它是平台共享协议代码，不属于创作工具箱业务实现。
+专属行为测试 `tools.test.mjs` 和公开平台 API 集成测试 `integration_test.go` 位于同级扩展目录。复制包到独立开发项目时，还需从 `internal/platform/assets/sdk/` 复制 `runtime.mjs`；它是平台共享协议代码，不属于创作工具箱业务实现。
 
 准备后的开发目录包含：
 

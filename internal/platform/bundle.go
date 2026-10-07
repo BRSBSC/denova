@@ -3,7 +3,7 @@ package platform
 import (
 	"io/fs"
 
-	"denova/extensionassets"
+	"denova/internal/platform/assets"
 )
 
 // PreviewBundled freezes a trusted, embedded extension using normal package
@@ -19,7 +19,7 @@ func (m *Manager) PreviewBundled(kind Kind, source fs.FS) (Candidate, error) {
 		return Candidate{}, err
 	}
 	if _, exists := files["client.mjs"]; !exists {
-		files["client.mjs"], err = extensionassets.Files().ReadFile("sdk/client.mjs")
+		files["client.mjs"], err = assets.Files().ReadFile("sdk/client.mjs")
 		if err != nil {
 			return Candidate{}, err
 		}

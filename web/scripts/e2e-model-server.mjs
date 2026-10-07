@@ -393,16 +393,6 @@ const server = createServer(async (request, response) => {
     return
   }
 
-  if (requestIncludesMarker(body, 'E2E_PLUGIN_ASK')) {
-    const answers = toolResultMessages(body, 'ask')
-    if (answers.length) writeChatCompletion(response, textCompletionFrames(`Plugin answers: ${JSON.stringify(parseToolResult(answers.at(-1)))}`))
-    else writeChatCompletion(response, toolCompletionFrames('ask', JSON.stringify({ questions: [
-      { id: 'mood', prompt: 'Target mood', options: [{ value: 'serene', label: 'Serene', recommended: true }, { value: 'dramatic', label: 'Dramatic' }] },
-      { id: 'detail', prompt: 'Scene detail' },
-    ] }), 'call-plugin-ask'))
-    return
-  }
-
   if (requestIncludesMarker(body, 'E2E_IMAGE_TRANSPORT_LIMIT')) {
     response.writeHead(413, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify({ error: { type: 'request_too_large', message: 'image request exceeds gateway transfer limit' } }))
