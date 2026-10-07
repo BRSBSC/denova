@@ -110,10 +110,10 @@ func parseLoreMutationReceipt(toolName, payload string) ([]string, []string, boo
 
 func parseGeneratedImageMutationTarget(toolName, payload string) string {
 	if illustration, err := producttools.ParseChapterIllustrationResult(toolName, payload); err == nil && illustration != nil {
-		return strings.TrimSpace(illustration.MetaPath)
+		return strings.TrimSpace(illustration.ImagePath)
 	}
 	if interactiveImage, err := producttools.ParseInteractiveImageResult(toolName, payload); err == nil && interactiveImage != nil {
-		return strings.TrimSpace(interactiveImage.MetaPath)
+		return strings.TrimSpace(interactiveImage.ImagePath)
 	}
 	return strings.TrimSpace(producttools.ParseGeneratedImageTarget(toolName, payload))
 }

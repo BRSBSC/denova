@@ -251,7 +251,7 @@ export function useVirtuosoBottomLock({ resetKey, resetPosition = 'end', itemCou
     updateAwayFromBottom(scroller)
   }, [cancelScheduledScroll, currentScrollerElement, resetAfterContentInteraction, updateAwayFromBottom])
 
-  const scrollToIndex = useCallback((index: number, options?: { align?: 'start' | 'center' | 'end'; behavior?: 'auto' | 'smooth' }) => {
+  const scrollToIndex = useCallback((index: number, options?: { align?: 'start' | 'center' | 'end'; behavior?: 'auto' | 'smooth'; offset?: number }) => {
     if (itemCount <= 0) return
     resetAfterContentInteraction()
     lockedRef.current = false
@@ -262,6 +262,7 @@ export function useVirtuosoBottomLock({ resetKey, resetPosition = 'end', itemCou
       index: Math.max(0, Math.min(itemCount - 1, index)),
       align: options?.align || 'start',
       behavior: options?.behavior || 'smooth',
+      offset: options?.offset,
     })
     updateAwayFromBottom()
   }, [cancelScheduledScroll, itemCount, resetAfterContentInteraction, updateAwayFromBottom])
@@ -431,8 +432,13 @@ export function useVirtuosoBottomLock({ resetKey, resetPosition = 'end', itemCou
   }, [cancelScheduledScroll, resetAfterContentInteraction, resetKey])
 
   useEffect(() => {
+    // A restored stream or a large batch can put the actual tail outside the
+    // mounted range. Materialize it before measuring its bottom; overscan rows
+    // are not the execution tail and must never become the scroll target.
+    const scroller = currentScrollerElement()
+    if (canAutoFollowStreamingTail() && scroller && !scroller.querySelector('[data-nova-chat-tail-row]')) scrollToBottomNow()
     updateAwayFromBottom()
-  }, [itemCount, updateAwayFromBottom])
+  }, [canAutoFollowStreamingTail, currentScrollerElement, itemCount, scrollToBottomNow, updateAwayFromBottom])
 
   useEffect(() => cancelScheduledScroll, [cancelScheduledScroll])
 

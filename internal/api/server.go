@@ -10,6 +10,7 @@ import (
 	"github.com/hertz-contrib/gzip"
 
 	"denova/config"
+	"denova/internal/api/sse"
 	"denova/internal/app"
 	"denova/internal/update"
 )
@@ -55,6 +56,12 @@ func newServer(application *app.App, port string, listener net.Listener) *Server
 		options = append(options, hertzserver.WithListener(listener))
 	}
 	h := hertzserver.Default(options...)
+	streamShutdown, closeStreams := context.WithCancel(context.Background())
+	h.OnShutdown = append(h.OnShutdown, func(context.Context) {
+		slog.Info("http_server_shutdown_started")
+		closeStreams()
+	})
+	h.Use(sse.ShutdownMiddleware(streamShutdown))
 	h.Use(requestObservabilityMiddleware)
 	h.Use(corsMiddleware)
 	accessGate := newRemoteAccessGate(application.RemoteAccessConfig, port)
@@ -76,4 +83,5 @@ func newServer(application *app.App, port string, listener net.Listener) *Server
 func (s *Server) Run() {
 	slog.InfoContext(context.Background(), "http_server_started", "host", s.host, "port", s.port)
 	s.engine.Spin()
+	slog.InfoContext(context.Background(), "http_server_stopped")
 }

@@ -11,6 +11,8 @@ import (
 )
 
 type CreateStoryRequest struct {
+	// Preview keeps development test Stories outside the normal Story picker.
+	Preview                   bool                              `json:"-"`
 	Title                     string                            `json:"title"`
 	CustomAgentID             *string                           `json:"custom_agent_id,omitempty"`
 	ProfileID                 string                            `json:"profile_id,omitempty"`
@@ -27,6 +29,7 @@ type CreateStoryRequest struct {
 	ImageSettings             StoryImageSettings                `json:"image_settings,omitempty"`
 	CheckSettings             StoryCheckSettings                `json:"check_settings,omitempty"`
 	SpeechSettings            StorySpeechSettings               `json:"speech_settings,omitempty"`
+	PresentationSettings      *StoryPresentationSettings        `json:"presentation_settings,omitempty"`
 	InitialTraitRolls         []InitialActorTraitRoll           `json:"initial_trait_rolls,omitempty"`
 	StateSchemaPolicy         *StoryStateSchemaPolicy           `json:"state_schema_policy,omitempty"`
 	ActorState                *StoryDirectorActorStateSystem    `json:"-"`
@@ -141,6 +144,7 @@ type UpdateStoryRequest struct {
 	ImageSettings             *StoryImageSettings              `json:"image_settings,omitempty"`
 	CheckSettings             *StoryCheckSettings              `json:"check_settings,omitempty"`
 	SpeechSettings            *StorySpeechSettings             `json:"speech_settings,omitempty"`
+	PresentationSettings      *StoryPresentationSettings       `json:"presentation_settings,omitempty"`
 	StateSchemaPolicy         *StoryStateSchemaPolicy          `json:"state_schema_policy,omitempty"`
 	ActorState                *StoryDirectorActorStateSystem   `json:"-"`
 	TRPGSystem                *StoryDirectorTRPGSystem         `json:"-"`
@@ -161,27 +165,29 @@ type Index struct {
 }
 
 type StorySummary struct {
-	ID                    string                   `json:"id"`
-	Title                 string                   `json:"title"`
-	TitleSource           string                   `json:"title_source"`
-	Origin                string                   `json:"origin"`
-	Protagonist           StoryProtagonist         `json:"protagonist"`
-	StoryTellerID         string                   `json:"story_teller_id"`
-	PlanningTemplateID    string                   `json:"planning_template_id"`
-	LegacyStoryDirectorID string                   `json:"story_director_id,omitempty"`
-	PlanningMode          string                   `json:"planning_mode"`
-	ModuleRefs            *StoryDirectorModuleRefs `json:"module_refs,omitempty"`
-	ReplyTargetChars      int                      `json:"reply_target_chars"`
-	ChoiceCount           int                      `json:"choice_count"`
-	Opening               StoryOpeningConfig       `json:"opening"`
-	ImageSettings         StoryImageSettings       `json:"image_settings"`
-	CheckSettings         StoryCheckSettings       `json:"check_settings"`
-	SpeechSettings        StorySpeechSettings      `json:"speech_settings,omitempty"`
-	StateSchemaPolicy     *StoryStateSchemaPolicy  `json:"state_schema_policy,omitempty"`
-	CreatedAt             string                   `json:"created_at"`
-	UpdatedAt             string                   `json:"updated_at"`
-	Branches              int                      `json:"branches"`
-	Events                int                      `json:"events"`
+	Preview               bool                       `json:"preview,omitempty"`
+	ID                    string                     `json:"id"`
+	Title                 string                     `json:"title"`
+	TitleSource           string                     `json:"title_source"`
+	Origin                string                     `json:"origin"`
+	Protagonist           StoryProtagonist           `json:"protagonist"`
+	StoryTellerID         string                     `json:"story_teller_id"`
+	PlanningTemplateID    string                     `json:"planning_template_id"`
+	LegacyStoryDirectorID string                     `json:"story_director_id,omitempty"`
+	PlanningMode          string                     `json:"planning_mode"`
+	ModuleRefs            *StoryDirectorModuleRefs   `json:"module_refs,omitempty"`
+	ReplyTargetChars      int                        `json:"reply_target_chars"`
+	ChoiceCount           int                        `json:"choice_count"`
+	Opening               StoryOpeningConfig         `json:"opening"`
+	ImageSettings         StoryImageSettings         `json:"image_settings"`
+	CheckSettings         StoryCheckSettings         `json:"check_settings"`
+	SpeechSettings        StorySpeechSettings        `json:"speech_settings,omitempty"`
+	PresentationSettings  *StoryPresentationSettings `json:"presentation_settings,omitempty"`
+	StateSchemaPolicy     *StoryStateSchemaPolicy    `json:"state_schema_policy,omitempty"`
+	CreatedAt             string                     `json:"created_at"`
+	UpdatedAt             string                     `json:"updated_at"`
+	Branches              int                        `json:"branches"`
+	Events                int                        `json:"events"`
 	// TurnCount is the canonical depth of the story's current branch. Journal
 	// side events and turns that only exist on another branch are excluded.
 	TurnCount int `json:"turn_count"`
@@ -232,6 +238,7 @@ type BranchSummary struct {
 }
 
 type StoryMeta struct {
+	Preview                   bool                             `json:"preview,omitempty"`
 	V                         int                              `json:"v"`
 	Type                      string                           `json:"type"`
 	StoryID                   string                           `json:"story_id"`
@@ -250,6 +257,7 @@ type StoryMeta struct {
 	ImageSettings             StoryImageSettings               `json:"image_settings"`
 	CheckSettings             StoryCheckSettings               `json:"check_settings,omitempty"`
 	SpeechSettings            StorySpeechSettings              `json:"speech_settings,omitempty"`
+	PresentationSettings      *StoryPresentationSettings       `json:"presentation_settings,omitempty"`
 	StateSchemaPolicy         *StoryStateSchemaPolicy          `json:"state_schema_policy,omitempty"`
 	InitialTraitRolls         []InitialActorTraitRoll          `json:"initial_trait_rolls,omitempty"`
 	ActorStateSchema          *ActorStateSchemaSnapshot        `json:"actor_state_schema,omitempty"`
@@ -271,9 +279,13 @@ type TurnEvent struct {
 	Attachments []agent.Attachment `json:"attachments,omitempty"`
 	// UserContextOnly keeps host-owned autonomous instructions available to
 	// future model turns while hiding them from the player-authored timeline.
-	UserContextOnly  bool   `json:"user_context_only,omitempty"`
-	Narrative        string `json:"narrative"`
-	Thinking         string `json:"thinking,omitempty"`
+	UserContextOnly   bool   `json:"user_context_only,omitempty"`
+	Narrative         string `json:"narrative"`
+	NarrativeRevision string `json:"narrative_revision,omitempty"`
+	Thinking          string `json:"thinking,omitempty"`
+	// ExecutionCursor is a UI-only locator for deferred thinking and tool payloads.
+	// It is never written to the canonical journal or used as model context.
+	ExecutionCursor  string `json:"execution_cursor,omitempty"`
 	RunID            string `json:"run_id,omitempty"`
 	AgentKind        string `json:"agent_kind,omitempty"`
 	AgentCommandID   string `json:"agent_command_id,omitempty"`

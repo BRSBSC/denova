@@ -3,11 +3,14 @@ import { createAndOpenBook } from '../support/api'
 
 test('manual update stays tucked away and stages an upload before explicit restart', async ({ page, request, browserDiagnostics }, testInfo) => {
   test.setTimeout(90_000)
-  browserDiagnostics.allow(/console\.error: Failed to load resource:.*400/)
+  browserDiagnostics.allow(/console\.error: Failed to load resource:.*(?:400|500)/)
+  browserDiagnostics.allow(/http\.5xx: POST .*\/api\/update\/apply returned 500/)
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await createAndOpenBook(request, 'Manual Update Browser Book')
   let uploads = 0
   let applies = 0
+  let pendingPhase = 'idle'
+  await page.route('**/api/update/status', route => route.fulfill({ json: { phase: pendingPhase, id: 'browser-update', current_version: '0.4.5', version: '0.5.0', log_path: '.denova-updates/pending-0.5.0-1234567890/apply.log' } }))
   let finishUpload!: () => void
   const uploadReady = new Promise<void>(resolve => { finishUpload = resolve })
   await page.route('**/api/update/upload', async route => {
@@ -18,12 +21,18 @@ test('manual update stays tucked away and stages an upload before explicit resta
       await route.fulfill({ status: 400, json: { error: '安装包与当前电脑的操作系统或处理器架构不匹配。', code: 'update.platform_mismatch', request_id: 'update-upload-request', details: { detail: 'archive platform windows/amd64 does not match darwin/arm64', operation: 'update.upload', backend_version: '0.5.0', platform: 'darwin/arm64' } } })
     } else {
       await uploadReady
+      pendingPhase = 'staged'
       await route.fulfill({ json: { previous_version: '0.4.5', installed_version: '0.5.0', status: 'staged', staged: true, apply_ready: true, restart_required: true } })
     }
   })
   await page.route('**/api/update/apply', async route => {
     applies++
-    await route.fulfill({ json: { status: 'applying', version: '0.5.0' } })
+    if (applies === 1) {
+      await route.fulfill({ status: 500, json: { error: '无法启动更新程序，请重试。' } })
+      return
+    }
+    pendingPhase = 'waiting'
+    await route.fulfill({ json: { status: 'restarting', id: 'browser-update', version: '0.5.0' } })
   })
   await page.goto('/')
   const sidebar = page.getByLabel('工作台侧边栏')
@@ -58,9 +67,20 @@ test('manual update stays tucked away and stages an upload before explicit resta
   await heading.click()
   await heading.click()
   await expect(page.getByText(/版本 0.5.0 已就绪/)).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: '应用更新', exact: true }).click()
+  await expect(page.getByText(/版本 0.5.0 已就绪/)).toBeVisible()
+  await page.getByRole('button', { name: '重启并安装', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('无法启动更新程序，请重试。')
+  await expect(page.getByRole('button', { name: '重启并安装', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: '重启并安装', exact: true }).click()
   await expect(page.getByText('Denova 正在重启并应用更新。新版本可用后页面会自动刷新。')).toBeVisible()
-  expect(applies).toBe(1)
+  expect(applies).toBe(2)
+  // The old backend can still answer while shutdown is draining.
+  await page.waitForTimeout(1200)
+  await expect(page).not.toHaveURL(/denova_reload=/)
+  pendingPhase = 'failed'
+  await expect(page.getByRole('alert')).toContainText('更新未完成')
 
   for (const scenario of [
     { width: 1440, height: 960, theme: 'dark', language: 'zh-CN' },
@@ -90,7 +110,9 @@ test('manual update stays tucked away and stages an upload before explicit resta
 })
 
 test('automatic download still stages its streamed result after a failed attempt', async ({ page, request }) => {
-  await createAndOpenBook(request, 'Downloaded Update Browser Book')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  const book = await createAndOpenBook(request, 'Downloaded Update Browser Book')
+  await page.route('**/api/update/status', route => route.fulfill({ json: { phase: 'idle', current_version: '0.4.5' } }))
   await page.route('**/api/update/check', route => route.fulfill({ json: {
     current_version: '0.4.5', latest_version: '0.5.0', update_available: true, can_install: true, platform: 'windows-x64',
   } }))
@@ -103,9 +125,11 @@ test('automatic download still stages its streamed result after a failed attempt
     return route.fulfill({ contentType: 'text/event-stream', body: 'event: update_progress\ndata: {"phase":"downloading","percent":50}\n\n' + result })
   })
   await page.goto('/')
+  await expect(page.getByRole('button', { name: `切换书籍，当前：${book.title}`, exact: true })).toBeVisible()
   await page.getByLabel('工作台侧边栏').getByRole('button', { name: '设置', exact: true }).click()
   await page.getByRole('button', { name: '应用更新', exact: true }).click()
   await page.getByRole('button', { name: '检查更新', exact: true }).click()
+  await expect(page.getByText('最新版本：0.5.0', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '安装更新', exact: true }).click()
   await expect(page.getByText('下载失败，请重试。', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '安装更新', exact: true }).click()

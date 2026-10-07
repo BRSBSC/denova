@@ -8,6 +8,7 @@ import (
 	sdk "github.com/openai/openai-go/v3"
 
 	agent "github.com/alfredxw/denova/agent"
+	"github.com/alfredxw/denova/agent/providers"
 )
 
 const (
@@ -22,10 +23,10 @@ const (
 	ExtraKeySystemFingerprint = "system_fingerprint"
 )
 
-func responseMessage(response *sdk.ChatCompletion, rawResponse *http.Response, provider, reasoningField string) *agent.Message {
+func responseMessage(response *sdk.ChatCompletion, rawResponse *http.Response, config providers.ModelConfig, reasoningField string) (*agent.Message, error) {
 	choice, found := responseChoice(response.Choices)
 	if !found {
-		return nil
+		return nil, nil
 	}
 	message := &agent.Message{
 		Role:             responseRole(string(choice.Message.Role)),
@@ -37,7 +38,7 @@ func responseMessage(response *sdk.ChatCompletion, rawResponse *http.Response, p
 		},
 		Extra: responseExtra(
 			rawResponse,
-			provider,
+			string(config.Provider),
 			response.ID,
 			response.Model,
 			response.Created,
@@ -48,7 +49,18 @@ func responseMessage(response *sdk.ChatCompletion, rawResponse *http.Response, p
 	if response.JSON.Usage.Valid() {
 		message.ResponseMeta.Usage = responseUsage(response.Usage)
 	}
-	return message
+	var continuation continuationState
+	if err := continuation.add(choice.Message.RawJSON()); err != nil {
+		return nil, err
+	}
+	retained, err := continuation.message(config)
+	if err != nil {
+		return nil, err
+	}
+	if retained != nil {
+		message.Extra[providers.ExtraKeyContinuation] = retained.Extra[providers.ExtraKeyContinuation]
+	}
+	return message, nil
 }
 
 func responseChoice(choices []sdk.ChatCompletionChoice) (sdk.ChatCompletionChoice, bool) {

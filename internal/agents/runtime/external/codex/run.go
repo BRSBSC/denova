@@ -79,11 +79,11 @@ func (c *Client) Run(ctx context.Context, input external.Input, host external.Ho
 		// Host tools own project access and receipts; the engine cwd is scratch space.
 		"developerInstructions": "Use the provided host tools for all project reads and changes. The process working directory is temporary scratch space, not the project. Host tools enforce the selected permissions and report actual access failures; do not infer that a host tool is read-only from the process sandbox. Do not use built-in file or shell tools to bypass the host tools.",
 		"dynamicTools":          specs,
-		"config":                map[string]any{"tools.update_plan.enabled": input.Mode == external.OperationTurn},
 	}
 	if input.Mode != external.OperationTurn {
 		// Fork retains the source thread's dynamic tool schemas. The empty host
 		// allowlist rejects their execution; the sandbox also blocks built-in writes.
+		// Built-in plan updates stay in the fork and maintenanceHost discards them.
 		params["sandbox"] = config.CodexReadOnly
 		params["developerInstructions"] = "This is read-only context maintenance. Use only the supplied conversation and instructions. Do not call tools or ask questions."
 	}

@@ -13,8 +13,8 @@ import (
 
 // Cold reconstruction has independent semantic-byte and visual/text-token
 // allowances. Encoded image bytes belong to adapter transport, not these limits.
-// The 64K token allowance admits a conservative 32K unknown-model image plus
-// text; provider-native continuation/compaction remains responsible for its window.
+// The 64K token allowance bounds reconstructed history; provider-native
+// continuation/compaction remains responsible for its window.
 const (
 	historyBudget          = 96 << 10
 	historyTokenBudget     = 64 << 10
@@ -125,8 +125,7 @@ func (request HistoryPreparation) Prepare(ctx context.Context) (Input, error) {
 		end, retained := len(input.History), (agent.InputSize{})
 		for end > 0 {
 			cost := costs[end-1]
-			// Reserve conservatively for the bounded summary and its envelope,
-			// while still allowing a 32K unknown-model image in recent history.
+			// Reserve conservatively for the bounded summary and its envelope.
 			if retained.Bytes+cost.Bytes > historyBudget/2 || retained.Tokens+cost.Tokens > historyTokenBudget-checkpointSummaryBytes {
 				break
 			}

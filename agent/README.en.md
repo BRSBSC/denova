@@ -322,6 +322,6 @@ Denova's native writing, game and persistent child Agents share the existing aut
 
 ### Native image input
 
-[`Attachment`](attachment.go) carries user images and `ToolResult.Attachments` carries tool images. `InputSize.Tokens` includes visual tokens; `InputSize.Bytes` counts the JSON envelope without image Base64. Both compaction and final input checks share these estimates. Custom models can implement `ModelInputEstimator`; unknown models reserve 32K tokens per image.
+[`Attachment`](attachment.go) carries user images and `ToolResult.Attachments` carries tool images. `InputSize.Tokens` includes visual tokens; `InputSize.Bytes` counts the JSON envelope without image Base64. Both compaction and final input checks share these estimates. Custom models can implement `ModelInputEstimator`; unknown models estimate 1,844 tokens per image.
 
 The `read` tool in `tools.Workspace` reads UTF-8 text and PNG, JPEG, GIF, or WebP images (up to 20 MiB each). Image reads require `Definition.Artifacts` with local path resolution: the tool saves an immutable snapshot before returning native image input. User attachment paths are relative to `AttachmentRoot`; tool image paths are relative to their artifact storage boundary. Journals retain relative references and SHA256, never runtime absolute paths or Base64. Responses and Anthropic include images inside tool results; Chat Completions projects image messages after the entire tool result batch to preserve call pairing.

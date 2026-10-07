@@ -59,12 +59,10 @@ func TestExternalSummaryReceivesUserAndToolImages(t *testing.T) {
 		{Role: "assistant", Text: "Continue.", Cursor: 2},
 	}}
 	images := 0
-	imageBatches := 0
 	_, err := (HistoryPreparation{Input: input, Adapter: adapterFunc(func(ctx context.Context, input Input, host Host) (Result, error) {
 		if input.Mode != OperationSummarize || input.SessionID != "" || len(input.Tools) != 0 || SteeringFromContext(ctx) != nil {
 			t.Fatal("summary inherited execution or provider session state")
 		}
-		batchImages := 0
 		for _, message := range input.History {
 			for _, image := range message.Attachments {
 				if !strings.Contains(message.Text, "Source record 1 (cursor 1, user)") || strings.Contains(message.Text, file.RuntimePath) {
@@ -73,22 +71,15 @@ func TestExternalSummaryReceivesUserAndToolImages(t *testing.T) {
 				if _, err := agent.ReadAttachmentImage(image); err != nil {
 					t.Fatal(err)
 				}
-				batchImages++
+				images++
 			}
 		}
-		if batchImages > 1 {
-			t.Fatal("conservative image reserve overflowed a maintenance batch")
-		}
-		if batchImages > 0 {
-			imageBatches++
-		}
-		images += batchImages
 		return Result{Text: "The reference is transparent."}, nil
 	})}).Prepare(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if images != 2 || imageBatches != 2 {
+	if images != 2 {
 		t.Fatalf("summary received %d images, want both user and tool images", images)
 	}
 }

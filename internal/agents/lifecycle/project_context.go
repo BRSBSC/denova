@@ -32,7 +32,7 @@ var projectInstructionDefinitions = [...]projectInstructionDefinition{
 	},
 	{
 		resource: book.CreatorFileName,
-		heading:  "# Creative instructions",
+		heading:  book.CreatorInstructionsHeading,
 		source:   "workspace CREATOR.md",
 		purpose:  "apply stable workspace-level creative instructions",
 	},
@@ -97,7 +97,7 @@ func (source projectInstructionsContextSource) Materialize(context.Context, agen
 		if body == "" {
 			continue
 		}
-		content := definition.heading + "\n\n" + body + "\n\nA later explicit user request takes precedence."
+		content := book.ProjectInstructionsContent(definition.heading, body)
 		if len(content) > source.limit {
 			return nil, fmt.Errorf("%s exceeds the %d-byte project instruction limit", definition.resource, source.limit)
 		}

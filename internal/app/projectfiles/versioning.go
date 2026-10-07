@@ -58,7 +58,7 @@ func (service *Service) VersionStatus(ctx context.Context, projectID string) (bo
 	var status book.VersionStatus
 	err = changes.WithConsistentWorkspaceSnapshot(ctx, func() error {
 		var statusErr error
-		status, statusErr = resources.VersionService.Status(resources.Settings)
+		status, statusErr = resources.VersionService.Status(ctx, resources.Settings)
 		return statusErr
 	})
 	return status, err
@@ -177,7 +177,9 @@ type cachedBookVersioning struct {
 }
 
 func supportsVersions(projectType projectdomain.Type) bool {
-	return projectType == projectdomain.TypeBook || projectType == projectdomain.TypeAgents
+	// Source Projects use the same Store-owned history as other workbench Projects.
+	// Their own .git directory remains excluded and is never repurposed.
+	return projectType == projectdomain.TypeBook || projectType == projectdomain.TypeAgents || projectType == projectdomain.TypeGeneral
 }
 
 func (service *Service) mutationVersioning(runtime projectRuntime) MutationVersioning {

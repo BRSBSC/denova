@@ -1,10 +1,12 @@
+import { GameStories } from '@/features/platform/GameStories'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'motion/react'
 import { toast } from '@/lib/toast'
 import { useShallow } from 'zustand/react/shallow'
 import { readOptionalProjectFile, type LoreItem } from '@/lib/api'
-import { createInteractiveBranch, createInteractiveStory, deleteInteractiveBranch, deleteInteractiveStory, getGamePlanningTemplates, getInteractiveBranches, getInteractiveSnapshot, getInteractiveStories, getInteractiveTellers, selectInteractiveStory, switchInteractiveBranch, updateInteractiveBranchPlan, updateInteractiveStory } from '../api'
+import { createInteractiveBranch, createInteractiveStory, deleteInteractiveBranch, deleteInteractiveStory, getGamePlanningTemplates, getInteractiveBranches, getInteractiveSnapshot, getInteractiveStories, getInteractiveTellers, selectInteractiveStory, switchInteractiveBranch, updateInteractiveBranchPlan, updateInteractiveTurnBackground, updateInteractiveStory } from '../api'
+import type { PresentationMaterial } from '../types'
 import { branchPlanSnapshotAfterUpdate } from '../branch-plan-snapshot'
 import { useInteractiveStore } from '../stores/interactive-store'
 import { BranchTimeline } from './BranchTimeline'
@@ -32,7 +34,6 @@ interface InteractiveLayoutProps {
   active?: boolean
   recentNarrativeStyleID?: string
   narrativeStyleLoading?: boolean
-  onNarrativeStyleChange?: (id: string) => void | Promise<unknown>
   imagePresets?: ImagePreset[]
   loreEmpty?: boolean
   loreItems?: LoreItem[]
@@ -44,7 +45,7 @@ interface InteractiveLayoutProps {
 
 const SNAPSHOT_POLL_INTERVAL_MS = 1000
 
-export function InteractiveLayout({ projectId = '', workspace, active = true, recentNarrativeStyleID = DEFAULT_NARRATIVE_STYLE_ID, narrativeStyleLoading = false, onNarrativeStyleChange, imagePresets = [], loreEmpty = false, loreItems = [], onRequestLoreInit, onOpenPresets, rightPanelVisible = true, onToggleRightPanel }: InteractiveLayoutProps) {
+export function InteractiveLayout({ projectId = '', workspace, active = true, recentNarrativeStyleID = DEFAULT_NARRATIVE_STYLE_ID, narrativeStyleLoading = false, imagePresets = [], loreEmpty = false, loreItems = [], onRequestLoreInit, onOpenPresets, rightPanelVisible = true, onToggleRightPanel }: InteractiveLayoutProps) {
   const { t } = useTranslation()
   const isMobile = useIsMobile()
   const {
@@ -325,6 +326,7 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
       module_refs: input.module_refs,
       reply_target_chars: input.reply_target_chars,
       choice_count: input.choice_count,
+      presentation_settings: input.presentation_settings,
       image_settings: input.image_settings,
       check_settings: input.check_settings,
       opening: input.opening,
@@ -350,6 +352,15 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
     if (input.module_refs || input.state_schema_policy) {
       await reloadSnapshot(undefined, currentStoryId, { silent: true })
     }
+  }
+
+  const handleBackgroundChange = async (turnId: string, background?: PresentationMaterial) => {
+    if (!currentStoryId || !currentBranchId) throw new Error(t('storyStage.presentation.backgroundUpdateFailed'))
+    await updateInteractiveTurnBackground(currentStoryId, turnId, { branch_id: currentBranchId, background: background ?? null })
+    const current = useInteractiveStore.getState()
+    // A completed save must not replace the snapshot of a newly selected story.
+    if (current.currentStoryId !== currentStoryId || current.currentBranchId !== currentBranchId) return
+    await reloadSnapshot(currentBranchId, currentStoryId, { silent: true })
   }
 
   const handleBranchPlanUpdate = useCallback(async (markdown: string, baseRevision: string) => {
@@ -389,14 +400,6 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
     setStoryStateDisplayPreference(value)
     writeStoryStateDisplayPreference(value)
   }, [])
-
-  const openDirectorState = useCallback(() => {
-    if (isMobile) {
-      setMobileSnapshotOpen(true)
-      return
-    }
-    if (!rightPanelVisible) onToggleRightPanel?.()
-  }, [isMobile, onToggleRightPanel, rightPanelVisible])
 
   const openBranchTimeline = useCallback(() => {
     setMobileSnapshotOpen(false)
@@ -485,7 +488,6 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
       onStorySelect={handleStorySelect}
       onStoryCreate={handleCreateStory}
       onStorySetupUpdate={handleStorySetupUpdate}
-      onNarrativeStyleChange={onNarrativeStyleChange}
       onStoryDelete={handleDeleteStories}
       onStoryRename={handleRenameStory}
       onRequestLoreInit={onRequestLoreInit}
@@ -494,7 +496,6 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
         setMobileSnapshotOpen(false)
       }}
       onToggleDirectorPanel={isMobile ? () => setMobileSnapshotOpen((open) => !open) : onToggleRightPanel}
-      onOpenDirectorState={openDirectorState}
       onRequestCreateBranch={setBranchCreationSource}
       onStateDisplayPreferenceChange={handleStoryStateDisplayPreferenceChange}
       onTurnPersisted={handleTurnPersisted}
@@ -502,6 +503,10 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
     />
   )
   return (
+    <GameStories key={projectId || 'current'} projectId={projectId ?? ''} active={active} builtinPicker={{
+      stories, currentStoryId, onSelect: handleStorySelect, onCreate: () => undefined,
+      onDeleteStories: handleDeleteStories, onRenameStory: handleRenameStory,
+    }}>
     <div className="flex h-full min-h-0 flex-col bg-[var(--nova-bg)] text-[var(--nova-text)]">
       <div data-testid="interactive-shell" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--nova-bg)]">
         <div className="flex min-h-0 flex-1">
@@ -512,11 +517,13 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
               ) : (
                 <StoryWorkspace
                   rightPanelVisible={rightPanelVisible}
+                  onToggleRightPanel={onToggleRightPanel}
                   mobileConsoleOpen={mobileSnapshotOpen}
                   onMobileConsoleOpenChange={setMobileSnapshotOpen}
                   story={storyStage}
                   console={<DirectorPanel
                       projectId={projectId}
+                      loreItems={loreItems}
                       storyId={currentStoryId}
                       story={currentStory}
                       planningTemplates={planningTemplates}
@@ -529,6 +536,7 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
                       branches={branches}
                       snapshot={displaySnapshot}
                       branchPlanEditingDisabled={branchPlanEditingDisabled}
+                      onBackgroundChange={handleBackgroundChange}
                       onBranchPlanUpdate={handleBranchPlanUpdate}
                       stateDisplayPreference={storyStateDisplayPreference}
                       onStateDisplayPreferenceChange={handleStoryStateDisplayPreferenceChange}
@@ -548,6 +556,7 @@ export function InteractiveLayout({ projectId = '', workspace, active = true, re
         onCreate={(source, title, customAgentId) => handleCreateBranch(source.turnId, title, customAgentId)}
       />
     </div>
+    </GameStories>
   )
 }
 

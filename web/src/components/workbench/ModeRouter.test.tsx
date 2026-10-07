@@ -133,6 +133,11 @@ vi.mock('@/features/lore/LoreWorkspaceTab', () => ({
   ),
 }))
 
+vi.mock('@/features/lore/use-lore-categories', async () => {
+  const { DEFAULT_LORE_CATEGORIES } = await import('@/features/lore/knowledge-sections')
+  return { useLoreCategories: () => ({ categories: DEFAULT_LORE_CATEGORIES }) }
+})
+
 vi.mock('@/features/interactive/components/SettingPanel', () => ({
   SettingPanel: ({ onFlushHandlerChange }: {
     onFlushHandlerChange?: (handler: (() => Promise<boolean>) | null) => void
@@ -276,16 +281,13 @@ describe('ModeRouter autosave navigation policy', () => {
     })
   })
 
-  it('stacks Diff Review above retained document-tab overlays', () => {
+  it('shows Diff Review while hiding the retained document tabs', () => {
     writingChangeReviewMock.activeReviewThreadID = 'review-thread'
 
     const { container } = render(withAppProviders(<ModeRouter {...modeRouterProps()} />))
 
     const writingLayer = container.querySelector('[data-writing-content-layer="true"]')
-    const reviewLayer = container.querySelector('[data-change-review-layer="true"]')
-    expect(writingLayer).toHaveClass('z-0')
     expect(writingLayer).toHaveAttribute('aria-hidden', 'true')
-    expect(reviewLayer).toHaveClass('z-10')
     expect(screen.getByTestId('change-review-workspace')).toBeInTheDocument()
   })
 
@@ -767,7 +769,7 @@ function modeRouterProps(
     onQuickSwitchBook: vi.fn(async () => true),
     onBeforeWorkspaceSwitch: vi.fn(async () => true),
     onBooksChange: vi.fn(),
-    onAgentChatBookCreated: vi.fn(),
+    onBookCreated: vi.fn(),
     onOpenCharacterCardImport: vi.fn(),
     onSetSidebarView: vi.fn(),
     onSelectSearchResult: vi.fn(),

@@ -23,7 +23,7 @@ import (
 type guardedGameCheckpointModel struct{ calls int }
 
 func (model *guardedGameCheckpointModel) Generate(_ context.Context, messages []*agent.Message, _ ...agent.ModelOption) (*agent.Message, error) {
-	if err := modelio.ValidateInput(config.AgentKindInteractiveStory, providers.ModelConfig{}, messages, nil, 4<<20, 400_000); err != nil {
+	if err := modelio.ValidateInput(config.AgentKindInteractiveStory, providers.ModelConfig{}, messages, nil, 4<<20, 32_000); err != nil {
 		return nil, err
 	}
 	model.calls++
@@ -46,27 +46,27 @@ func TestGameManualCompactionRecoversHistoryAboveProviderTokenLimit(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 16 {
+	for range 3 {
 		if _, err := store.AppendTurn(story.ID, interactive.AppendTurnRequest{
-			BranchID: "main", User: "Follow the river", Narrative: strings.Repeat("雨", 26_000),
+			BranchID: "main", User: "Follow the river", Narrative: strings.Repeat("雨", 12_000),
 		}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	cfg := &config.Config{Workspace: workspace, OpenAIContextWindowTokens: 400_000}
+	cfg := &config.Config{Workspace: workspace, OpenAIContextWindowTokens: 32_000}
 	conversation := NewConversation(store, "", workspace, story.ID, "main", "", 800, cfg)
 	history, err := conversation.CanonicalMessages(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var limit *modelio.ProviderInputLimitError
-	if err := modelio.ValidateInput(config.AgentKindInteractiveStory, providers.ModelConfig{}, history, nil, 4<<20, 400_000); !errors.As(err, &limit) ||
+	if err := modelio.ValidateInput(config.AgentKindInteractiveStory, providers.ModelConfig{}, history, nil, 4<<20, 32_000); !errors.As(err, &limit) ||
 		limit.Tokens <= limit.MaxTokens || limit.Bytes >= limit.MaxBytes {
-		t.Fatalf("expected token-only overflow like the reported game: %v", err)
+		t.Fatalf("expected token-only overflow below the byte limit: %v", err)
 	}
 	model := &guardedGameCheckpointModel{}
 	identity := agent.CapabilityIdentity{Kind: "test.guarded-game-checkpoint", Version: 1}
-	manager, err := agentcompaction.NewAgentManagerForModel(cfg, config.AgentKindInteractiveStory, 400_000)
+	manager, err := agentcompaction.NewAgentManagerForModel(cfg, config.AgentKindInteractiveStory, 32_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestGameManualCompactionRecoversHistoryAboveProviderTokenLimit(t *testing.T
 		t.Fatalf("game could not continue below the provider limit after compaction: %+v", outcome)
 	}
 	snapshot, err := store.Snapshot(story.ID, "main")
-	if err != nil || len(snapshot.Turns) != 17 {
+	if err != nil || len(snapshot.Turns) != 4 {
 		t.Fatalf("compaction lost existing turns or prevented continuation: turns=%d error=%v", len(snapshot.Turns), err)
 	}
 }

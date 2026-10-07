@@ -62,7 +62,7 @@ func (m *incrementalModel) Stream(ctx context.Context, messages []*agent.Message
 }
 
 func TestCompactionRepeatsWithinOneUserRun(t *testing.T) {
-	for _, extension := range []string{"builtin", "summarizer", "manager"} {
+	for _, extension := range []string{"builtin", "summarizer", "manager", "chat_completions"} {
 		for _, interruption := range []string{"none", "pause", "abort", "summary_failure"} {
 			t.Run(extension+"/"+interruption, func(t *testing.T) { testRepeatedCompaction(t, extension, interruption) })
 		}
@@ -107,7 +107,7 @@ func testRepeatedCompaction(t *testing.T, extension, interruption string) {
 				return agent.CompactionCheckpoint{}, ctx.Err()
 			}
 		}
-		if extension != "builtin" {
+		if extension != "builtin" && extension != "chat_completions" {
 			if len(request.Messages) == 0 {
 				t.Error("empty summary delta")
 			}
@@ -126,7 +126,7 @@ func testRepeatedCompaction(t *testing.T, extension, interruption string) {
 	}
 	var manager agent.CompactionManager
 	switch extension {
-	case "builtin":
+	case "builtin", "chat_completions":
 		manager = compaction.Standard(compaction.StandardConfig{ContextWindowTokens: 6000})
 	case "summarizer":
 		manager = compaction.Standard(compaction.StandardConfig{
@@ -141,6 +141,11 @@ func testRepeatedCompaction(t *testing.T, extension, interruption string) {
 		t.Fatal("unknown extension")
 	}
 	definition := agent.Definition{Name: "incremental", Model: model, Tools: toolset, Permission: permission.FullAccess(), Compaction: manager}
+	if extension == "chat_completions" {
+		definition.Model = newStrictCompactionChatModel(t, model)
+		definition.Instructions = "Keep the exact user constraints and verify every source."
+		definition.Context = strictCompactionContext{}
+	}
 	store, err := sessionfile.New(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -216,7 +221,7 @@ func testRepeatedCompaction(t *testing.T, extension, interruption string) {
 	if err != nil || snapshot.Compaction == nil || snapshot.Compaction.Revision != uint64(committedSummaries) {
 		t.Fatalf("checkpoint=%+v summaries=%d error=%v", snapshot.Compaction, summaries, err)
 	}
-	if extension != "builtin" && (snapshot.Compaction.ContextData == nil || string(snapshot.Compaction.ContextData.Data) != `{"budget":72519}`) {
+	if extension != "builtin" && extension != "chat_completions" && (snapshot.Compaction.ContextData == nil || string(snapshot.Compaction.ContextData.Data) != `{"budget":72519}`) {
 		t.Fatal("structured checkpoint state was not persisted")
 	}
 	if err := owner.Close(ctx); err != nil {
@@ -234,7 +239,15 @@ func testRepeatedCompaction(t *testing.T, extension, interruption string) {
 	if err != nil || !reflect.DeepEqual(restored.Compaction, snapshot.Compaction) {
 		t.Fatalf("reopened checkpoint differs: %#v %v", restored.Compaction, err)
 	}
-
+	if extension == "chat_completions" {
+		inspection, err := conversation.Inspect(ctx, agent.Text("Keep budget 72519; verify every source before finishing."))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := definition.Model.Generate(ctx, inspection.ModelRequest.Messages); err != nil {
+			t.Fatalf("reopened context was rejected by the strict template: %v", err)
+		}
+	}
 }
 
 // This extension owns planning and semantic state; it never sees journal positions.

@@ -360,7 +360,7 @@ func TestReadSettingsFileMissingReturnsZero(t *testing.T) {
 func TestWriteThenReadSettings(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "config.toml")
-	in := Settings{ModelProfiles: []ModelProfileSettings{{ID: "default", EndpointID: "default", Model: "abc"}}, AutoSaveEnabled: boolPtr(false), Language: "en-US"}
+	in := Settings{ModelProfiles: []ModelProfileSettings{{ID: "default", EndpointID: "default", Model: "abc"}}, AutoSaveEnabled: boolPtr(false), Language: "en-US", InteractiveStageTextMaxWidth: intPtr(1120)}
 	if err := WriteSettingsFile(p, in); err != nil {
 		t.Fatal(err)
 	}
@@ -376,6 +376,9 @@ func TestWriteThenReadSettings(t *testing.T) {
 	}
 	if out.Language != "en-US" {
 		t.Fatalf("language")
+	}
+	if effective := Merge(DefaultSettings(), out); effective.InteractiveStageTextMaxWidth == nil || *effective.InteractiveStageTextMaxWidth != 1120 {
+		t.Fatal("saved stage text width must override the default after reload")
 	}
 }
 
@@ -618,9 +621,10 @@ func TestLoadLayeredKeepsGeneralSettingsUserScopedAndAppliesWorkspaceAgentOverri
 		t.Fatal(err)
 	}
 
-	user := Settings{OpenAIModel: "user-model", MaxIteration: intPtr(20)}
+	user := Settings{OpenAIModel: "user-model", MaxIteration: intPtr(20), InteractiveStageCharacterLayout: "left"}
 	wsCfg := Settings{
-		OpenAIModel: "ws-model",
+		OpenAIModel:                     "ws-model",
+		InteractiveStageCharacterLayout: "right",
 		AgentTools: AgentToolSettings{
 			IDE: AgentToolOverride{AgentToolShell: false},
 		},
@@ -647,6 +651,9 @@ func TestLoadLayeredKeepsGeneralSettingsUserScopedAndAppliesWorkspaceAgentOverri
 	}
 	if layered.Workspace.OpenAIModel != "" {
 		t.Fatalf("workspace general setting should be filtered: %s", layered.Workspace.OpenAIModel)
+	}
+	if layered.Effective.InteractiveStageCharacterLayout != "left" || layered.Workspace.InteractiveStageCharacterLayout != "" {
+		t.Fatalf("character layout must remain user-scoped: effective=%q workspace=%q", layered.Effective.InteractiveStageCharacterLayout, layered.Workspace.InteractiveStageCharacterLayout)
 	}
 	if modelFromProfiles(layered.Inherited.User.ModelProfiles, "default") == "user-model" {
 		t.Fatalf("user inheritance must exclude the user layer")
@@ -793,13 +800,15 @@ func modelFromProfiles(profiles []ModelProfileSettings, id string) string {
 
 func TestPrepareWorkspaceAgentSettingsForWritePreservesLegacyGeneralValues(t *testing.T) {
 	existing := Settings{
-		OpenAIModel: "legacy-workspace-model",
+		OpenAIModel:                     "legacy-workspace-model",
+		InteractiveStageCharacterLayout: "right",
 		AgentTools: AgentToolSettings{
 			IDE: AgentToolOverride{AgentToolShell: true},
 		},
 	}
 	incoming := Settings{
-		OpenAIModel: "ignored-new-model",
+		OpenAIModel:                     "ignored-new-model",
+		InteractiveStageCharacterLayout: "left",
 		AgentModels: AgentModelSettings{
 			IDE: AgentModelOverride{ProfileID: "ignored-workspace-profile"},
 		},
@@ -811,6 +820,9 @@ func TestPrepareWorkspaceAgentSettingsForWritePreservesLegacyGeneralValues(t *te
 	prepared := PrepareWorkspaceAgentSettingsForWrite(existing, incoming)
 	if prepared.OpenAIModel != "legacy-workspace-model" {
 		t.Fatalf("legacy general value should remain reversible on disk: %q", prepared.OpenAIModel)
+	}
+	if prepared.InteractiveStageCharacterLayout != "right" {
+		t.Fatalf("inactive workspace character layout should remain unchanged on disk: %q", prepared.InteractiveStageCharacterLayout)
 	}
 	if prepared.AgentModels.IDE.ProfileID != "" {
 		t.Fatalf("workspace model selection must remain user-scoped: %#v", prepared.AgentModels)

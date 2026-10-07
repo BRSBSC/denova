@@ -40,8 +40,6 @@ for (const theme of ['dark', 'light']) {
       const sidebar = page.getByLabel('工作台侧边栏')
       await sidebar.getByRole('button', { name: '游戏', exact: true }).click()
       await page.getByRole('tab', { name: '控制', exact: true }).click()
-      const titles = await page.locator('.director-console__scroll h3').allTextContents()
-      expect(titles.indexOf('语音朗读')).toBe(titles.indexOf('互动图像') + 1)
       await expect(page.getByRole('switch', { name: '自动朗读新正文', exact: true })).toHaveCount(0)
       await expect(page.getByRole('button', { name: '朗读正文', exact: true })).toHaveCount(0)
       await expect(page.getByRole('switch', { name: '自动生成', exact: true })).toHaveCount(0)

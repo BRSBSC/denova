@@ -101,7 +101,7 @@ func defineTool(tool agent.Tool, descriptor agent.ToolDescriptor) (agent.ToolDef
 func newConfigResourceRegistry(cfg *config.Config) (*Registry, error) {
 	novaDir := strings.TrimSpace(cfg.DataDir())
 	workspace := strings.TrimSpace(cfg.Workspace)
-	return New(
+	adapters := []Adapter{
 		newStyleReferenceResource(novaDir),
 		newNarrativeStyleResource(novaDir),
 		newGamePlanningResource(novaDir),
@@ -112,7 +112,11 @@ func newConfigResourceRegistry(cfg *config.Config) (*Registry, error) {
 		newAutomationResource(novaDir, cfg.ProjectID, workspace, cfg.ProjectStoreDir),
 		newSkillConfigResource(cfg),
 		newAgentProfileResource(cfg),
-	)
+	}
+	if workspace != "" {
+		adapters = append(adapters, newLoreIndexResource(workspace), newLoreIndexMembershipResource(workspace))
+	}
+	return New(adapters...)
 }
 
 func configReadDescriptor(maxResultBytes ...int) agent.ToolDescriptor {

@@ -7,7 +7,7 @@ import (
 )
 
 // InputEstimator uses the same resolved model identity as Run. Unrecognized CLI
-// aliases use the conservative shared policy rather than compressed file size.
+// aliases use the shared image fallback rather than compressed file size.
 func (c *Client) InputEstimator(input external.Input) agent.InputEstimator {
 	model := ""
 	if input.Selection.Codex != nil {

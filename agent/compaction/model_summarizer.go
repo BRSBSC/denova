@@ -82,7 +82,7 @@ func (s *modelSummarizer) Summarize(ctx context.Context, request SummaryRequest)
 	snapshot := request.ModelSnapshot
 	if s.config.Model == nil {
 		primary := snapshot.Messages()
-		positions, ok := sourcePositions(primary, request.Messages)
+		positions, ok := sourcePositions(primary, request.Messages, request.Current)
 		if !ok {
 			return agent.CompactionCheckpoint{}, errors.New("Compaction source does not match the final model request")
 		}
@@ -134,9 +134,10 @@ func (s *modelSummarizer) complete(ctx context.Context, snapshot *agent.ModelReq
 
 // Match the newly selected contiguous delta from its newest occurrence. An
 // earlier checkpoint can be separated from that delta by retained user intent.
-func sourcePositions(primary, source []*agent.Message) ([]int, bool) {
+// Current identifies that checkpoint independently of its model-visible role.
+func sourcePositions(primary, source []*agent.Message, current *agent.CompactionState) ([]int, bool) {
 	delta := 0
-	if len(source) > 1 && source[0] != nil && source[0].Role == agent.System {
+	if len(source) > 1 && current != nil {
 		delta = 1
 	}
 	for start := len(primary) - (len(source) - delta); start >= 0; start-- {

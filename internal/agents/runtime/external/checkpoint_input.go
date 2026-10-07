@@ -8,7 +8,7 @@ import (
 )
 
 // Adapters may report the resolved model's existing visual estimator. Unknown
-// models use Agent's conservative reserve; no Native execution is involved.
+// models use Agent's shared image fallback; no Native execution is involved.
 type modelInputEstimator interface {
 	InputEstimator(Input) agent.InputEstimator
 }

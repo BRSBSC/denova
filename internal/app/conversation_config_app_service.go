@@ -349,7 +349,7 @@ func (a *App) interactiveConversationConfig(binding ConversationConfigBinding) (
 	if err != nil {
 		return conversationconfig.Snapshot{}, err
 	}
-	return interactiveapp.ApplyConversationConfig(store, &runtimeCfg, binding.StoryID, binding.BranchID)
+	return interactiveapp.EnsureConversationConfig(store, &runtimeCfg, binding.StoryID, binding.BranchID)
 }
 
 func (a *App) patchInteractiveConversationConfig(ctx context.Context, binding ConversationConfigBinding, patch conversationconfig.Patch, baseRevision uint64) (conversationconfig.Snapshot, error) {
@@ -375,16 +375,9 @@ func (a *App) patchInteractiveConversationConfig(ctx context.Context, binding Co
 	if err != nil {
 		return conversationconfig.Snapshot{}, err
 	}
-	current, ok, err := store.BranchRuntimeConfig(binding.StoryID, binding.BranchID)
+	current, err := interactiveapp.EnsureConversationConfig(store, &runtimeCfg, binding.StoryID, binding.BranchID)
 	if err != nil {
 		return conversationconfig.Snapshot{}, err
-	}
-	if !ok {
-		seed := conversationconfig.Default(&runtimeCfg, config.AgentKindInteractiveStory)
-		current, err = store.EnsureBranchRuntimeConfig(binding.StoryID, binding.BranchID, seed)
-		if err != nil {
-			return conversationconfig.Snapshot{}, err
-		}
 	}
 	next, err := conversationconfig.Merge(&runtimeCfg, current.Config, patch)
 	if err != nil {

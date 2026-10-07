@@ -8,6 +8,7 @@ import type { VisibleAgentKey } from '@/features/agents/agent-registry'
 import { Button } from '@/components/ui/button'
 import { AgentComposerShell } from './AgentComposerShell'
 import { ModelProfileSwitcher } from './ModelProfileSwitcher'
+import { ConversationConfigError } from '@/features/conversation-config/ConversationConfigError'
 import { ComposerTokenInput, type ComposerTokenInputHandle, type ComposerTokenSpec, type ComposerTrigger } from './composer-token-input'
 import { workspaceFileName } from '@/lib/workspace-path'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -56,6 +57,7 @@ interface InputAreaProps {
   /** An idle empty composer can continue the exact durable interruption. */
   resumeAvailable?: boolean
   queuedCommands?: AgentRuntimeQueuedCommand[]
+  activeOperationID?: string
   queueActionPendingCommandID?: string
   onQueuedCommandSteer?: (item: AgentRuntimeQueuedCommand) => boolean | void | Promise<boolean | void>
   onQueuedCommandDelete?: (item: AgentRuntimeQueuedCommand) => boolean | void | Promise<boolean | void>
@@ -121,6 +123,7 @@ export function InputArea({
   generationActive,
   resumeAvailable = false,
   queuedCommands = [],
+  activeOperationID = '',
   queueActionPendingCommandID = '',
   onQueuedCommandSteer,
   onQueuedCommandDelete,
@@ -592,7 +595,9 @@ export function InputArea({
         <AgentQueuedCommandList
           items={queuedCommands}
           pendingCommandID={queueActionPendingCommandID}
-          disabled={activeControlsDisabled || abortPending || commandSubmitting}
+          disabled={disabled || abortPending || commandSubmitting}
+          activeOperationID={activeOperationID}
+          steerDisabled={activeControlsDisabled}
           onSteer={onQueuedCommandSteer}
           onDelete={onQueuedCommandDelete}
           onEdit={onQueuedCommandEdit}
@@ -609,6 +614,7 @@ export function InputArea({
           />
         ) : null}
 
+        <ConversationConfigError controller={conversationConfig} agentKey={agentKey} />
         <AgentComposerShell
           references={hasReferences ? (
             <>

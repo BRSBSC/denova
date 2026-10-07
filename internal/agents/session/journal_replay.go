@@ -217,6 +217,9 @@ func appendRecordLine(sess *Session, line []byte, lineNumber int) error {
 		return err
 	}
 	switch typed.Type {
+	case platformRecordType:
+		_, err := decodePlatformRecord(line)
+		return err
 	case historyTypeClear:
 		return appendClearRecordLine(sess, line)
 	case historyTypeInterrupt:

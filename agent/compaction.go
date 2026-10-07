@@ -143,18 +143,15 @@ type CompactionMetrics struct {
 }
 
 // CalibratedTokens applies provider/local calibration measured on the exact
-// previous request. The provider ratio may raise a conservative local
-// estimate, but never lower it. Outlier ratios fail closed to the local
-// estimate.
+// previous request. The provider ratio may raise the local estimate, but never
+// lower it. Large ratios remain valid: native images can cost substantially
+// more than the unknown-model fallback.
 func (metrics CompactionMetrics) CalibratedTokens(estimated int) int {
 	estimated = max(1, estimated)
 	if metrics.ObservedPromptTokens <= 0 || metrics.ObservedEstimateTokens <= 0 {
 		return estimated
 	}
 	ratio := float64(metrics.ObservedPromptTokens) / float64(metrics.ObservedEstimateTokens)
-	if ratio < .25 || ratio > 4 {
-		return estimated
-	}
 	return max(estimated, int(math.Round(float64(estimated)*ratio)))
 }
 

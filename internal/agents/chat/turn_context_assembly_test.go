@@ -260,7 +260,7 @@ func TestSessionConversationAssemblesTurnAndRuntimeFragmentsUnderOneBudget(t *te
 	}}}
 	conversation := agentconversation.NewSessionConversationForAgentWithRuntimeContexts(
 		sess, cfg, config.AgentKindIDE,
-		"Stable workspace", strings.Repeat("stable-", 80),
+		"Stable workspace", strings.Repeat("stable-", 20),
 		"Dynamic workspace", strings.Repeat("dynamic-", 80),
 	)
 	conversation.BindAgentCycleIdentity(agentrun.CycleIdentity{CommandID: "assembly-command", OperationID: "assembly-operation", Cycle: 1})
@@ -304,6 +304,27 @@ func TestSessionConversationAssemblesTurnAndRuntimeFragmentsUnderOneBudget(t *te
 	visible := sess.History()
 	if len(visible) != 1 || visible[0].Content != "continue" {
 		t.Fatalf("input commit must persist only the raw user message: %#v", visible)
+	}
+}
+
+func TestSessionConversationRejectsTruncatedStableLore(t *testing.T) {
+	store, err := session.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetOrCreate("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation := agentconversation.NewSessionConversationForAgentWithRuntimeContexts(
+		sess, &config.Config{Language: "en-US"}, config.AgentKindIDE,
+		"Lore Index", "# Lore Index\n"+strings.Repeat("canon ", 100), "", "",
+	)
+	_, err = conversation.AssembleModelContext(context.Background(), "continue", agentcontext.ModelContextInput{
+		UserMessage: "continue", Budget: agentcontext.Budget{MaxFragmentBytes: 256},
+	})
+	if err == nil || !strings.Contains(err.Error(), "will not be truncated") {
+		t.Fatalf("expected complete-Lore budget error, got %v", err)
 	}
 }
 

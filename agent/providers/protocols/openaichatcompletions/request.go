@@ -68,6 +68,13 @@ func requestMessages(messages []*agent.Message, compatibility Compatibility, con
 		if message == nil {
 			return nil, fmt.Errorf("openai request message %d: nil message", index)
 		}
+		// Strict templates accept one leading system message. Merge only the
+		// initial instruction block, preserving the order of later context.
+		if message.Role == agent.System && len(result) == 1 && result[0].OfSystem != nil {
+			content := result[0].OfSystem.Content.OfString.Value + "\n\n" + message.Content
+			result[0].OfSystem.Content.OfString = sdk.String(content)
+			continue
+		}
 		mapped, err := requestMessage(message, compatibility, config, imageCount)
 		if err != nil {
 			return nil, fmt.Errorf("openai request message %d: %w", index, err)
@@ -134,6 +141,10 @@ func requestMessage(message *agent.Message, compatibility Compatibility, config 
 		}
 		return result, nil
 	case agent.Assistant:
+		var continuation chatContinuation
+		if _, err := providers.DecodeContinuation(message.Extra, config, &continuation); err != nil {
+			return sdk.ChatCompletionMessageParamUnion{}, err
+		}
 		assistant := sdk.ChatCompletionAssistantMessageParam{}
 		if message.Content != "" || len(message.ToolCalls) == 0 || compatibility.RequiresAssistantToolContent {
 			assistant.Content.OfString = sdk.String(message.Content)
@@ -141,21 +152,30 @@ func requestMessage(message *agent.Message, compatibility Compatibility, config 
 		if message.Name != "" {
 			assistant.Name = sdk.String(message.Name)
 		}
+		extraFields := map[string]any{}
 		if compatibility.shouldReplayReasoning(message, config.ThinkingLevel) && message.ReasoningContent != "" {
-			assistant.SetExtraFields(map[string]any{compatibility.ReasoningContentField: message.ReasoningContent})
+			extraFields[compatibility.ReasoningContentField] = message.ReasoningContent
 		}
+		if len(continuation.ExtraContent) != 0 {
+			extraFields["extra_content"] = continuation.ExtraContent
+		}
+		assistant.SetExtraFields(extraFields)
 		for callIndex, call := range message.ToolCalls {
 			if call.Type != "" && call.Type != "function" {
 				return sdk.ChatCompletionMessageParamUnion{}, fmt.Errorf("tool call %d has unsupported type %q", callIndex, call.Type)
 			}
-			assistant.ToolCalls = append(assistant.ToolCalls, sdk.ChatCompletionMessageToolCallUnionParam{
-				OfFunction: &sdk.ChatCompletionMessageFunctionToolCallParam{
-					ID: call.ID,
-					Function: sdk.ChatCompletionMessageFunctionToolCallFunctionParam{
-						Name:      call.Function.Name,
-						Arguments: call.Function.Arguments,
-					},
+			function := sdk.ChatCompletionMessageFunctionToolCallParam{
+				ID: call.ID,
+				Function: sdk.ChatCompletionMessageFunctionToolCallFunctionParam{
+					Name:      call.Function.Name,
+					Arguments: call.Function.Arguments,
 				},
+			}
+			if extraContent := continuation.ToolCalls[call.ID]; len(extraContent) != 0 {
+				function.SetExtraFields(map[string]any{"extra_content": extraContent})
+			}
+			assistant.ToolCalls = append(assistant.ToolCalls, sdk.ChatCompletionMessageToolCallUnionParam{
+				OfFunction: &function,
 			})
 		}
 		return sdk.ChatCompletionMessageParamUnion{OfAssistant: &assistant}, nil

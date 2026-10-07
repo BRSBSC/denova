@@ -648,6 +648,7 @@ function AgentPanelComponent({
     generationActive: isStreaming,
     resumeAvailable: !isStreaming && Boolean(runtimeProjection?.pending_interruption_id?.trim()),
     queuedCommands: runtimeProjection?.queue || [],
+    activeOperationID: runtimeProjection?.active || runtimeProjection?.phase === 'suspended' ? runtimeProjection.active_operation_id : '',
     queueActionPendingCommandID,
     onQueuedCommandSteer: onSteerQueuedCommand,
     onQueuedCommandDelete: onDeleteQueuedCommand,
