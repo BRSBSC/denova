@@ -50,7 +50,7 @@ test('loads Game history progressively and fetches execution only when expanded'
     await expect(timeline).toHaveAttribute('aria-busy', 'false')
     await expect(page.getByPlaceholder(/你要做什么/)).toBeVisible()
     await expect(timeline.getByText('行动 12', { exact: true })).toBeVisible()
-    await expect(timeline.getByText('更新于第 13 回合', { exact: true })).toBeVisible()
+    await expect(timeline.getByRole('region', { name: '当前状态', exact: true })).toBeVisible()
     expect(detailsRequested).toBe(0)
     expect(historyRequested).toBe(0)
     await expect(page.getByRole('button', { name: '跳转到第 13 轮', exact: true })).toHaveCount(1)

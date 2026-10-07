@@ -50,6 +50,8 @@ interface MessageListProps {
   bottomPaddingPx?: number
   /** Shared adaptive boundary for every timeline row and trailing content. */
   contentClassName?: string
+  /** Exposes the scrollport so floating controls can share its content width. */
+  onScrollerChange?: (element: HTMLElement | null) => void
   afterContent?: ReactNode
   afterContentKey?: string
   hasEarlierMessages?: boolean
@@ -130,7 +132,7 @@ export function MessageList(props: MessageListProps) {
   return <VirtualizedMessageState key={props.scrollResetKey || 'default'}><MessageListContent {...props} /></VirtualizedMessageState>
 }
 
-function MessageListContent({ projectId, attachmentScope, messages, projection, isStreaming, activeRunId, visible = true, isExecutionActive = isStreaming, activityContent, highlightDialogue = false, scrollResetKey, bottomPaddingClassName = '', bottomPaddingPx, contentClassName, afterContent, afterContentKey, hasEarlierMessages = false, isLoadingEarlierMessages = false, onLoadEarlierMessages, autoLoadEarlierMessages = false, onLoadExecutionDetails, timelineAttachments = [], messageStyle, collapseTraceGroups = false, activeTraceDisplay = 'expanded', canMutateMessage, onEditMessage, onEditAssistantReply, onCreateBranch, onRegenerateMessage, onSwitchMessageVersion, onOpenSubAgentSession, onInsertIllustration, onReadAloud, onGenerateInteractiveImage, generatingInteractiveImageTurnId, activeSubAgentSessionKey, onApprovePlan, onContinuePlan, onExitPlanMode, onResolveAsk, turnScrollRequest, onVisibleTurnAnchorChange }: MessageListProps) {
+function MessageListContent({ projectId, attachmentScope, messages, projection, isStreaming, activeRunId, visible = true, isExecutionActive = isStreaming, activityContent, highlightDialogue = false, scrollResetKey, bottomPaddingClassName = '', bottomPaddingPx, contentClassName, onScrollerChange, afterContent, afterContentKey, hasEarlierMessages = false, isLoadingEarlierMessages = false, onLoadEarlierMessages, autoLoadEarlierMessages = false, onLoadExecutionDetails, timelineAttachments = [], messageStyle, collapseTraceGroups = false, activeTraceDisplay = 'expanded', canMutateMessage, onEditMessage, onEditAssistantReply, onCreateBranch, onRegenerateMessage, onSwitchMessageVersion, onOpenSubAgentSession, onInsertIllustration, onReadAloud, onGenerateInteractiveImage, generatingInteractiveImageTurnId, activeSubAgentSessionKey, onApprovePlan, onContinuePlan, onExitPlanMode, onResolveAsk, turnScrollRequest, onVisibleTurnAnchorChange }: MessageListProps) {
   const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const renderedItemsRef = useRef<ListItem<AgentChatListItem>[]>([])
@@ -201,6 +203,10 @@ function MessageListContent({ projectId, attachmentScope, messages, projection, 
     bottomInsetPx: bottomPaddingPx,
     resolveScroller: resolveMessageScroller,
   })
+  const setScroller = useCallback((element: HTMLElement | Window | null) => {
+    scrollLock.scrollerRef(element)
+    onScrollerChange?.(element instanceof HTMLElement ? element : null)
+  }, [onScrollerChange, scrollLock.scrollerRef])
   const latestInteractiveCardAnchor = useMemo(
     () => latestInteractiveCardBottomAnchorTarget(listItems),
     [listItems],
@@ -288,13 +294,24 @@ function MessageListContent({ projectId, attachmentScope, messages, projection, 
     }
   }, [firstItemIndex, listItems, onVisibleTurnAnchorChange, resolveMessageScroller])
 
+  const earlierRequest = useRef(false)
+  const historyScrollAnchor = useRef<{ key: string; firstKey: string; offset: number } | null>(null)
+  const captureHistoryAnchor = useCallback((scroller: HTMLElement | null) => {
+    if (!scroller || (historyScrollAnchor.current && historyScrollAnchor.current.firstKey !== listItems[0]?.key)) return
+    const viewport = scroller.getBoundingClientRect()
+    const row = [...scroller.querySelectorAll<HTMLElement>('[data-nova-chat-row-key]')].find(row => {
+      const bounds = row.getBoundingClientRect()
+      return bounds.bottom > viewport.top && bounds.top < viewport.bottom
+    })
+    if (row) historyScrollAnchor.current = { key: row.dataset.novaChatRowKey!, firstKey: listItems[0]?.key || '', offset: (row.parentElement || row).getBoundingClientRect().top - viewport.top }
+  }, [listItems])
   const handleItemsRendered = useCallback((items: ListItem<AgentChatListItem>[]) => {
     renderedItemsRef.current = items
     notifyVisibleTurnAnchor(items)
-  }, [notifyVisibleTurnAnchor])
+    // A scroll event can precede mounting the rows at the new viewport position.
+    if (earlierRequest.current) captureHistoryAnchor(resolveMessageScroller())
+  }, [captureHistoryAnchor, notifyVisibleTurnAnchor, resolveMessageScroller])
 
-  const earlierRequest = useRef(false)
-  const historyScrollAnchor = useRef<{ key: string; firstKey: string; offset: number } | null>(null)
   useLayoutEffect(() => {
     const anchor = historyScrollAnchor.current
     if (!anchor || anchor.firstKey === listItems[0]?.key) return
@@ -303,32 +320,24 @@ function MessageListContent({ projectId, attachmentScope, messages, projection, 
       historyScrollAnchor.current = null
       return
     }
-    // firstItemIndex preserves identity, but newly measured row heights and a
-    // shrinking history header can change the estimated prepend distance.
+    // Virtuoso includes the current header height when positioning an index.
+    // Preserve only the row's viewport offset, without counting the header twice.
     const frame = requestAnimationFrame(() => {
-      const headerHeight = resolveMessageScroller()?.querySelector('.nova-message-list-header')?.getBoundingClientRect().height || 0
-      scrollLock.scrollToIndex(index, { align: 'start', behavior: 'auto', offset: headerHeight - anchor.offset })
+      scrollLock.scrollToIndex(index, { align: 'start', behavior: 'auto', offset: -anchor.offset })
       historyScrollAnchor.current = null
     })
     return () => cancelAnimationFrame(frame)
-  }, [listItems, resolveMessageScroller, scrollLock.scrollToIndex])
+  }, [listItems, scrollLock.scrollToIndex])
   const handleMessageScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     scrollLock.onScroll(event)
     notifyVisibleTurnAnchor(renderedItemsRef.current, event.currentTarget.scrollTop)
     const shouldLoadEarlier = autoLoadEarlierMessages && initialPositionReady && event.currentTarget.scrollTop < 240 && hasEarlierMessages && !isLoadingEarlierMessages && !earlierRequest.current && onLoadEarlierMessages
-    if (shouldLoadEarlier || earlierRequest.current) {
-      const scroller = event.currentTarget
-      const top = scroller.getBoundingClientRect().top
-      const row = [...scroller.querySelectorAll<HTMLElement>('[data-nova-chat-row-key]')].find(row => row.getBoundingClientRect().bottom > top)
-      if (row && (!historyScrollAnchor.current || historyScrollAnchor.current.firstKey === listItems[0]?.key)) {
-        historyScrollAnchor.current = { key: row.dataset.novaChatRowKey!, firstKey: listItems[0]?.key || '', offset: (row.parentElement || row).getBoundingClientRect().top - top }
-      }
-    }
+    if (shouldLoadEarlier || earlierRequest.current) captureHistoryAnchor(event.currentTarget)
     if (shouldLoadEarlier) {
       earlierRequest.current = true
       void Promise.resolve(onLoadEarlierMessages()).finally(() => { earlierRequest.current = false })
     }
-  }, [autoLoadEarlierMessages, hasEarlierMessages, initialPositionReady, isLoadingEarlierMessages, listItems, notifyVisibleTurnAnchor, onLoadEarlierMessages, scrollLock.onScroll])
+  }, [autoLoadEarlierMessages, captureHistoryAnchor, hasEarlierMessages, initialPositionReady, isLoadingEarlierMessages, notifyVisibleTurnAnchor, onLoadEarlierMessages, scrollLock.onScroll])
 
   const onProcessExpandedChange = useCallback(async (key: string, running: boolean, expanded: boolean, navigationAnchor: string) => {
     scrollLock.releaseBottomLock()
@@ -413,7 +422,7 @@ function MessageListContent({ projectId, attachmentScope, messages, projection, 
       <Virtuoso
         key={scrollResetKey || 'default'}
         ref={scrollLock.virtuosoRef}
-        scrollerRef={scrollLock.scrollerRef}
+        scrollerRef={setScroller}
         onScroll={handleMessageScroll}
         onWheel={scrollLock.onWheel}
         onKeyDown={scrollLock.onKeyDown}

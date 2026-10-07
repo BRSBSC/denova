@@ -81,6 +81,8 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
   const [skillCommandQuery, setSkillCommandQuery] = useState<string | null>(null)
   const [activeSkillCommandIndex, setActiveSkillCommandIndex] = useState(0)
   const [inputFloatHeight, setInputFloatHeight] = useState(0)
+  const [messageScroller, setMessageScroller] = useState<HTMLElement | null>(null)
+  const [scrollbarWidth, setScrollbarWidth] = useState(0)
   const inputRef = useRef<ComposerTokenInputHandle | null>(null)
   const inputFloatRef = useRef<HTMLDivElement | null>(null)
   const skillCommands = useSkillCommands({
@@ -331,6 +333,16 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
     const nextHeight = Math.ceil(element.getBoundingClientRect().height)
     setInputFloatHeight((current) => (current === nextHeight ? current : nextHeight))
   }, [])
+
+  useLayoutEffect(() => {
+    // Classic scrollbars consume reading width; overlay scrollbars do not.
+    const syncScrollbarWidth = () => setScrollbarWidth(messageScroller ? messageScroller.offsetWidth - messageScroller.clientWidth : 0)
+    syncScrollbarWidth()
+    if (!messageScroller || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(syncScrollbarWidth)
+    observer.observe(messageScroller)
+    return () => observer.disconnect()
+  }, [messageScroller])
 
   useLayoutEffect(() => {
     syncInputFloatHeight()
@@ -657,7 +669,7 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
   )
 
   return (
-    <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--nova-surface-2)]" style={{ '--nova-story-text-max-width': `${stagePreferences.textMaxWidth}px` } as CSSProperties}>
+    <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--nova-surface-2)]" style={{ '--nova-story-text-max-width': `${stagePreferences.textMaxWidth}px`, '--nova-story-scrollbar-width': `${scrollbarWidth}px` } as CSSProperties}>
       {!storySetupVisible && <StoryStageArtwork key={`${projectId}:${stageKey}`} previousTurnId={previousPresentationTurnId} projectId={projectId} turn={presentationTurn} latest={historyWindow.followLatest && presentationTurn?.id === snapshot?.current_turn?.id} settings={story?.presentation_settings} textHidden={artworkOnly} scrimOpacity={stagePreferences.scrimOpacity} characterLayout={stagePreferences.characterLayout} characterSize={stagePreferences.characterSize} />}
       <div data-testid="story-stage-card" className="nova-story-stage-card relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <StoryStageHeader isMobile={isMobile} controls={stageControls} />
@@ -734,6 +746,7 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
                 activityContent={stageRun.runtime.recoveryPaused ? t('storyStage.activity.recoveryPaused') : activityContent}
                 highlightDialogue
                 contentClassName="nova-story-reading-column"
+                onScrollerChange={setMessageScroller}
                 scrollResetKey={scrollResetKey}
                 bottomPaddingClassName="pb-36"
                 bottomPaddingPx={messageListBottomPadding}

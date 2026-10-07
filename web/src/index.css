@@ -1107,6 +1107,7 @@ html[data-nova-motion="off"] .shimmer {
 
 .nova-story-stage-content .nova-story-input-float {
   padding-inline: 0;
+  padding-inline-end: var(--nova-story-scrollbar-width, 0px);
 }
 
 .nova-story-stage-content [data-nova-scroll-to-bottom] {
