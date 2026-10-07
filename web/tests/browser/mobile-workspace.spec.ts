@@ -148,9 +148,20 @@ for (const theme of ['dark', 'light']) {
         expect(bounds!.width).toBeGreaterThanOrEqual(44)
       }
       await expectInsideViewport(page)
+      // Fill the available composer row at each viewport, including any space
+      // reserved for a classic scrollbar, while retaining the input's padding.
+      await expect.poll(() => composer.evaluate(element => {
+        const input = element.closest<HTMLElement>('.nova-agent-composer-textarea')!
+        const body = element.closest<HTMLElement>('[data-slot="agent-composer-input"]')!
+        const row = element.closest<HTMLElement>('[data-slot="agent-composer-layout"]')!
+        const padding = [input, body].reduce((total, container) => {
+          const style = getComputedStyle(container)
+          return total + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+        }, 0)
+        const availableWidth = row.clientWidth - padding
+        return Math.abs(element.getBoundingClientRect().width - availableWidth)
+      })).toBeLessThan(2)
     }
-    const inputBounds = await composer.boundingBox()
-    expect(inputBounds!.width).toBeGreaterThan(300)
     await composer.fill('推开石门')
     await composer.press('Enter')
     await composer.pressSequentially('观察灯光')
