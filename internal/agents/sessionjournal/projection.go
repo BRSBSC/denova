@@ -10,7 +10,8 @@ import (
 	"strings"
 
 	"denova/internal/agents/conversationjournal"
-	agent "github.com/alfredxw/denova/agent"
+
+	"github.com/alfredxw/denova/agent"
 	agentsession "github.com/alfredxw/denova/agent/session"
 )
 

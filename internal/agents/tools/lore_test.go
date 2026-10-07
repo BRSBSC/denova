@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"denova/internal/book/lore"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 func TestLoreQueryExactSelectionPaginationAndMaterialSummary(t *testing.T) {
@@ -29,7 +31,7 @@ func TestLoreQueryExactSelectionPaginationAndMaterialSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var query agent.Tool
+	var query agenttool.Tool
 	for _, definition := range definitions {
 		info, err := definition.Tool.Info(context.Background())
 		if err != nil {
@@ -45,7 +47,7 @@ func TestLoreQueryExactSelectionPaginationAndMaterialSummary(t *testing.T) {
 	run := func(input string) string {
 		t.Helper()
 		result, err := query.Run(context.Background(), input)
-		if err != nil || result.Status != agent.ToolResultSuccess {
+		if err != nil || result.Status != agentschema.ToolResultSuccess {
 			t.Fatalf("query failed: %#v %v", result, err)
 		}
 		return result.ModelContent
@@ -82,7 +84,7 @@ func TestLoreQueryExactSelectionPaginationAndMaterialSummary(t *testing.T) {
 		`{"ids":["hero"],"offset":-1}`, `{"detail":"full"}`,
 	} {
 		result, err := query.Run(context.Background(), input)
-		if err == nil && result.Status == agent.ToolResultSuccess {
+		if err == nil && result.Status == agentschema.ToolResultSuccess {
 			t.Fatalf("accepted invalid query: %s", input)
 		}
 	}
@@ -126,7 +128,7 @@ func TestLoreGroupQueriesPreserveMarkdownAndObserveOnlyFullBodies(t *testing.T) 
 		run := func(input string) string {
 			t.Helper()
 			result, err := definition.Tool.Run(context.Background(), input)
-			if err != nil || result.Status != agent.ToolResultSuccess {
+			if err != nil || result.Status != agentschema.ToolResultSuccess {
 				t.Fatalf("list failed: %#v %v", result, err)
 			}
 			return result.ModelContent
@@ -173,7 +175,7 @@ func TestWriteLoreItemsKeepsBatchEntitiesSeparateDuringPartialUpdates(t *testing
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result.Status != agent.ToolResultSuccess {
+			if result.Status != agentschema.ToolResultSuccess {
 				t.Fatalf("write failed: %s", result.ModelContent)
 			}
 			var receipt struct {

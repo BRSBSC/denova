@@ -1,18 +1,18 @@
 package toolruntime
 
 import (
-	agentinteractive "denova/internal/agents/interactive"
-	agenttool "denova/internal/agents/tool"
 	"encoding/json"
 	"strings"
 
-	agent "github.com/alfredxw/denova/agent"
-
+	agentinteractive "denova/internal/agents/interactive"
+	agenttool "denova/internal/agents/tool"
 	producttools "denova/internal/agents/tools"
 	workspacechange "denova/internal/workspace/change"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
-func applyInteractiveTurnReceiptToExecutionRecord(record *agenttool.ExecutionRecord, result agent.ToolResult) {
+func applyInteractiveTurnReceiptToExecutionRecord(record *agenttool.ExecutionRecord, result agentschema.ToolResult) {
 	if record == nil || !agentinteractive.IsInteractiveTurnSubmissionTool(record.ToolName) {
 		return
 	}
@@ -46,14 +46,14 @@ func turnSubmissionReceiptHasStatus(statuses map[string]string, target string) b
 	return false
 }
 
-func toolResultDomainPayload(result agent.ToolResult) []byte {
+func toolResultDomainPayload(result agentschema.ToolResult) []byte {
 	if len(result.Details) != 0 && json.Valid(result.Details) {
 		return result.Details
 	}
 	return []byte(result.ModelContent)
 }
 
-func applyWorkspaceChangeReceiptToExecutionRecord(record *agenttool.ExecutionRecord, result agent.ToolResult) {
+func applyWorkspaceChangeReceiptToExecutionRecord(record *agenttool.ExecutionRecord, result agentschema.ToolResult) {
 	if record == nil {
 		return
 	}
@@ -75,7 +75,7 @@ func applyWorkspaceChangeReceiptToExecutionRecord(record *agenttool.ExecutionRec
 	}
 }
 
-func applyToolMutationReceiptToExecutionRecord(record *agenttool.ExecutionRecord, result agent.ToolResult) {
+func applyToolMutationReceiptToExecutionRecord(record *agenttool.ExecutionRecord, result agentschema.ToolResult) {
 	if record == nil {
 		return
 	}

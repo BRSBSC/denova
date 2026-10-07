@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"denova/internal/agents/canonicalstore"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 	"github.com/google/uuid"
 )
 
@@ -20,8 +22,8 @@ func TestPluginConsumerCancelsOwnedAgentAndImage(t *testing.T) {
 		t.Fatal(err)
 	}
 	model := &cancellablePlatformModel{started: make(chan struct{})}
-	m.ConfigureAgents(store, func(context.Context, string) (agent.BaseChatModel, agent.CapabilityIdentity, error) {
-		return model, agent.CapabilityIdentity{Kind: "test.consumer", Version: 1}, nil
+	m.ConfigureAgents(store, func(context.Context, string) (agentmodel.BaseChatModel, agentschema.CapabilityIdentity, error) {
+		return model, agentschema.CapabilityIdentity{Kind: "test.consumer", Version: 1}, nil
 	})
 	host := &resourceTestHost{project: projectID, profile: "image", blocking: true, entered: make(chan struct{})}
 	m.ConfigureResources(host)

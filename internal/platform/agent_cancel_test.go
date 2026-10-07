@@ -12,7 +12,10 @@ import (
 	"time"
 
 	"denova/internal/agents/canonicalstore"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	agentstream "github.com/alfredxw/denova/agent/model/stream"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 type cancellablePlatformModel struct {
@@ -20,13 +23,13 @@ type cancellablePlatformModel struct {
 	calls   atomic.Int32
 }
 
-func (m *cancellablePlatformModel) Generate(ctx context.Context, _ []*agent.Message, _ ...agent.ModelOption) (*agent.Message, error) {
+func (m *cancellablePlatformModel) Generate(ctx context.Context, _ []*agentschema.Message, _ ...agentmodel.ModelOption) (*agentschema.Message, error) {
 	m.calls.Add(1)
 	close(m.started)
 	<-ctx.Done()
 	return nil, ctx.Err()
 }
-func (m *cancellablePlatformModel) Stream(ctx context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+func (m *cancellablePlatformModel) Stream(ctx context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentstream.StreamReader[*agentschema.Message], error) {
 	_, err := m.Generate(ctx, messages, options...)
 	return nil, err
 }
@@ -38,8 +41,8 @@ func TestAgentCancellationStreamsAndPersistsWithoutReplaying(t *testing.T) {
 		t.Fatal(err)
 	}
 	model := &cancellablePlatformModel{started: make(chan struct{})}
-	m.ConfigureAgents(store, func(context.Context, string) (agent.BaseChatModel, agent.CapabilityIdentity, error) {
-		return model, agent.CapabilityIdentity{Kind: "platform.cancel.test", Version: 1}, nil
+	m.ConfigureAgents(store, func(context.Context, string) (agentmodel.BaseChatModel, agentschema.CapabilityIdentity, error) {
+		return model, agentschema.CapabilityIdentity{Kind: "platform.cancel.test", Version: 1}, nil
 	})
 	release := testInstall(t, m, testCandidate(t, m, projectID, "agent", "test.cancel", Game))
 	instance, err := m.CreateInstance(CreateInstance{GameID: release.Manifest.ID, ReleaseID: release.Ref.ReleaseID, Title: "NPC", ProjectID: projectID, Models: map[string]string{"local:writer": "test"}})

@@ -8,7 +8,11 @@ import (
 	"time"
 
 	"denova/config"
-	agent "github.com/alfredxw/denova/agent"
+
+	"github.com/alfredxw/denova/agent"
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	agentstream "github.com/alfredxw/denova/agent/model/stream"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 	agentsession "github.com/alfredxw/denova/agent/session"
 )
 
@@ -18,7 +22,7 @@ type pausedPluginModel struct {
 	calls       atomic.Int32
 }
 
-func (m *pausedPluginModel) Generate(ctx context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.Message, error) {
+func (m *pausedPluginModel) Generate(ctx context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentschema.Message, error) {
 	if m.calls.Add(1) == 1 {
 		return (pluginCallingModel{}).Generate(ctx, messages, options...)
 	}
@@ -30,9 +34,9 @@ func (m *pausedPluginModel) Generate(ctx context.Context, messages []*agent.Mess
 	return nil, ctx.Err()
 }
 
-func (m *pausedPluginModel) Stream(ctx context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+func (m *pausedPluginModel) Stream(ctx context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentstream.StreamReader[*agentschema.Message], error) {
 	message, err := m.Generate(ctx, messages, options...)
-	return agent.StreamReaderFromArray([]*agent.Message{message}), err
+	return agentstream.StreamReaderFromArray([]*agentschema.Message{message}), err
 }
 
 func TestPausedPluginTaskRejectsChangedSharedSettingsAfterReopen(t *testing.T) {
@@ -45,7 +49,7 @@ func TestPausedPluginTaskRejectsChangedSharedSettingsAfterReopen(t *testing.T) {
 	}
 	store := agentsession.Memory()
 	model := &pausedPluginModel{resultReady: make(chan struct{}, 1)}
-	definition := agent.Definition{Name: "shared-plugin-test", Model: model, ModelIdentity: agent.CapabilityIdentity{Kind: "test.paused_plugin_model", Version: 1}, Tools: tools}
+	definition := agent.Definition{Name: "shared-plugin-test", Model: model, ModelIdentity: agentschema.CapabilityIdentity{Kind: "test.paused_plugin_model", Version: 1}, Tools: tools}
 	owner, err := agent.New(t.Context(), definition, agent.WithSessionStore(store))
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +57,7 @@ func TestPausedPluginTaskRejectsChangedSharedSettingsAfterReopen(t *testing.T) {
 	t.Cleanup(func() { _ = owner.Close(context.Background()) })
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
-	session, err := owner.Session(ctx, agent.NamedSession("paused-plugin-task"))
+	session, err := owner.Session(ctx, agentsession.Named("paused-plugin-task"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +73,7 @@ func TestPausedPluginTaskRejectsChangedSharedSettingsAfterReopen(t *testing.T) {
 	if _, err := session.SuspendAndClose(ctx, agent.SuspendRequest{RunID: run.ID(), IdempotencyKey: "pause"}); err != nil {
 		t.Fatal(err)
 	}
-	if result, err := run.Wait(ctx); err != nil || result.Status != agent.ResultSuspended {
+	if result, err := run.Wait(ctx); err != nil || result.Status != agentschema.ResultSuspended {
 		t.Fatalf("pause result=%#v error=%v", result, err)
 	}
 	if err := owner.Close(ctx); err != nil {
@@ -86,7 +90,7 @@ func TestPausedPluginTaskRejectsChangedSharedSettingsAfterReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session, err = owner.Session(ctx, agent.NamedSession("paused-plugin-task"))
+	session, err = owner.Session(ctx, agentsession.Named("paused-plugin-task"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +99,7 @@ func TestPausedPluginTaskRejectsChangedSharedSettingsAfterReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := resumed.Wait(ctx)
-	if err == nil || result.Status != agent.ResultFailed || !strings.HasPrefix(result.Reason, agent.ErrDefinitionMismatch.Error()) {
+	if err == nil || result.Status != agentschema.ResultFailed || !strings.HasPrefix(result.Reason, agentschema.ErrDefinitionMismatch.Error()) {
 		t.Fatalf("changed configuration resumed: result=%#v error=%v", result, err)
 	}
 	if model.calls.Load() != 2 {

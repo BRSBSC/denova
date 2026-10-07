@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	agent "github.com/alfredxw/denova/agent"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 func TestExternalContextSourceSurvivesAppendAndReopenButNotClear(t *testing.T) {
@@ -19,9 +19,9 @@ func TestExternalContextSourceSurvivesAppendAndReopenButNotClear(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sess.Close() })
 	// Exceed the resident window, so a loader cannot silently use UI history.
-	messages := make([]*agent.Message, sessionRecentTransactionLimit+25)
+	messages := make([]*agentschema.Message, sessionRecentTransactionLimit+25)
 	for index := range messages {
-		messages[index] = agent.UserMessage(fmt.Sprintf("original-%d", index))
+		messages[index] = agentschema.UserMessage(fmt.Sprintf("original-%d", index))
 	}
 	if err := sess.withCanonicalMutation(t.Context(), "publish source fixture", func() error {
 		return sess.appendMessagesLocked(messages, make([]MessageMetadata, len(messages)), historyTypeMessage)
@@ -32,7 +32,7 @@ func TestExternalContextSourceSurvivesAppendAndReopenButNotClear(t *testing.T) {
 	if err := sess.ReadExternal(t.Context(), func(state ExternalState) error { source = state.ContextSource; return nil }); err != nil {
 		t.Fatal(err)
 	}
-	if err := sess.Append(agent.UserMessage("New input must not enter the captured history.")); err != nil {
+	if err := sess.Append(agentschema.UserMessage("New input must not enter the captured history.")); err != nil {
 		t.Fatal(err)
 	}
 	if err := sess.Close(); err != nil {
@@ -94,7 +94,7 @@ func TestExternalContextSourceRejectsClearDuringPagedRead(t *testing.T) {
 			}
 			defer sess.Close()
 			for index := range 70 {
-				if err := sess.Append(agent.UserMessage(fmt.Sprintf("original-%d", index))); err != nil {
+				if err := sess.Append(agentschema.UserMessage(fmt.Sprintf("original-%d", index))); err != nil {
 					t.Fatal(err)
 				}
 			}

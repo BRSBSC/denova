@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"denova/internal/interactive"
-	agent "github.com/alfredxw/denova/agent"
+
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 func TestPresentationErrorsReachTheNonblockingProductReducer(t *testing.T) {
@@ -21,7 +22,7 @@ func TestPresentationErrorsReachTheNonblockingProductReducer(t *testing.T) {
 	}
 	info, _ := tool.Info(t.Context())
 	for _, presentation := range []string{`"invalid"`, `{"background":null,"characters":[{"item_id":"hero","asset_id":null}]}`, `{"background":42,"characters":[false,{"item_id":"hero"}]}`} {
-		normalized, err := agent.NormalizeToolArguments(info, `{"state_changes":[],"choices":["Continue"],"presentation":`+presentation+`}`)
+		normalized, err := agenttool.NormalizeToolArguments(info, `{"state_changes":[],"choices":["Continue"],"presentation":`+presentation+`}`)
 		if err != nil {
 			t.Fatalf("presentation must not fail runtime validation: %v", err)
 		}
@@ -108,7 +109,7 @@ func TestSubmitInteractiveTurnKeepsConditionalValidationAndNativeValues(t *testi
 	}
 	invoke := func(arguments string) {
 		t.Helper()
-		normalized, err := agent.NormalizeToolArguments(info, arguments)
+		normalized, err := agenttool.NormalizeToolArguments(info, arguments)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -11,7 +11,8 @@ import (
 	"strings"
 	"time"
 
-	agent "github.com/alfredxw/denova/agent"
+	agentevent "github.com/alfredxw/denova/agent/lifecycle/event"
+	agentinteraction "github.com/alfredxw/denova/agent/lifecycle/interaction"
 )
 
 type agentRunInput struct {
@@ -27,26 +28,26 @@ type streamEvent struct {
 	Data     any
 }
 
-func (e *agentExecution) consume(event agent.Event) {
+func (e *agentExecution) consume(event agentevent.Event) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	kind := "state"
 	var data any
 	switch payload := event.Payload.(type) {
-	case agent.RunStarted:
+	case agentevent.RunStarted:
 		e.receipt.Result.Status = "running"
-	case agent.AssistantDelta:
+	case agentevent.AssistantDelta:
 		e.receipt.Result.Text += payload.Delta
 		kind = "delta"
 		data = map[string]string{"delta": payload.Delta}
-	case agent.InteractionRequested:
+	case agentevent.InteractionRequested:
 		e.receipt.Result.Status = "waiting"
 		e.interactions = append(e.interactions, payload.Request)
 		kind = "interaction"
 		data = payload.Request
-	case agent.InteractionResolved:
+	case agentevent.InteractionResolved:
 		e.receipt.Result.Status = "running"
-		e.interactions = slices.DeleteFunc(e.interactions, func(request agent.InteractionRequest) bool { return request.ID == payload.ID })
+		e.interactions = slices.DeleteFunc(e.interactions, func(request agentinteraction.InteractionRequest) bool { return request.ID == payload.ID })
 	default:
 		return
 	}
@@ -270,7 +271,7 @@ func (s *AgentService) ServeHTTP(w http.ResponseWriter, request *http.Request, r
 		}
 		if request.Method == "POST" && len(parts) == 2 && parts[1] == "cancel" {
 			if execution != nil && execution.run != nil {
-				if _, err := execution.run.Abort(request.Context(), agent.AbortRequest{Reason: "Cancelled by caller"}); err != nil {
+				if _, err := execution.run.Abort(request.Context(), agentevent.AbortRequest{Reason: "Cancelled by caller"}); err != nil {
 					writeError(w, err)
 					return
 				}
@@ -290,7 +291,7 @@ func (s *AgentService) ServeHTTP(w http.ResponseWriter, request *http.Request, r
 			}
 			allowed := false
 			for _, interaction := range snapshot.PendingInteractions {
-				if interaction.ID == parts[2] && interaction.Kind == agent.InteractionAsk {
+				if interaction.ID == parts[2] && interaction.Kind == agentinteraction.InteractionAsk {
 					allowed = true
 				}
 			}
@@ -298,7 +299,7 @@ func (s *AgentService) ServeHTTP(w http.ResponseWriter, request *http.Request, r
 				writeError(w, failure("PERMISSION_DENIED", "Only ordinary questions can be answered through the consumer API"))
 				return
 			}
-			var answer agent.InteractionResponse
+			var answer agentinteraction.InteractionResponse
 			if err := readRequest(request, &answer); err != nil {
 				writeError(w, err)
 				return
@@ -322,7 +323,7 @@ func serveAgentEvents(w http.ResponseWriter, request *http.Request, execution *a
 	}
 	lastID := request.Header.Get("Last-Event-ID")
 	var after uint64
-	var interactions []agent.InteractionRequest
+	var interactions []agentinteraction.InteractionRequest
 	if execution != nil {
 		execution.mu.Lock()
 		if lastID != "" {

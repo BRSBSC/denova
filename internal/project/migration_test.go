@@ -20,7 +20,8 @@ import (
 	bookversions "denova/internal/book/versions"
 	"denova/internal/interactive"
 	workspacelayout "denova/internal/workspace"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 func TestEnsureStoreCopiesLegacyProjectDataWithoutDeletingSource(t *testing.T) {
@@ -502,7 +503,7 @@ func TestShallowAssetsMigrationPreservesAttributesJournalsAndVersionRestore(t *t
 	}
 	remote := "https://example.com/" + oldImage
 	toolOutput := `{"image_path":"` + oldImage + `","remote_url":"` + remote + `"}`
-	for _, msg := range []*agent.Message{agent.UserMessage("![Hero](" + oldImage + ")"), {Role: agent.ToolRole, Content: toolOutput, ToolCallID: "call", ToolName: "generate_image"}, agent.AssistantMessage("Done", nil)} {
+	for _, msg := range []*agentschema.Message{agentschema.UserMessage("![Hero](" + oldImage + ")"), {Role: agentschema.ToolRole, Content: toolOutput, ToolCallID: "call", ToolName: "generate_image"}, agentschema.AssistantMessage("Done", nil)} {
 		if err := session.Append(msg); err != nil {
 			t.Fatal(err)
 		}
@@ -635,7 +636,7 @@ func TestShallowAssetsMigrationPreservesAttributesJournalsAndVersionRestore(t *t
 	if err != nil || !bytes.Equal(restoredJournal, afterJournal) {
 		t.Fatal("restore rewrote an active journal", err)
 	}
-	if err := session.Append(agent.UserMessage("After restore")); err != nil {
+	if err := session.Append(agentschema.UserMessage("After restore")); err != nil {
 		t.Fatalf("journal cannot append after migration and restore: %v", err)
 	}
 	restoredGame, err := game.Snapshot(story.ID, "main")

@@ -16,7 +16,8 @@ import (
 	"denova/internal/agents/conversationconfig"
 	externaljournal "denova/internal/agents/runtime/external/journal"
 	"denova/internal/agents/session"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 func TestResolveAskRoutesOnlyOwnedQuestions(t *testing.T) {
@@ -189,7 +190,7 @@ func pendingAskFixtureForEngine(t *testing.T, arguments string, engine config.Ru
 		t.Fatal(err)
 	}
 	if err := sess.UpdateExternal(context.Background(), 1, func(session.ExternalState) (session.ExternalTransaction, error) {
-		return session.ExternalTransaction{Records: []externaljournal.Record{accepted, started}, Message: agent.UserMessage("Draft an opening."), Metadata: session.MessageMetadata{MessageID: "input-1"}}, nil
+		return session.ExternalTransaction{Records: []externaljournal.Record{accepted, started}, Message: agentschema.UserMessage("Draft an opening."), Metadata: session.MessageMetadata{MessageID: "input-1"}}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}

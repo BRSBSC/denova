@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/internal/agents/conversationjournal"
 	externaljournal "denova/internal/agents/runtime/external/journal"
 	"denova/internal/agents/sessionjournal"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 func loadSession(filePath string) (*Session, error) {
@@ -71,7 +71,7 @@ func loadSession(filePath string) (*Session, error) {
 		journalIncarnation: generation, journalLineCount: int(journal.Head().Cursor),
 		journal: journal, projection: projection,
 		messageBaseIndex: messageBase, messageCount: messageBase,
-		messages: make([]*agent.Message, 0), records: make([]historyRecord, 0),
+		messages: make([]*agentschema.Message, 0), records: make([]historyRecord, 0),
 		partialMaterialization: true,
 	}
 	if projection.PendingInterrupt != nil && projection.PendingInterruptCursor < startCursor {

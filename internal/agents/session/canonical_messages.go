@@ -7,28 +7,30 @@ import (
 	"fmt"
 	"strconv"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/internal/agents/conversationjournal"
 	externaljournal "denova/internal/agents/runtime/external/journal"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agentcanonical "github.com/alfredxw/denova/agent/session/canonical"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 // CanonicalHistoryHead reads only the reducer. Clear and journal replacement
 // start a different lane; ordinary message appends advance its existing revision.
-func (s *Session) CanonicalHistoryHead(ctx context.Context) (agent.CanonicalHistoryHead, error) {
+func (s *Session) CanonicalHistoryHead(ctx context.Context) (agentcanonical.CanonicalHistoryHead, error) {
 	if err := ctx.Err(); err != nil {
-		return agent.CanonicalHistoryHead{}, err
+		return agentcanonical.CanonicalHistoryHead{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.refreshCanonicalTailLocked(); err != nil {
-		return agent.CanonicalHistoryHead{}, err
+		return agentcanonical.CanonicalHistoryHead{}, err
 	}
 	if s.journal == nil || s.projection == nil {
-		return agent.CanonicalHistoryHead{}, fmt.Errorf("session canonical journal is unavailable")
+		return agentcanonical.CanonicalHistoryHead{}, fmt.Errorf("session canonical journal is unavailable")
 	}
 	head := s.journal.Head()
-	return agent.CanonicalHistoryHead{
+	return agentcanonical.CanonicalHistoryHead{
 		Identity: fmt.Sprintf("%s/%s/%d", head.Identity.ID, head.Identity.Generation, s.projection.ClearCursor),
 		Revision: strconv.FormatUint(s.contextCursorLocked().Revision, 10),
 	}, nil
@@ -38,7 +40,7 @@ func (s *Session) CanonicalHistoryHead(ctx context.Context) (agent.CanonicalHist
 // latest clear marker. The Session's resident window is intentionally bounded
 // for UI work, so Agent recovery must read the canonical JSONL instead of
 // treating that window as the complete transcript.
-func (s *Session) ReadCanonicalMessages(ctx context.Context) ([]*agent.Message, error) {
+func (s *Session) ReadCanonicalMessages(ctx context.Context) ([]*agentschema.Message, error) {
 	if s == nil {
 		return nil, fmt.Errorf("session is nil")
 	}
@@ -70,7 +72,7 @@ func (s *Session) ReadCanonicalMessages(ctx context.Context) ([]*agent.Message, 
 	if err != nil {
 		return nil, fmt.Errorf("read canonical message range: %w", err)
 	}
-	messages := make([]*agent.Message, 0)
+	messages := make([]*agentschema.Message, 0)
 	starts := map[string]externaljournal.StartedTool{}
 	for _, record := range records {
 		var typed struct {
@@ -81,7 +83,7 @@ func (s *Session) ReadCanonicalMessages(ctx context.Context) ([]*agent.Message, 
 		}
 		switch typed.Type {
 		case "":
-			var message agent.Message
+			var message agentschema.Message
 			if err := json.Unmarshal(record.Payload, &message); err != nil {
 				return nil, fmt.Errorf("decode legacy canonical message at cursor %d: %w", record.Location.Cursor, err)
 			}
@@ -132,15 +134,15 @@ func (s *Session) ReadCanonicalMessages(ctx context.Context) ([]*agent.Message, 
 			// Completed host facts become a matched observation pair for Native.
 			// IDs derive from durable host identity, never a vendor continuation.
 			id := fmt.Sprintf("external-%x", sha256.Sum256([]byte(finished.ExecutionID)))[:41]
-			call := agent.AssistantMessage("", []agent.ToolCall{{ID: id, Type: "function", Function: agent.FunctionCall{Name: started.Tool, Arguments: string(started.Arguments)}}})
-			result := agent.TextToolResult(finished.Result)
+			call := agentschema.AssistantMessage("", []agentschema.ToolCall{{ID: id, Type: "function", Function: agentschema.FunctionCall{Name: started.Tool, Arguments: string(started.Arguments)}}})
+			result := agentschema.TextToolResult(finished.Result)
 			if !finished.Success {
-				result = agent.ToolErrorResult(finished.Result, finished.Result)
+				result = agenttool.ToolErrorResult(finished.Result, finished.Result)
 			}
 			if finished.Receipt != nil {
 				result.Attachments, result.Artifacts = finished.Receipt.Attachments, finished.Receipt.Artifacts
 			}
-			messages = append(messages, call, agent.ToolMessage(result, id, agent.WithToolName(started.Tool)))
+			messages = append(messages, call, agentschema.ToolMessage(result, id, agentschema.WithToolName(started.Tool)))
 		}
 	}
 	return messages, nil

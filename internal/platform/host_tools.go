@@ -10,13 +10,15 @@ import (
 	"sync"
 
 	"denova/config"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 // HostAgentTools reads the installed plugins and shared settings for a new
 // execution. It persists nothing; calls remain bound to the caller's Project
 // and conversation. Existing executions finish with their already loaded tools.
-func (m *Manager) HostAgentTools(cfg *config.Config, agentKind string) (agent.Toolset, error) {
+func (m *Manager) HostAgentTools(cfg *config.Config, agentKind string) (agenttool.Toolset, error) {
 	if cfg == nil || cfg.AgentPluginScope == (config.AgentPluginScope{}) {
 		return nil, nil
 	}
@@ -123,7 +125,7 @@ type hostPluginToolset struct {
 	models    map[string]string
 }
 
-func (t *hostPluginToolset) Identity() agent.CapabilityIdentity {
+func (t *hostPluginToolset) Identity() agentschema.CapabilityIdentity {
 	// Reuse the Agent's behavior check so a paused tool batch cannot silently
 	// resume against changed implementations or shared settings.
 	configuration := make(map[string]any, len(t.releases))
@@ -131,18 +133,18 @@ func (t *hostPluginToolset) Identity() agent.CapabilityIdentity {
 		configuration[id] = []any{release.Ref.ReleaseID, t.settings[id]}
 	}
 	raw, _ := json.Marshal([]any{configuration, t.providers, t.context, t.models})
-	return agent.CapabilityIdentity{Kind: "denova.plugin.tools", Version: 1, ConfigHash: stableID(string(raw))}
+	return agentschema.CapabilityIdentity{Kind: "denova.plugin.tools", Version: 1, ConfigHash: stableID(string(raw))}
 }
 
-func (t *hostPluginToolset) PrepareTools(ctx context.Context, request agent.ToolRequest) ([]agent.ToolDefinition, error) {
+func (t *hostPluginToolset) PrepareTools(ctx context.Context, request agenttool.ToolRequest) ([]agenttool.ToolDefinition, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	invocation := &hostPluginInvocation{toolset: t, owner: ctx, releases: t.releases, settings: t.settings, runtimes: map[string]*Runtime{}}
-	definitions := []agent.ToolDefinition{}
+	definitions := []agenttool.ToolDefinition{}
 	for _, id := range t.providers {
 		release := t.releases[id]
-		prepared := []agent.ToolDefinition{}
+		prepared := []agenttool.ToolDefinition{}
 		for _, tool := range release.Manifest.Contributes.Tools {
 			if !slices.Contains(tool.AgentContexts, t.context) {
 				continue

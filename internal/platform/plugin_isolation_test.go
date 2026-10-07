@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"denova/config"
-	agent "github.com/alfredxw/denova/agent"
+
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 func TestBrokenPluginDoesNotBlockUnrelatedHostTools(t *testing.T) {
@@ -27,7 +28,7 @@ func TestBrokenPluginDoesNotBlockUnrelatedHostTools(t *testing.T) {
 			if err != nil || set == nil {
 				t.Fatalf("unrelated plugin admission failed: %v", err)
 			}
-			tools, err := set.PrepareTools(context.Background(), agent.ToolRequest{})
+			tools, err := set.PrepareTools(context.Background(), agenttool.ToolRequest{})
 			if err != nil || len(tools) != 1 || len(m.RuntimeSnapshots()) != 0 {
 				t.Fatalf("expected only the healthy tool without starting code: %d %v", len(tools), err)
 			}
@@ -78,7 +79,7 @@ func TestPluginContextFilteringAndExplicitDependency(t *testing.T) {
 		if set == nil {
 			t.Fatal("writing tool unavailable")
 		}
-		tools, err := set.PrepareTools(t.Context(), agent.ToolRequest{})
+		tools, err := set.PrepareTools(t.Context(), agenttool.ToolRequest{})
 		if err != nil || len(tools) != 1 {
 			t.Fatalf("explicit-only dependency leaked into Agent context: %d %v", len(tools), err)
 		}

@@ -14,13 +14,15 @@ import (
 	novaskills "denova/internal/agents/skills"
 	"denova/internal/interactive"
 
-	agent "github.com/alfredxw/denova/agent"
-	"github.com/alfredxw/denova/agent/providers"
-	"github.com/alfredxw/denova/agent/providers/protocols/anthropicmessages"
-	"github.com/alfredxw/denova/agent/providers/protocols/openaichatcompletions"
-	"github.com/alfredxw/denova/agent/providers/protocols/openairesponses"
-	agentscript "github.com/alfredxw/denova/agent/script"
-	publictools "github.com/alfredxw/denova/agent/tools"
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	"github.com/alfredxw/denova/agent/model/providers"
+	"github.com/alfredxw/denova/agent/model/providers/protocols/anthropicmessages"
+	"github.com/alfredxw/denova/agent/model/providers/protocols/openaichatcompletions"
+	"github.com/alfredxw/denova/agent/model/providers/protocols/openairesponses"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
+	publictools "github.com/alfredxw/denova/agent/tool/builtin"
+	agentscript "github.com/alfredxw/denova/agent/tool/script"
 )
 
 // Exercise the actual wire payload, since a valid in-memory schema alone does
@@ -78,7 +80,7 @@ func TestBuiltinSchemasExposeSameParametersAcrossProtocols(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := model.Generate(context.Background(), []*agent.Message{agent.UserMessage("inspect")}, agent.WithTools(infos)); err != nil {
+			if _, err := model.Generate(context.Background(), []*agentschema.Message{agentschema.UserMessage("inspect")}, agentmodel.WithTools(infos)); err != nil {
 				t.Fatal(err)
 			}
 			body := <-bodies
@@ -153,19 +155,19 @@ func isDirectNullableType(value any) bool {
 
 type schemaOnlyTaskExecutor struct{ publictools.TaskExecutor }
 
-func (schemaOnlyTaskExecutor) Identity() agent.CapabilityIdentity {
-	return agent.CapabilityIdentity{Kind: "test.schema.tasks", Version: 1}
+func (schemaOnlyTaskExecutor) Identity() agentschema.CapabilityIdentity {
+	return agentschema.CapabilityIdentity{Kind: "test.schema.tasks", Version: 1}
 }
 
 type schemaOnlyCommandRunner struct{ publictools.CommandRunner }
 
-func (schemaOnlyCommandRunner) Identity() agent.CapabilityIdentity {
-	return agent.CapabilityIdentity{Kind: "test.schema.shell", Version: 1}
+func (schemaOnlyCommandRunner) Identity() agentschema.CapabilityIdentity {
+	return agentschema.CapabilityIdentity{Kind: "test.schema.shell", Version: 1}
 }
 
 // Build real writing/game/common definitions with isolated paths. No tool is
 // executed and no model, browser, shell, or user workspace is accessed.
-func builtinSchemaInfos(t *testing.T) []*agent.ToolInfo {
+func builtinSchemaInfos(t *testing.T) []*agentschema.ToolInfo {
 	t.Helper()
 	ctx := context.Background()
 	cfg := &config.Config{NovaDir: t.TempDir(), Workspace: t.TempDir(), ProjectStoreDir: t.TempDir()}
@@ -176,8 +178,8 @@ func builtinSchemaInfos(t *testing.T) []*agent.ToolInfo {
 		config.AgentToolWebSearch: true, config.AgentToolWebFetch: true,
 	}
 	catalog := NewCatalog(cfg, nil, RuntimeExecutables{})
-	definitions := []agent.ToolDefinition{}
-	add := func(items []agent.ToolDefinition, err error) {
+	definitions := []agenttool.ToolDefinition{}
+	add := func(items []agenttool.ToolDefinition, err error) {
 		t.Helper()
 		if err != nil {
 			t.Fatal(err)
@@ -185,7 +187,7 @@ func builtinSchemaInfos(t *testing.T) []*agent.ToolInfo {
 		definitions = append(definitions, items...)
 	}
 	add(catalog.Workspace(settings))
-	for _, build := range []func(publictools.CommandRunner, ...publictools.DefinitionOption) (agent.ToolDefinition, error){publictools.Bash, publictools.Pwsh} {
+	for _, build := range []func(publictools.CommandRunner, ...publictools.DefinitionOption) (agenttool.ToolDefinition, error){publictools.Bash, publictools.Pwsh} {
 		definition, err := build(schemaOnlyCommandRunner{})
 		if err != nil {
 			t.Fatal(err)
@@ -207,8 +209,8 @@ func builtinSchemaInfos(t *testing.T) []*agent.ToolInfo {
 			panic("schema only")
 		},
 	})(config.ResolvedAgentToolSettings{}))
-	for _, toolset := range []agent.Toolset{publictools.Ask(), publictools.Todo(), publictools.Tasks(schemaOnlyTaskExecutor{})} {
-		add(toolset.PrepareTools(ctx, agent.ToolRequest{}))
+	for _, toolset := range []agenttool.Toolset{publictools.Ask(), publictools.Todo(), publictools.Tasks(schemaOnlyTaskExecutor{})} {
+		add(toolset.PrepareTools(ctx, agenttool.ToolRequest{}))
 	}
 	browser, err := newBrowserTool(&schemaBrowserController{})
 	if err != nil {
@@ -229,7 +231,7 @@ func builtinSchemaInfos(t *testing.T) []*agent.ToolInfo {
 		t.Fatal(err)
 	}
 	definitions = append(definitions, script)
-	infos := make([]*agent.ToolInfo, 0, len(definitions))
+	infos := make([]*agentschema.ToolInfo, 0, len(definitions))
 	for _, definition := range definitions {
 		info, err := definition.Tool.Info(ctx)
 		if err != nil {

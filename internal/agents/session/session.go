@@ -8,30 +8,31 @@ import (
 	"strings"
 	"time"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	agentcontext "denova/internal/agents/context"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 // Append 追加消息并持久化到磁盘。
-func (s *Session) Append(msg *agent.Message) error {
+func (s *Session) Append(msg *agentschema.Message) error {
 	return s.AppendWithMetadata(msg, MessageMetadata{})
 }
 
-func (s *Session) AppendWithMetadata(msg *agent.Message, metadata MessageMetadata) error {
+func (s *Session) AppendWithMetadata(msg *agentschema.Message, metadata MessageMetadata) error {
 	return s.withCanonicalMutation(context.Background(), "append message", func() error {
 		return s.appendMessageLocked(msg, metadata, historyTypeMessage)
 	})
 }
 
-func (s *Session) appendMessageLocked(msg *agent.Message, metadata MessageMetadata, kind string) error {
-	return s.appendMessagesLocked([]*agent.Message{msg}, []MessageMetadata{metadata}, kind)
+func (s *Session) appendMessageLocked(msg *agentschema.Message, metadata MessageMetadata, kind string) error {
+	return s.appendMessagesLocked([]*agentschema.Message{msg}, []MessageMetadata{metadata}, kind)
 }
 
 // appendMessagesLocked publishes one or more logical messages as one physical
 // journal transaction. The batch is the atomicity seam used by paired tool
 // call/result receipts; ordinary single-message appends share the same path.
-func (s *Session) appendMessagesLocked(messages []*agent.Message, metadata []MessageMetadata, kind string) error {
+func (s *Session) appendMessagesLocked(messages []*agentschema.Message, metadata []MessageMetadata, kind string) error {
 	if len(messages) == 0 || len(messages) != len(metadata) {
 		return fmt.Errorf("会话消息批次无效")
 	}
@@ -61,7 +62,7 @@ func (s *Session) appendMessagesLocked(messages []*agent.Message, metadata []Mes
 		s.records = append(s.records, historyRecord{
 			kind: kind, message: msg, messageMetadata: normalizedMetadata[index], createdAt: now,
 		})
-		if s.title == defaultSessionTitle && msg.Role == agent.User && strings.TrimSpace(msg.Content) != "" {
+		if s.title == defaultSessionTitle && msg.Role == agentschema.User && strings.TrimSpace(msg.Content) != "" {
 			titleContent := normalizedMetadata[index].DisplayContent
 			if titleContent == "" {
 				titleContent = msg.Content
@@ -139,7 +140,7 @@ func sanitizeUserMessageReferences(values []agentcontext.UserReference) []agentc
 }
 
 // AppendContextMessage appends a model-visible message that is hidden from UI history.
-func (s *Session) AppendContextMessage(msg *agent.Message) error {
+func (s *Session) AppendContextMessage(msg *agentschema.Message) error {
 	if msg == nil || (msg.Role == "" && strings.TrimSpace(msg.Content) == "" && len(msg.ToolCalls) == 0) {
 		return nil
 	}
@@ -151,7 +152,7 @@ func (s *Session) AppendContextMessage(msg *agent.Message) error {
 // AppendContextMessages atomically appends a model-visible, UI-hidden message
 // batch. It is primarily used for protocol pairs that must never be durable in
 // a half-written state.
-func (s *Session) AppendContextMessages(messages ...*agent.Message) error {
+func (s *Session) AppendContextMessages(messages ...*agentschema.Message) error {
 	if len(messages) == 0 {
 		return nil
 	}
@@ -180,30 +181,30 @@ func (s *Session) appendClearMarkerLocked() error {
 }
 
 // GetMessages 返回所有消息的快照。
-func (s *Session) GetMessages() []*agent.Message {
+func (s *Session) GetMessages() []*agentschema.Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	result := make([]*agent.Message, len(s.messages))
+	result := make([]*agentschema.Message, len(s.messages))
 	copy(result, s.messages)
 	return result
 }
 
 // MessageWindow returns the bounded resident raw transcript together with its
 // absolute starting index and total durable message count.
-func (s *Session) MessageWindow() ([]*agent.Message, int, int) {
+func (s *Session) MessageWindow() ([]*agentschema.Message, int, int) {
 	if s == nil {
 		return nil, 0, 0
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result := make([]*agent.Message, len(s.messages))
+	result := make([]*agentschema.Message, len(s.messages))
 	copy(result, s.messages)
 	return result, s.messageBaseIndex, s.messageCount
 }
 
 // GetEffectiveMessages 返回最后一个清理标记之后的 Agent 有效上下文。
-func (s *Session) GetEffectiveMessages() []*agent.Message {
+func (s *Session) GetEffectiveMessages() []*agentschema.Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.effectiveTranscriptMessagesLocked()
@@ -262,7 +263,7 @@ func (s *Session) History() []HistoryEntry {
 			if record.message == nil {
 				continue
 			}
-			if record.message.Role == agent.Assistant {
+			if record.message.Role == agentschema.Assistant {
 				if coverage := segmentedAssistantContentByRun[strings.TrimSpace(record.messageMetadata.RunID)]; coverage != nil {
 					_, segmentMatches := coverage.segments[sha256.Sum256([]byte(record.message.Content))]
 					if segmentMatches || coverage.combined.String() == record.message.Content {
@@ -279,7 +280,7 @@ func (s *Session) History() []HistoryEntry {
 				ID:                record.messageMetadata.MessageID,
 				Role:              string(record.message.Role),
 				Content:           content,
-				Attachments:       append([]agent.Attachment(nil), record.message.Attachments...),
+				Attachments:       append([]agentschema.Attachment(nil), record.message.Attachments...),
 				Message:           record.message,
 				CreatedAt:         record.createdAt,
 				RunID:             record.messageMetadata.RunID,
@@ -354,7 +355,7 @@ func (s *Session) History() []HistoryEntry {
 	return normalizeCompletedToolDisplayEntries(result)
 }
 
-func cloneSessionToolPresentation(presentation *agent.ToolPresentation) *agent.ToolPresentation {
+func cloneSessionToolPresentation(presentation *agenttool.ToolPresentation) *agenttool.ToolPresentation {
 	if presentation == nil {
 		return nil
 	}

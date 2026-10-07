@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/config"
 	"denova/internal/book/lore"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 type queryLoreItemsInput struct {
@@ -70,13 +71,13 @@ func (p *loreReadPolicy) observe(items []lore.Item) {
 	}
 }
 
-func newLoreTools(workspace string, allowWrite bool, options ...loreToolsOptions) ([]agent.ToolDefinition, error) {
+func newLoreTools(workspace string, allowWrite bool, options ...loreToolsOptions) ([]agenttool.ToolDefinition, error) {
 	workspace = strings.TrimSpace(workspace)
 	var readPolicy *loreReadPolicy
 	if len(options) > 0 {
 		readPolicy = options[0].ReadPolicy
 	}
-	queryTool, err := agent.InferTool("query_lore_items", "Query enabled lore by exact ids or unique names, or search by groups, keywords, categories and load modes. Exact selectors cannot be combined with search filters. detail=index (default) returns briefs; detail=full returns complete bodies. Both include material_count and cover_asset_id, not media content. Empty selectors return the project category and name catalog. Follow next_offset with the same arguments to continue; missing_ids or missing_names never include later-page results. Use list_lore_materials only when actual material metadata is needed. Re-read earlier lore observations here using their retained selectors; exact body reads require detail=full.", func(ctx context.Context, input queryLoreItemsInput) (string, error) {
+	queryTool, err := agenttool.InferTool("query_lore_items", "Query enabled lore by exact ids or unique names, or search by groups, keywords, categories and load modes. Exact selectors cannot be combined with search filters. detail=index (default) returns briefs; detail=full returns complete bodies. Both include material_count and cover_asset_id, not media content. Empty selectors return the project category and name catalog. Follow next_offset with the same arguments to continue; missing_ids or missing_names never include later-page results. Use list_lore_materials only when actual material metadata is needed. Re-read earlier lore observations here using their retained selectors; exact body reads require detail=full.", func(ctx context.Context, input queryLoreItemsInput) (string, error) {
 		if workspace == "" {
 			return "", fmt.Errorf("cannot query lore because the current workspace is unavailable")
 		}
@@ -117,7 +118,7 @@ func newLoreTools(workspace string, allowWrite bool, options ...loreToolsOptions
 	if err != nil {
 		return nil, err
 	}
-	definedQueryTool, err := defineTool(queryTool, boundedReadDescriptor(ToolSourceLore, config.AgentToolLoreRead, agent.ToolResultRecoveryRerun))
+	definedQueryTool, err := defineTool(queryTool, boundedReadDescriptor(ToolSourceLore, config.AgentToolLoreRead, agentschema.ToolResultRecoveryRerun))
 	if err != nil {
 		return nil, err
 	}
@@ -125,39 +126,39 @@ func newLoreTools(workspace string, allowWrite bool, options ...loreToolsOptions
 	if err != nil {
 		return nil, err
 	}
-	tools := []agent.ToolDefinition{definedQueryTool, materialTool}
+	tools := []agenttool.ToolDefinition{definedQueryTool, materialTool}
 	if !allowWrite {
 		return tools, nil
 	}
-	writeTool, err := agent.InferTool("write_lore_items", "Batch-create, partially update, or delete lore items. Each item is one independently retrievable entity or coherent topic, such as a character, location, faction, item, or world rule. Organize library-wide updates into separate items in the same batch, not one omnibus entry. Keep related facts about the same entity together. Find matching existing items with query_lore_items and read their bodies before updating; reuse their exact IDs instead of creating duplicates. Creation requires at least name; updates send only changed fields, while omitted fields retain their values. A supplied content replaces the whole body, so preserve still-valid canon. The backend may generate brief_description on creation. Put post-chapter current location, injuries, psychology, goals, and possessions in setting/character-states.md instead of lore. Do not store chapter planning or future plot in lore.", func(ctx context.Context, input writeLoreItemsInput) (agent.ToolResult, error) {
+	writeTool, err := agenttool.InferTool("write_lore_items", "Batch-create, partially update, or delete lore items. Each item is one independently retrievable entity or coherent topic, such as a character, location, faction, item, or world rule. Organize library-wide updates into separate items in the same batch, not one omnibus entry. Keep related facts about the same entity together. Find matching existing items with query_lore_items and read their bodies before updating; reuse their exact IDs instead of creating duplicates. Creation requires at least name; updates send only changed fields, while omitted fields retain their values. A supplied content replaces the whole body, so preserve still-valid canon. The backend may generate brief_description on creation. Put post-chapter current location, injuries, psychology, goals, and possessions in setting/character-states.md instead of lore. Do not store chapter planning or future plot in lore.", func(ctx context.Context, input writeLoreItemsInput) (agentschema.ToolResult, error) {
 		_ = ctx
 		if workspace == "" {
-			return agent.ToolResult{}, fmt.Errorf("cannot write lore because the current workspace is unavailable")
+			return agentschema.ToolResult{}, fmt.Errorf("cannot write lore because the current workspace is unavailable")
 		}
 		store := lore.NewStore(workspace)
 		ops, err := buildWriteLoreOperations(store, input)
 		if err != nil {
-			return agent.ToolResult{}, err
+			return agentschema.ToolResult{}, err
 		}
 		result, err := store.ApplyOperations(input.Message, ops)
 		if err != nil {
-			return agent.ToolResult{}, err
+			return agentschema.ToolResult{}, err
 		}
 		details, err := json.Marshal(map[string]any{
 			"schema": "lore.write.v1", "item_ids": writeLoreChangedItemIDs(result),
 			"deleted_ids": result.DeletedIDs,
 		})
 		if err != nil {
-			return agent.ToolResult{}, err
+			return agentschema.ToolResult{}, err
 		}
-		toolResult := agent.TextToolResult(formatWriteLoreItemsResult(result))
+		toolResult := agentschema.TextToolResult(formatWriteLoreItemsResult(result))
 		toolResult.Details = details
 		return toolResult, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	definedWriteTool, err := defineTool(writeTool, workspaceWriteDescriptor(ToolSourceLore, config.AgentToolLoreWrite, agent.ToolRecoveryReconcilable))
+	definedWriteTool, err := defineTool(writeTool, workspaceWriteDescriptor(ToolSourceLore, config.AgentToolLoreWrite, agenttool.ToolRecoveryReconcilable))
 	if err != nil {
 		return nil, err
 	}

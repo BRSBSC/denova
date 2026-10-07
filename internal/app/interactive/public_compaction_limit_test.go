@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alfredxw/denova/agent/providers"
-
 	"denova/config"
 	agentchat "denova/internal/agents/chat"
 	agentcompaction "denova/internal/agents/context/compaction"
@@ -17,25 +15,29 @@ import (
 	agentrun "denova/internal/agents/run"
 	"denova/internal/interactive"
 
-	agent "github.com/alfredxw/denova/agent"
+	"github.com/alfredxw/denova/agent"
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	"github.com/alfredxw/denova/agent/model/providers"
+	agentstream "github.com/alfredxw/denova/agent/model/stream"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 type guardedGameCheckpointModel struct{ calls int }
 
-func (model *guardedGameCheckpointModel) Generate(_ context.Context, messages []*agent.Message, _ ...agent.ModelOption) (*agent.Message, error) {
+func (model *guardedGameCheckpointModel) Generate(_ context.Context, messages []*agentschema.Message, _ ...agentmodel.ModelOption) (*agentschema.Message, error) {
 	if err := modelio.ValidateInput(config.AgentKindInteractiveStory, providers.ModelConfig{}, messages, nil, 4<<20, 32_000); err != nil {
 		return nil, err
 	}
 	model.calls++
-	return agent.AssistantMessage("The player followed the river through the storm and reached the village.", nil), nil
+	return agentschema.AssistantMessage("The player followed the river through the storm and reached the village.", nil), nil
 }
 
-func (model *guardedGameCheckpointModel) Stream(ctx context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+func (model *guardedGameCheckpointModel) Stream(ctx context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentstream.StreamReader[*agentschema.Message], error) {
 	message, err := model.Generate(ctx, messages, options...)
 	if err != nil {
 		return nil, err
 	}
-	return agent.StreamReaderFromArray([]*agent.Message{message}), nil
+	return agentstream.StreamReaderFromArray([]*agentschema.Message{message}), nil
 }
 
 func TestGameManualCompactionRecoversHistoryAboveProviderTokenLimit(t *testing.T) {
@@ -65,7 +67,7 @@ func TestGameManualCompactionRecoversHistoryAboveProviderTokenLimit(t *testing.T
 		t.Fatalf("expected token-only overflow below the byte limit: %v", err)
 	}
 	model := &guardedGameCheckpointModel{}
-	identity := agent.CapabilityIdentity{Kind: "test.guarded-game-checkpoint", Version: 1}
+	identity := agentschema.CapabilityIdentity{Kind: "test.guarded-game-checkpoint", Version: 1}
 	manager, err := agentcompaction.NewAgentManagerForModel(cfg, config.AgentKindInteractiveStory, 32_000)
 	if err != nil {
 		t.Fatal(err)

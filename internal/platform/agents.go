@@ -3,8 +3,6 @@ package platform
 import (
 	"context"
 	"crypto/sha256"
-	"denova/config"
-	agentlifecycle "denova/internal/agents/lifecycle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -14,15 +12,22 @@ import (
 	"strings"
 	"sync"
 
+	"denova/config"
 	"denova/internal/agents/canonicalstore"
+	agentlifecycle "denova/internal/agents/lifecycle"
 	agentrun "denova/internal/agents/run"
 	productsession "denova/internal/agents/session"
-	agent "github.com/alfredxw/denova/agent"
+
+	"github.com/alfredxw/denova/agent"
+	agentevent "github.com/alfredxw/denova/agent/lifecycle/event"
+	agentinteraction "github.com/alfredxw/denova/agent/lifecycle/interaction"
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 // ModelResolver resolves an explicitly selected profile without exposing keys.
 // Its stable identity excludes credentials and must change with model behavior.
-type ModelResolver func(context.Context, string) (agent.BaseChatModel, agent.CapabilityIdentity, error)
+type ModelResolver func(context.Context, string) (agentmodel.BaseChatModel, agentschema.CapabilityIdentity, error)
 
 type AgentService struct {
 	manager  *Manager
@@ -34,14 +39,14 @@ type AgentService struct {
 }
 
 type agentConfig struct {
-	Caller        PackageRef               `json:"caller"`
-	Scope         Scope                    `json:"scope"`
-	Key           string                   `json:"key"`
-	Definition    string                   `json:"definition"`
-	Provider      ReleaseRef               `json:"provider"`
-	Content       AgentDefinition          `json:"content"`
-	ModelProfile  string                   `json:"modelProfile"`
-	ModelIdentity agent.CapabilityIdentity `json:"modelIdentity"`
+	Caller        PackageRef                     `json:"caller"`
+	Scope         Scope                          `json:"scope"`
+	Key           string                         `json:"key"`
+	Definition    string                         `json:"definition"`
+	Provider      ReleaseRef                     `json:"provider"`
+	Content       AgentDefinition                `json:"content"`
+	ModelProfile  string                         `json:"modelProfile"`
+	ModelIdentity agentschema.CapabilityIdentity `json:"modelIdentity"`
 }
 
 type AgentRef struct {
@@ -94,7 +99,7 @@ type agentExecution struct {
 	generation string
 	events     []streamEvent
 	// Pending questions are an event projection; the Agent journal owns answers.
-	interactions []agent.InteractionRequest
+	interactions []agentinteraction.InteractionRequest
 	next         uint64
 	mu           sync.Mutex
 }
@@ -348,7 +353,7 @@ func (s *AgentService) start(ctx context.Context, runtime *Runtime, caller *acti
 		}
 		result, runErr := run.Wait(context.Background())
 		status := string(result.Status)
-		if result.Status == agent.ResultBlocked {
+		if result.Status == agentschema.ResultBlocked {
 			status = "failed"
 		}
 		execution.finish(status, runErr)
@@ -379,7 +384,7 @@ func (s *AgentService) StopRuntime(ctx context.Context, runtime *Runtime) error 
 			continue
 		}
 		if live.run != nil {
-			_, _ = live.run.Abort(ctx, agent.AbortRequest{Reason: "Owning runtime stopped"})
+			_, _ = live.run.Abort(ctx, agentevent.AbortRequest{Reason: "Owning runtime stopped"})
 		}
 		select {
 		case <-live.done:

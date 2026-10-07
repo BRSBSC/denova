@@ -6,15 +6,17 @@ import (
 	"log/slog"
 	"strings"
 
-	agent "github.com/alfredxw/denova/agent"
-	"github.com/alfredxw/denova/agent/providers"
-
 	"denova/config"
-	agents "denova/internal/agents"
+	"denova/internal/agents"
 	agentrun "denova/internal/agents/run"
 	"denova/internal/agents/session"
 	"denova/internal/agents/toolresult"
 	"denova/internal/interactive"
+
+	agentcontext "github.com/alfredxw/denova/agent/context"
+	"github.com/alfredxw/denova/agent/model/providers"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agentcanonical "github.com/alfredxw/denova/agent/session/canonical"
 )
 
 func (c *Conversation) PrepareInteractiveTurn(ctx context.Context, request interactive.TurnCheckRequest) (interactive.RuleResolution, error) {
@@ -186,7 +188,7 @@ func interactiveContextMessageFromSchema(msg *agents.Message) (interactive.Model
 		}
 		return interactive.ModelContextMessageFromAgent(cloned, continuation), true
 	case agents.RoleUser:
-		if cloned.TaskCompletion == nil && !agent.IsContextStateMessage(cloned) {
+		if cloned.TaskCompletion == nil && !agentcontext.IsContextStateMessage(cloned) {
 			return interactive.ModelContextMessage{}, false
 		}
 		return interactive.ModelContextMessageFromAgent(cloned, continuation), true
@@ -339,7 +341,7 @@ func (c *Conversation) AppendContextMessages(messages ...*agents.Message) error 
 // the Story journal. The batch remains side evidence until the final Turn
 // absorbs it; memory tracks only the next sequence and never duplicates the
 // journal's canonical message payload.
-func (c *Conversation) CommitAgentCanonicalContext(ctx context.Context, request agent.ContextCommitRequest) (string, error) {
+func (c *Conversation) CommitAgentCanonicalContext(ctx context.Context, request agentcanonical.ContextCommitRequest) (string, error) {
 	if c == nil || c.store == nil {
 		return "", fmt.Errorf("game conversation is unavailable")
 	}
@@ -479,9 +481,9 @@ func (c *Conversation) CommitAgentCanonicalOutput(
 	ctx context.Context,
 	message *agents.Message,
 	metadata session.MessageMetadata,
-	checkpoint agent.CanonicalCheckpoint,
+	checkpoint agentcanonical.CanonicalCheckpoint,
 ) (interactive.DomainCommitReceipt, error) {
-	if message == nil || message.Role != agent.Assistant || len(message.ToolCalls) != 0 {
+	if message == nil || message.Role != agentschema.Assistant || len(message.ToolCalls) != 0 {
 		return interactive.DomainCommitReceipt{}, fmt.Errorf("canonical game output requires a final assistant message")
 	}
 	metadata.ProviderContinuation = providers.ContinuationExtra(message.Extra)

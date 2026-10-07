@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	agent "github.com/alfredxw/denova/agent"
-	"github.com/alfredxw/denova/agent/providers"
+	"github.com/alfredxw/denova/agent/model/providers"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 func TestDefaultSettingsValues(t *testing.T) {
@@ -709,9 +709,9 @@ func TestLoadLayeredPublishesResolvedAgentToolCatalogAndManifests(t *testing.T) 
 		t.Fatalf("resolved delegation tools = %#v", delegation)
 	}
 	waitDescriptor, found := delegation.ToolDescriptors["await"]
-	if !found || waitDescriptor.Execution != agent.ToolExecutionInteractiveWait ||
-		waitDescriptor.Steering != agent.SteeringInterruptibleWait ||
-		waitDescriptor.Recovery != agent.ToolRecoveryReadOnly {
+	if !found || waitDescriptor.Execution != agenttool.ToolExecutionInteractiveWait ||
+		waitDescriptor.Steering != agenttool.SteeringInterruptibleWait ||
+		waitDescriptor.Recovery != agenttool.ToolRecoveryReadOnly {
 		t.Fatalf("resolved task_wait descriptor = %#v", waitDescriptor)
 	}
 	for _, kind := range []string{AgentKindVersionSummary, AgentKindToolAgent} {

@@ -3,11 +3,13 @@ package interactive
 import (
 	"encoding/json"
 
-	interactivestate "denova/internal/interactive/state"
-	agent "github.com/alfredxw/denova/agent"
-
 	agentcontext "denova/internal/agents/context"
 	"denova/internal/agents/conversationconfig"
+	interactivestate "denova/internal/interactive/state"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agentcanonical "github.com/alfredxw/denova/agent/session/canonical"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 type CreateStoryRequest struct {
@@ -50,18 +52,18 @@ type AppendTurnRequest struct {
 }
 
 type AppendTurnWithStateRequest struct {
-	Checkpoint       agent.CanonicalCheckpoint `json:"-"`
-	BranchID         string                    `json:"branch_id"`
-	ExpectedParentID *string                   `json:"expected_parent_id,omitempty"`
-	ReplaceTurnID    string                    `json:"replace_turn_id,omitempty"`
-	User             string                    `json:"user"`
-	Narrative        string                    `json:"narrative"`
-	Thinking         string                    `json:"thinking,omitempty"`
-	RunID            string                    `json:"run_id,omitempty"`
-	AgentKind        string                    `json:"agent_kind,omitempty"`
-	AgentCommandID   string                    `json:"agent_command_id,omitempty"`
-	AgentOperationID string                    `json:"agent_operation_id,omitempty"`
-	AgentCycle       int                       `json:"agent_cycle,omitempty"`
+	Checkpoint       agentcanonical.CanonicalCheckpoint `json:"-"`
+	BranchID         string                             `json:"branch_id"`
+	ExpectedParentID *string                            `json:"expected_parent_id,omitempty"`
+	ReplaceTurnID    string                             `json:"replace_turn_id,omitempty"`
+	User             string                             `json:"user"`
+	Narrative        string                             `json:"narrative"`
+	Thinking         string                             `json:"thinking,omitempty"`
+	RunID            string                             `json:"run_id,omitempty"`
+	AgentKind        string                             `json:"agent_kind,omitempty"`
+	AgentCommandID   string                             `json:"agent_command_id,omitempty"`
+	AgentOperationID string                             `json:"agent_operation_id,omitempty"`
+	AgentCycle       int                                `json:"agent_cycle,omitempty"`
 	// ProviderContinuation is opaque model-visible state from the exact final
 	// assistant output. Story persistence retains it without exposing it in UI
 	// projections or interpreting provider-owned payloads.
@@ -269,14 +271,14 @@ type StoryMeta struct {
 }
 
 type TurnEvent struct {
-	V           int                `json:"v"`
-	Type        string             `json:"type"`
-	ID          string             `json:"id"`
-	ParentID    any                `json:"parent_id"`
-	BranchID    string             `json:"branch_id"`
-	Ts          string             `json:"ts"`
-	User        string             `json:"user"`
-	Attachments []agent.Attachment `json:"attachments,omitempty"`
+	V           int                      `json:"v"`
+	Type        string                   `json:"type"`
+	ID          string                   `json:"id"`
+	ParentID    any                      `json:"parent_id"`
+	BranchID    string                   `json:"branch_id"`
+	Ts          string                   `json:"ts"`
+	User        string                   `json:"user"`
+	Attachments []agentschema.Attachment `json:"attachments,omitempty"`
 	// UserContextOnly keeps host-owned autonomous instructions available to
 	// future model turns while hiding them from the player-authored timeline.
 	UserContextOnly   bool   `json:"user_context_only,omitempty"`
@@ -337,26 +339,26 @@ const DisplayEventRoleNarrative = "narrative"
 // Role 为 narrative 的事件是正文位置锚点：正文本身不进入 DisplayEvents，
 // 锚点只标记正文在事件流中的相对位置，供前端按真实顺序穿插渲染。
 type DisplayEvent struct {
-	Phase             string                  `json:"phase,omitempty"`
-	RuntimeManaged    bool                    `json:"runtime_managed,omitempty"`
-	AgentCycle        int                     `json:"agent_cycle,omitempty"`
-	ID                string                  `json:"id,omitempty"`
-	Role              string                  `json:"role"`
-	Content           string                  `json:"content,omitempty"`
-	Name              string                  `json:"name,omitempty"`
-	Args              string                  `json:"args,omitempty"`
-	Status            string                  `json:"status,omitempty"`
-	Result            string                  `json:"result,omitempty"`
-	ToolPresentation  *agent.ToolPresentation `json:"tool_presentation,omitempty"`
-	CreatedAt         string                  `json:"created_at,omitempty"`
-	AgentKind         string                  `json:"agent_kind,omitempty"`
-	AgentName         string                  `json:"agent_name,omitempty"`
-	RootAgentName     string                  `json:"root_agent_name,omitempty"`
-	RunPath           []string                `json:"run_path,omitempty"`
-	SubAgent          bool                    `json:"subagent,omitempty"`
-	RunID             string                  `json:"run_id,omitempty"`
-	SubAgentSessionID string                  `json:"subagent_session_id,omitempty"`
-	SubAgentType      string                  `json:"subagent_type,omitempty"`
+	Phase             string                      `json:"phase,omitempty"`
+	RuntimeManaged    bool                        `json:"runtime_managed,omitempty"`
+	AgentCycle        int                         `json:"agent_cycle,omitempty"`
+	ID                string                      `json:"id,omitempty"`
+	Role              string                      `json:"role"`
+	Content           string                      `json:"content,omitempty"`
+	Name              string                      `json:"name,omitempty"`
+	Args              string                      `json:"args,omitempty"`
+	Status            string                      `json:"status,omitempty"`
+	Result            string                      `json:"result,omitempty"`
+	ToolPresentation  *agenttool.ToolPresentation `json:"tool_presentation,omitempty"`
+	CreatedAt         string                      `json:"created_at,omitempty"`
+	AgentKind         string                      `json:"agent_kind,omitempty"`
+	AgentName         string                      `json:"agent_name,omitempty"`
+	RootAgentName     string                      `json:"root_agent_name,omitempty"`
+	RunPath           []string                    `json:"run_path,omitempty"`
+	SubAgent          bool                        `json:"subagent,omitempty"`
+	RunID             string                      `json:"run_id,omitempty"`
+	SubAgentSessionID string                      `json:"subagent_session_id,omitempty"`
+	SubAgentType      string                      `json:"subagent_type,omitempty"`
 }
 
 // ModelContextMessage is model-visible turn evidence hidden from the chat UI.
@@ -364,22 +366,22 @@ type DisplayEvent struct {
 // model input. Provider continuation remains in its private side event so it
 // is not exposed by ordinary Game API projections.
 type ModelContextMessage struct {
-	Role                     string                           `json:"role"`
-	Content                  string                           `json:"content,omitempty"`
-	Attachments              []agent.Attachment               `json:"attachments,omitempty"`
-	MultiContent             []json.RawMessage                `json:"multi_content,omitempty"`
-	UserInputMultiContent    []json.RawMessage                `json:"user_input_multi_content,omitempty"`
-	AssistantGenMultiContent []json.RawMessage                `json:"assistant_output_multi_content,omitempty"`
-	Name                     string                           `json:"name,omitempty"`
-	ToolCalls                []ModelContextToolCall           `json:"tool_calls,omitempty"`
-	ToolCallID               string                           `json:"tool_call_id,omitempty"`
-	ToolName                 string                           `json:"tool_name,omitempty"`
-	ToolResult               *agent.ToolResultSummary         `json:"tool_result,omitempty"`
-	ResponseMeta             *agent.ResponseMeta              `json:"response_meta,omitempty"`
-	AgentMeta                *agent.AgentMessageMeta          `json:"agent_meta,omitempty"`
-	TaskCompletion           *agent.TaskCompletionMessageMeta `json:"task_completion,omitempty"`
-	ReasoningContent         string                           `json:"reasoning_content,omitempty"`
-	Extra                    map[string]any                   `json:"extra,omitempty"`
+	Role                     string                                 `json:"role"`
+	Content                  string                                 `json:"content,omitempty"`
+	Attachments              []agentschema.Attachment               `json:"attachments,omitempty"`
+	MultiContent             []json.RawMessage                      `json:"multi_content,omitempty"`
+	UserInputMultiContent    []json.RawMessage                      `json:"user_input_multi_content,omitempty"`
+	AssistantGenMultiContent []json.RawMessage                      `json:"assistant_output_multi_content,omitempty"`
+	Name                     string                                 `json:"name,omitempty"`
+	ToolCalls                []ModelContextToolCall                 `json:"tool_calls,omitempty"`
+	ToolCallID               string                                 `json:"tool_call_id,omitempty"`
+	ToolName                 string                                 `json:"tool_name,omitempty"`
+	ToolResult               *agentschema.ToolResultSummary         `json:"tool_result,omitempty"`
+	ResponseMeta             *agentschema.ResponseMeta              `json:"response_meta,omitempty"`
+	AgentMeta                *agentschema.AgentMessageMeta          `json:"agent_meta,omitempty"`
+	TaskCompletion           *agentschema.TaskCompletionMessageMeta `json:"task_completion,omitempty"`
+	ReasoningContent         string                                 `json:"reasoning_content,omitempty"`
+	Extra                    map[string]any                         `json:"extra,omitempty"`
 	// ProviderContinuation is persisted through a private side event and is
 	// hydrated only for model-history projections.
 	ProviderContinuation map[string]any `json:"-"`

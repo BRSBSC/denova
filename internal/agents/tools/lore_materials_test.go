@@ -11,7 +11,8 @@ import (
 	"testing"
 
 	"denova/internal/book/lore"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentexecution "github.com/alfredxw/denova/agent/engine/execution"
 )
 
 func TestLoreMaterialDiscoveryThenNativeImageRead(t *testing.T) {
@@ -53,7 +54,7 @@ func TestLoreMaterialDiscoveryThenNativeImageRead(t *testing.T) {
 		t.Fatal("wrong selection metadata", result)
 	}
 	input, _ := json.Marshal(map[string]string{"path": page.Materials[0].Path})
-	result, err = read.Tool.Run(agent.ContextWithToolCall(ctx, "read-selected-material", "read"), string(input))
+	result, err = read.Tool.Run(agentexecution.ContextWithToolCall(ctx, "read-selected-material", "read"), string(input))
 	if err != nil {
 		t.Fatal(err)
 	}

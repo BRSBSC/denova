@@ -14,7 +14,8 @@ import (
 	"denova/internal/agents/conversationconfig"
 	"denova/internal/agents/conversationjournal"
 	externaljournal "denova/internal/agents/runtime/external/journal"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 func TestExternalJournalAcceptanceToolsRestartAndAtomicCompletion(t *testing.T) {
@@ -65,7 +66,7 @@ func TestExternalJournalAcceptanceToolsRestartAndAtomicCompletion(t *testing.T) 
 	if err := commit(ExternalTransaction{Records: []externaljournal.Record{accept}}); err == nil {
 		t.Fatal("acceptance committed without its input")
 	}
-	if err := commit(ExternalTransaction{Records: []externaljournal.Record{accept}, Message: agent.UserMessage("Revise the opening."), Metadata: MessageMetadata{MessageID: "input-1", AgentOperationID: "op-1", AgentCommandID: "command-1"}}); err != nil {
+	if err := commit(ExternalTransaction{Records: []externaljournal.Record{accept}, Message: agentschema.UserMessage("Revise the opening."), Metadata: MessageMetadata{MessageID: "input-1", AgentOperationID: "op-1", AgentCommandID: "command-1"}}); err != nil {
 		t.Fatal(err)
 	}
 	start := record(externaljournal.ToolStarted, "op-1", externaljournal.StartedTool{ExecutionID: "tool-1", Tool: "ask", Recovery: externaljournal.ReadOnly, Arguments: json.RawMessage(`{"questions":[{"id":"tone","prompt":"private-question-token"}]}`)})
@@ -76,7 +77,7 @@ func TestExternalJournalAcceptanceToolsRestartAndAtomicCompletion(t *testing.T) 
 		t.Fatalf("runtime switched during a pending question: %v", err)
 	}
 	closed := record(externaljournal.OperationClosed, "op-1", externaljournal.Closed{Status: externaljournal.Completed, MessageID: "output-1"})
-	if err := commit(ExternalTransaction{Records: []externaljournal.Record{closed}, Message: agent.AssistantMessage("Premature completion", nil), Metadata: MessageMetadata{MessageID: "output-1"}}); err == nil {
+	if err := commit(ExternalTransaction{Records: []externaljournal.Record{closed}, Message: agentschema.AssistantMessage("Premature completion", nil), Metadata: MessageMetadata{MessageID: "output-1"}}); err == nil {
 		t.Fatal("completed while a tool was unsettled")
 	}
 	interrupted := record(externaljournal.OperationClosed, "op-1", externaljournal.Closed{Status: externaljournal.Interrupted})
@@ -122,11 +123,11 @@ func TestExternalJournalAcceptanceToolsRestartAndAtomicCompletion(t *testing.T) 
 		t.Fatal(err)
 	}
 	continued := record(externaljournal.OperationAccepted, "op-2", externaljournal.Accepted{CommandID: "command-2", Fingerprint: "fingerprint-2", Runtime: selected.Engine(), InputMessageID: "input-2", ContinuesOperationID: "op-1"})
-	if err := commit(ExternalTransaction{Records: []externaljournal.Record{continued}, Message: agent.UserMessage("Continue using the saved answer."), Metadata: MessageMetadata{MessageID: "input-2"}}); err != nil {
+	if err := commit(ExternalTransaction{Records: []externaljournal.Record{continued}, Message: agentschema.UserMessage("Continue using the saved answer."), Metadata: MessageMetadata{MessageID: "input-2"}}); err != nil {
 		t.Fatal(err)
 	}
-	final := record(externaljournal.OperationClosed, "op-2", externaljournal.Closed{Status: externaljournal.Completed, MessageID: "output-2", AgentKind: config.AgentKindIDE, Usage: &agent.TokenUsage{PromptTokens: 200, CompletionTokens: 50, TotalTokens: 250}})
-	if err := commit(ExternalTransaction{Records: []externaljournal.Record{final}, Message: agent.AssistantMessage("Confirmed final text.", nil), Metadata: MessageMetadata{MessageID: "output-2"}}); err != nil {
+	final := record(externaljournal.OperationClosed, "op-2", externaljournal.Closed{Status: externaljournal.Completed, MessageID: "output-2", AgentKind: config.AgentKindIDE, Usage: &agentschema.TokenUsage{PromptTokens: 200, CompletionTokens: 50, TotalTokens: 250}})
+	if err := commit(ExternalTransaction{Records: []externaljournal.Record{final}, Message: agentschema.AssistantMessage("Confirmed final text.", nil), Metadata: MessageMetadata{MessageID: "output-2"}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := sess.ReadExternal(ctx, func(state ExternalState) error {

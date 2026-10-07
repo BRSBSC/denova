@@ -10,18 +10,21 @@ import (
 	"time"
 
 	"denova/internal/agents/canonicalstore"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	agentstream "github.com/alfredxw/denova/agent/model/stream"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 type platformTestModel struct{ calls atomic.Int32 }
 
-func (m *platformTestModel) Generate(context.Context, []*agent.Message, ...agent.ModelOption) (*agent.Message, error) {
+func (m *platformTestModel) Generate(context.Context, []*agentschema.Message, ...agentmodel.ModelOption) (*agentschema.Message, error) {
 	m.calls.Add(1)
-	return agent.AssistantMessage("Test response.", nil), nil
+	return agentschema.AssistantMessage("Test response.", nil), nil
 }
-func (m *platformTestModel) Stream(ctx context.Context, input []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+func (m *platformTestModel) Stream(ctx context.Context, input []*agentschema.Message, options ...agentmodel.ModelOption) (*agentstream.StreamReader[*agentschema.Message], error) {
 	message, err := m.Generate(ctx, input, options...)
-	return agent.StreamReaderFromArray([]*agent.Message{message}), err
+	return agentstream.StreamReaderFromArray([]*agentschema.Message{message}), err
 }
 
 func TestAgentCommandsSurviveRestartAndIndexRebuild(t *testing.T) {
@@ -31,8 +34,8 @@ func TestAgentCommandsSurviveRestartAndIndexRebuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	model := &platformTestModel{}
-	resolver := func(context.Context, string) (agent.BaseChatModel, agent.CapabilityIdentity, error) {
-		return model, agent.CapabilityIdentity{Kind: "platform.test", Version: 1}, nil
+	resolver := func(context.Context, string) (agentmodel.BaseChatModel, agentschema.CapabilityIdentity, error) {
+		return model, agentschema.CapabilityIdentity{Kind: "platform.test", Version: 1}, nil
 	}
 	m.ConfigureAgents(store, resolver)
 	release := testInstall(t, m, testCandidate(t, m, projectID, "agent", "test.npc", Game))

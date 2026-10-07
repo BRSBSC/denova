@@ -2,11 +2,12 @@ package handlers
 
 import (
 	"context"
-	"denova/internal/book/lore"
 	"errors"
 	"log/slog"
 
-	agent "github.com/alfredxw/denova/agent"
+	"denova/internal/book/lore"
+
+	agentmodel "github.com/alfredxw/denova/agent/model"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 )
@@ -69,5 +70,5 @@ func (h *Handlers) HandleLoreIndexPreview(ctx context.Context, c *app.RequestCon
 	writeJSON(c, consts.StatusOK, struct {
 		lore.IndexPreview
 		TokenEstimate int `json:"token_estimate"`
-	}{preview, agent.EstimateTextTokens(preview.Markdown)})
+	}{preview, agentmodel.EstimateTextTokens(preview.Markdown)})
 }

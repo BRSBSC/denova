@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"denova/internal/agents/canonicalstore"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 func TestPrivateGameAgentUsesSelectedPluginWithWriteGrant(t *testing.T) {
@@ -69,8 +71,8 @@ func TestPrivateGameAgentUsesSelectedPluginWithWriteGrant(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			m.ConfigureAgents(store, func(context.Context, string) (agent.BaseChatModel, agent.CapabilityIdentity, error) {
-				return pluginCallingModel{}, agent.CapabilityIdentity{Kind: "test.plugin_model", Version: 1}, nil
+			m.ConfigureAgents(store, func(context.Context, string) (agentmodel.BaseChatModel, agentschema.CapabilityIdentity, error) {
+				return pluginCallingModel{}, agentschema.CapabilityIdentity{Kind: "test.plugin_model", Version: 1}, nil
 			})
 			instance, err := m.CreateInstance(CreateInstance{GameID: release.Manifest.ID, ReleaseID: release.Ref.ReleaseID, Title: name, ProjectID: projectID, Models: map[string]string{"local:writer": "test"}})
 			if err != nil {

@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/internal/agents/conversationconfig"
 	"denova/internal/agents/conversationjournal"
 	externaljournal "denova/internal/agents/runtime/external/journal"
 	"denova/internal/agents/sessionjournal"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 const (
@@ -43,7 +43,7 @@ type messageLocator struct {
 type domainCommitLocator struct {
 	MessageIndex int                        `json:"message_index"`
 	Cursor       conversationjournal.Cursor `json:"cursor"`
-	Role         agent.RoleType             `json:"role"`
+	Role         agentschema.RoleType       `json:"role"`
 	Metadata     MessageMetadata            `json:"metadata"`
 	Hash         string                     `json:"hash"`
 }
@@ -473,17 +473,17 @@ func (projection *sessionJournalProjection) applyMessage(record conversationjour
 	if kind == historyTypeMessage {
 		projection.VisibleMessageCount++
 		visible := true
-		safeBoundary := message.Message.Role == agent.User
+		safeBoundary := message.Message.Role == agentschema.User
 		if safeBoundary {
 			projection.clearAssistantDigests()
-		} else if message.Message.Role == agent.Assistant && !metadata.SubAgent {
+		} else if message.Message.Role == agentschema.Assistant && !metadata.SubAgent {
 			visible = !projection.consumeCompleteAssistantRun(metadata.RunID, message.Message.Content)
 		}
 		if visible {
 			projection.rememberHistoryRow(record.Location.Cursor, safeBoundary)
 		}
 	}
-	if projection.Title == defaultSessionTitle && message.Message.Role == agent.User && strings.TrimSpace(message.Message.Content) != "" {
+	if projection.Title == defaultSessionTitle && message.Message.Role == agentschema.User && strings.TrimSpace(message.Message.Content) != "" {
 		projection.Title = deriveTitle(message.Message.Content)
 	}
 	projection.advanceRevision(metadata.ContextRevision)
@@ -492,7 +492,7 @@ func (projection *sessionJournalProjection) applyMessage(record conversationjour
 }
 
 func (projection *sessionJournalProjection) applyLegacyMessage(record conversationjournal.Record) error {
-	var message agent.Message
+	var message agentschema.Message
 	if err := json.Unmarshal(record.Payload, &message); err != nil {
 		return err
 	}
@@ -501,12 +501,12 @@ func (projection *sessionJournalProjection) applyLegacyMessage(record conversati
 	}
 	projection.rememberMessage(record.Location, message.Role, MessageMetadata{}, "")
 	projection.VisibleMessageCount++
-	safeBoundary := message.Role == agent.User
+	safeBoundary := message.Role == agentschema.User
 	if safeBoundary {
 		projection.clearAssistantDigests()
 	}
 	projection.rememberHistoryRow(record.Location.Cursor, safeBoundary)
-	if projection.Title == defaultSessionTitle && message.Role == agent.User && strings.TrimSpace(message.Content) != "" {
+	if projection.Title == defaultSessionTitle && message.Role == agentschema.User && strings.TrimSpace(message.Content) != "" {
 		projection.Title = deriveTitle(message.Content)
 	}
 	projection.advanceRevision(0)
@@ -524,7 +524,7 @@ func (projection *sessionJournalProjection) rememberCursor(cursor conversationjo
 	}
 }
 
-func (projection *sessionJournalProjection) rememberMessage(location conversationjournal.Location, role agent.RoleType, metadata MessageMetadata, hash string) {
+func (projection *sessionJournalProjection) rememberMessage(location conversationjournal.Location, role agentschema.RoleType, metadata MessageMetadata, hash string) {
 	index := projection.MessageCount
 	projection.MessageCount++
 	locator := messageLocator{Index: index, Cursor: location.Cursor, RecordIndex: location.RecordIndex}

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alfredxw/denova/agent"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 func TestDisplayHistoryDefersExecutionWithoutReducingRecovery(t *testing.T) {
@@ -42,7 +42,7 @@ func TestDisplayHistoryDefersExecutionWithoutReducingRecovery(t *testing.T) {
 				{ID: "tool", Role: "tool_call", Name: "read_file", Args: trace, Status: "success"},
 				{ID: "tool", Role: "tool_result", Result: trace, Status: "success"},
 				{ID: "narrative", Role: DisplayEventRoleNarrative},
-				{ID: "image", Role: "tool_call", Name: "image", ToolPresentation: &agent.ToolPresentation{Call: agent.ToolPresentationInteractiveMedia, Result: agent.ToolPresentationInteractiveMedia}},
+				{ID: "image", Role: "tool_call", Name: "image", ToolPresentation: &agenttool.ToolPresentation{Call: agenttool.ToolPresentationInteractiveMedia, Result: agenttool.ToolPresentationInteractiveMedia}},
 				{ID: "image", Role: "tool_result", Result: media, Status: "success"},
 				{ID: "progress", Role: "assistant", Content: trace},
 			},

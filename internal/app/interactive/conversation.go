@@ -3,13 +3,12 @@ package interactiveapp
 import (
 	"context"
 	"fmt"
-	agent "github.com/alfredxw/denova/agent"
 	"log/slog"
 	"strings"
 	"sync"
 
 	"denova/config"
-	agents "denova/internal/agents"
+	"denova/internal/agents"
 	agentcontext "denova/internal/agents/context"
 	"denova/internal/agents/prompts"
 	agentrun "denova/internal/agents/run"
@@ -18,6 +17,10 @@ import (
 	"denova/internal/book/lore"
 	"denova/internal/i18n"
 	"denova/internal/interactive"
+
+	agentcompaction "github.com/alfredxw/denova/agent/context/compaction"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agentcanonical "github.com/alfredxw/denova/agent/session/canonical"
 )
 
 type Conversation struct {
@@ -56,7 +59,7 @@ type Conversation struct {
 	acceptedPlayerInputID       string
 	pendingDomainCommit         *interactive.DomainCommitIntent
 	lastDomainReceipt           *interactive.DomainCommitReceipt
-	agentCompaction             *agent.CompactionState
+	agentCompaction             *agentcompaction.CompactionState
 	modelHistoryKey             string
 	modelHistory                *interactive.StoryModelHistory
 	openingStateSchemaDraft     *interactive.ActorStateSchemaBatchDraft
@@ -66,7 +69,7 @@ type Conversation struct {
 	// draftCommit is supplied by a product execution host before admission.
 	// Native uses its atomic checkpoint callback; external turns commit only
 	// product-owned Story facts and never enter the Native lifecycle.
-	draftCommit func(context.Context, interactive.TurnDraft, *agent.ToolResult) error
+	draftCommit func(context.Context, interactive.TurnDraft, *agentschema.ToolResult) error
 }
 
 var _ novaskills.ExplicitResolver = (*Conversation)(nil)
@@ -557,7 +560,7 @@ func (c *Conversation) AssembleModelContext(ctx context.Context, originalMessage
 			ID: "interactive_story_protagonist", Source: "story.protagonist", Title: "Story Protagonist Profile",
 			Purpose: "provide the immutable story-owned protagonist identity and backstory",
 			Content: protagonistContext, Placement: agentcontext.PlacementLeadingMessage, Limit: StoryRuntimeContextMaxBytes, Included: true,
-			Stability: agent.ContextStablePrefix,
+			Stability: agentschema.ContextStablePrefix,
 			Note:      "source=StoryMeta.protagonist; lifecycle=immutable after first turn; actor_id=protagonist",
 		})
 	}
@@ -566,7 +569,7 @@ func (c *Conversation) AssembleModelContext(ctx context.Context, originalMessage
 			ID: "interactive_resident_lore", Source: "interactive.resident_lore", Title: "Lore Index",
 			Purpose: "provide the Markdown lore guide, always-loaded settings and discovery entries",
 			Content: residentLore, Placement: agentcontext.PlacementLeadingMessage, Limit: interactiveResidentLoreMessageMaxBytes, Included: true,
-			Stability: agent.ContextStablePrefix,
+			Stability: agentschema.ContextStablePrefix,
 			Note:      "source=setting/lore/items.json index guide and enabled items; lifecycle=replaceable stable prefix; revision=" + strings.TrimSpace(loreRevision),
 		})
 	}
@@ -606,7 +609,7 @@ func (c *Conversation) AssembleModelContext(ctx context.Context, originalMessage
 		Note: presentationSource.Note,
 	})
 	baseInstruction := prompts.InteractiveStoryTurnInstruction(input.UserMessage, "", "")
-	history = append(history, agent.UserMessageWithAttachments(baseInstruction, input.Attachments))
+	history = append(history, agentschema.UserMessageWithAttachments(baseInstruction, input.Attachments))
 	assembled, err := agentcontext.NewAssembler(input.Budget).Assemble(ctx, agentcontext.AssembleRequest{Messages: history, Fragments: fragments})
 	if err != nil {
 		return agentcontext.ModelContextResult{}, err
@@ -708,8 +711,8 @@ func (c *Conversation) CommitModelInput(ctx context.Context, _ string, assembled
 func (c *Conversation) MaterializeAgentCanonicalInput(
 	ctx context.Context,
 	message string,
-	attachments []agent.Attachment,
-	checkpoint agent.CanonicalCheckpoint,
+	attachments []agentschema.Attachment,
+	checkpoint agentcanonical.CanonicalCheckpoint,
 ) (interactive.PlayerInputReceipt, error) {
 	if c == nil || c.store == nil {
 		return interactive.PlayerInputReceipt{}, fmt.Errorf("互动故事不存在")

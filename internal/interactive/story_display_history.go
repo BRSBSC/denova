@@ -3,7 +3,7 @@ package interactive
 import (
 	"fmt"
 
-	"github.com/alfredxw/denova/agent"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 const storyDisplayPageTurns = 10
@@ -94,9 +94,9 @@ func summarizeStoryExecution(turn *TurnEvent) bool {
 		if event.ToolPresentation == nil {
 			continue
 		}
-		for _, kind := range []agent.ToolPresentationKind{event.ToolPresentation.Call, event.ToolPresentation.Result} {
+		for _, kind := range []agenttool.ToolPresentationKind{event.ToolPresentation.Call, event.ToolPresentation.Result} {
 			switch kind {
-			case agent.ToolPresentationImage, agent.ToolPresentationInteractiveMedia, agent.ToolPresentationInteraction, agent.ToolPresentationTodo:
+			case agenttool.ToolPresentationImage, agenttool.ToolPresentationInteractiveMedia, agenttool.ToolPresentationInteraction, agenttool.ToolPresentationTodo:
 				visibleCalls[event.ID] = true
 			}
 		}

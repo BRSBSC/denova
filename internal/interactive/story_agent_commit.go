@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/internal/agents/sessionjournal"
 	interactivestate "denova/internal/interactive/state"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 // ErrAgentTurnIdentityConflict means one durable Agent command attempted to
@@ -214,7 +214,7 @@ func (s *Store) AppendTurnWithState(storyID string, req AppendTurnWithStateReque
 		BranchID:                    branchID,
 		Ts:                          now,
 		User:                        req.User,
-		Attachments:                 append([]agent.Attachment(nil), playerInput.Attachments...),
+		Attachments:                 append([]agentschema.Attachment(nil), playerInput.Attachments...),
 		UserContextOnly:             playerInput.ContextOnly,
 		Narrative:                   req.Narrative,
 		Thinking:                    strings.TrimSpace(req.Thinking),

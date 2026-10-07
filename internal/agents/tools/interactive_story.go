@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/invopop/jsonschema"
 	"log/slog"
 	"strings"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/internal/interactive"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
+	"github.com/invopop/jsonschema"
 )
 
 const submitInteractiveTurnToolName = "submit_interactive_turn"
@@ -64,7 +65,7 @@ func (input interactiveTurnCheckToolInput) request() interactive.TurnCheckReques
 	}
 }
 
-func newInteractiveHistoryTools(ctx InteractiveContext) ([]agent.ToolDefinition, error) {
+func newInteractiveHistoryTools(ctx InteractiveContext) ([]agenttool.ToolDefinition, error) {
 	ctx.StoryID = strings.TrimSpace(ctx.StoryID)
 	ctx.BranchID = strings.TrimSpace(ctx.BranchID)
 	if ctx.MaxResultBytes <= 0 {
@@ -73,7 +74,7 @@ func newInteractiveHistoryTools(ctx InteractiveContext) ([]agent.ToolDefinition,
 	if ctx.Store == nil || ctx.StoryID == "" {
 		return nil, nil
 	}
-	searchTool, err := agent.InferTool("search_story_history", "Search committed historical turns on the current branch. Turn events are the source of historical truth. Results contain only bounded player actions, narrative excerpts, state changes, and exact turn_id values and can be rebuilt from the event log. Use this to continue earlier characters, locations, clues, promises, or causality. Never treat results as current Actor State or future Director planning.", func(callCtx context.Context, input searchStoryHistoryInput) (string, error) {
+	searchTool, err := agenttool.InferTool("search_story_history", "Search committed historical turns on the current branch. Turn events are the source of historical truth. Results contain only bounded player actions, narrative excerpts, state changes, and exact turn_id values and can be rebuilt from the event log. Use this to continue earlier characters, locations, clues, promises, or causality. Never treat results as current Actor State or future Director planning.", func(callCtx context.Context, input searchStoryHistoryInput) (string, error) {
 		_ = callCtx
 		result, err := ctx.Store.SearchStoryHistory(ctx.StoryID, ctx.BranchID, interactive.StoryHistorySearchRequest{
 			Keywords:     input.Keywords,
@@ -92,7 +93,7 @@ func newInteractiveHistoryTools(ctx InteractiveContext) ([]agent.ToolDefinition,
 	if err != nil {
 		return nil, err
 	}
-	descriptor := boundedReadDescriptor(ToolSourceHistory, "", agent.ToolResultRecoveryRerun)
+	descriptor := boundedReadDescriptor(ToolSourceHistory, "", agentschema.ToolResultRecoveryRerun)
 	if ctx.MaxResultBytes > 0 {
 		descriptor.MaxResultBytes = ctx.MaxResultBytes
 	}
@@ -100,14 +101,14 @@ func newInteractiveHistoryTools(ctx InteractiveContext) ([]agent.ToolDefinition,
 	if err != nil {
 		return nil, err
 	}
-	return []agent.ToolDefinition{definedSearchTool}, nil
+	return []agenttool.ToolDefinition{definedSearchTool}, nil
 }
 
-func newInteractiveTurnTools(ctx InteractiveContext) ([]agent.ToolDefinition, error) {
+func newInteractiveTurnTools(ctx InteractiveContext) ([]agenttool.ToolDefinition, error) {
 	if ctx.PrepareTurn == nil && ctx.SubmitTurnResult == nil {
 		return nil, nil
 	}
-	tools := make([]agent.ToolDefinition, 0, 2)
+	tools := make([]agenttool.ToolDefinition, 0, 2)
 	if ctx.PrepareTurn != nil {
 		desc := strings.Join([]string{
 			"Execute one fixed d20 rule check for this turn. The Interactive Agent provides the action, intent, challenge, cost, relevant current state, pre-roll adjudication, runtime bonus sources and values, difficulty, and critical-success/success/failure/critical-failure consequences. This tool rolls, applies advantage or disadvantage, computes the target, resolves the tier, and returns the selected final consequence.",
@@ -116,24 +117,24 @@ func newInteractiveTurnTools(ctx InteractiveContext) ([]agent.ToolDefinition, er
 			"When state_bindings are available, choose binding_id and provide actor_id plus target_actor_id when needed. The tool reads Actor State to calculate binding modifiers and outcome_state_changes; do not calculate them again. narrative_state_refs only help write the four outcomes.*.result values before the roll.",
 			`Minimal example: {"action":"pick the lock","intent":"enter the warehouse","challenge":"open it before the patrol arrives","cost":"failure reveals the intrusion","state":"The protagonist has simple tools.","adjudication":{"reason":"Time pressure and failure would change the alert state.","stakes":"Failure brings the patrol closer.","difficulty_reason":"The old lock is simple but a patrol is nearby, so use normal difficulty.","roll_mode_reason":"The tools fit but the environment is tense, so roll normally.","state_refs":[{"actor_id":"protagonist","field_id":"stamina"}]},"rule":{"template_id":"dm-osr-player-skill","label":"OSR player-skill priority","failure_policy":"blocked"},"bonuses":[{"kind":"equipment","reason":"Simple lock-picking tools","value":2}],"difficulty":"normal","outcomes":{"critical_success":{"result":"Open it silently and find an extra clue."},"success":{"result":"Open it, but lose time."},"failure":{"result":"The lock stays shut and the patrol draws closer."},"critical_failure":{"result":"The tool breaks and alerts the patrol."}}}`,
 		}, "\n")
-		prepareTool, err := agent.InferTool("prepare_interactive_turn", desc, func(callCtx context.Context, input interactiveTurnCheckToolInput) (agent.ToolResult, error) {
+		prepareTool, err := agenttool.InferTool("prepare_interactive_turn", desc, func(callCtx context.Context, input interactiveTurnCheckToolInput) (agentschema.ToolResult, error) {
 			resolution, err := ctx.PrepareTurn(callCtx, input.request())
 			if err != nil {
-				return agent.ToolResult{}, err
+				return agentschema.ToolResult{}, err
 			}
 			modelData, err := json.MarshalIndent(resolution.ModelToolOutput(), "", "  ")
 			if err != nil {
-				return agent.ToolResult{}, err
+				return agentschema.ToolResult{}, err
 			}
 			displayData, err := json.MarshalIndent(resolution.ToolOutput(), "", "  ")
 			if err != nil {
-				return agent.ToolResult{}, err
+				return agentschema.ToolResult{}, err
 			}
-			return agent.ToolResult{
+			return agentschema.ToolResult{
 				ModelContent:   string(modelData),
 				DisplayContent: string(displayData),
 				Details:        json.RawMessage(displayData),
-				Status:         agent.ToolResultSuccess,
+				Status:         agentschema.ToolResultSuccess,
 			}, nil
 		})
 		if err != nil {
@@ -173,7 +174,7 @@ func newInteractiveTurnTools(ctx InteractiveContext) ([]agent.ToolDefinition, er
 
 // NewInteractiveTurn builds the rule-resolution and turn-submission tools for
 // one story-scoped Agent run.
-func NewInteractiveTurn(ctx InteractiveContext) ([]agent.ToolDefinition, error) {
+func NewInteractiveTurn(ctx InteractiveContext) ([]agenttool.ToolDefinition, error) {
 	return newInteractiveTurnTools(ctx)
 }
 
@@ -187,7 +188,7 @@ type submitInteractiveTurnToolSchema struct {
 const recommendedTurnStateChangesPerSubmission = 24
 
 type submitInteractiveTurnTool struct {
-	info              *agent.ToolInfo
+	info              *agentschema.ToolInfo
 	submit            func(context.Context, interactive.TurnSubmissionInput) (interactive.TurnSubmissionReceipt, error)
 	requestCompletion func(context.Context) bool
 }
@@ -196,8 +197,8 @@ func newSubmitInteractiveTurnTool(
 	description string,
 	submit func(context.Context, interactive.TurnSubmissionInput) (interactive.TurnSubmissionReceipt, error),
 	requestCompletion func(context.Context) bool,
-) (agent.Tool, error) {
-	info, err := agent.GoStruct2ToolInfo[submitInteractiveTurnToolSchema](submitInteractiveTurnToolName, description)
+) (agenttool.Tool, error) {
+	info, err := agenttool.GoStruct2ToolInfo[submitInteractiveTurnToolSchema](submitInteractiveTurnToolName, description)
 	if err != nil {
 		return nil, err
 	}
@@ -231,19 +232,19 @@ func newSubmitInteractiveTurnTool(
 	}
 	background.Type = ""
 	background.AnyOf = []*jsonschema.Schema{{Type: "object"}, {Type: "null"}}
-	info.ParamsOneOf = agent.NewParamsOneOfByJSONSchema(parameters)
+	info.ParamsOneOf = agentschema.NewParamsOneOfByJSONSchema(parameters)
 	return &submitInteractiveTurnTool{info: info, submit: submit, requestCompletion: requestCompletion}, nil
 }
 
-func (t *submitInteractiveTurnTool) Info(context.Context) (*agent.ToolInfo, error) {
+func (t *submitInteractiveTurnTool) Info(context.Context) (*agentschema.ToolInfo, error) {
 	return t.info, nil
 }
 
-func (t *submitInteractiveTurnTool) Run(ctx context.Context, argumentsInJSON string, _ ...agent.ToolOption) (agent.ToolResult, error) {
+func (t *submitInteractiveTurnTool) Run(ctx context.Context, argumentsInJSON string, _ ...agenttool.ToolOption) (agentschema.ToolResult, error) {
 	input := interactive.DecodeInteractiveTurnSubmissionInput(argumentsInJSON)
 	receipt, err := t.submit(ctx, input)
 	if err != nil {
-		return agent.ToolResult{}, err
+		return agentschema.ToolResult{}, err
 	}
 	if receipt.Ready {
 		requested := false
@@ -254,9 +255,9 @@ func (t *submitInteractiveTurnTool) Run(ctx context.Context, argumentsInJSON str
 	}
 	data, err := json.MarshalIndent(receipt, "", "  ")
 	if err != nil {
-		return agent.ToolResult{}, err
+		return agentschema.ToolResult{}, err
 	}
-	result := agent.TextToolResult(string(data))
+	result := agentschema.TextToolResult(string(data))
 	result.Details = data
 	return result, nil
 }

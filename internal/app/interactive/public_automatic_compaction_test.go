@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alfredxw/denova/agent/providers"
-
 	"denova/config"
 	"denova/internal/agents/canonicalstore"
 	agentchat "denova/internal/agents/chat"
@@ -20,8 +18,14 @@ import (
 	"denova/internal/interactive"
 	"denova/internal/project"
 
-	agent "github.com/alfredxw/denova/agent"
-	agentpermission "github.com/alfredxw/denova/agent/permission"
+	"github.com/alfredxw/denova/agent"
+	agentmiddleware "github.com/alfredxw/denova/agent/engine/middleware"
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	"github.com/alfredxw/denova/agent/model/providers"
+	agentstream "github.com/alfredxw/denova/agent/model/stream"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
+	agentpermission "github.com/alfredxw/denova/agent/tool/permission"
 )
 
 const automaticGameCheckpoint = "The traveler followed the river through twenty-four rainy nights and promised to return to the village."
@@ -34,24 +38,24 @@ type automaticGameCheckpointModel struct {
 	toolPending  bool
 }
 
-func (model *automaticGameCheckpointModel) Generate(_ context.Context, messages []*agent.Message, _ ...agent.ModelOption) (*agent.Message, error) {
+func (model *automaticGameCheckpointModel) Generate(_ context.Context, messages []*agentschema.Message, _ ...agentmodel.ModelOption) (*agentschema.Message, error) {
 	if err := modelio.ValidateInput(config.AgentKindInteractiveStory, providers.ModelConfig{}, messages, nil, 4<<20, 32_000); err != nil {
 		return nil, err
 	}
 	if len(messages) > 0 && strings.HasPrefix(messages[len(messages)-1].Content, "[Runtime context compaction request]") {
 		model.summaryCalls++
-		return agent.AssistantMessage(automaticGameCheckpoint, nil), nil
+		return agentschema.AssistantMessage(automaticGameCheckpoint, nil), nil
 	}
 	response := model.history.response(messages)
-	promptTokens := agent.EstimateMessagesTextTokens(messages)
-	response.ResponseMeta = &agent.ResponseMeta{
-		FinishReason: "stop", Usage: &agent.TokenUsage{PromptTokens: promptTokens, CompletionTokens: 100, TotalTokens: promptTokens + 100},
+	promptTokens := agentmodel.EstimateMessagesTextTokens(messages)
+	response.ResponseMeta = &agentschema.ResponseMeta{
+		FinishReason: "stop", Usage: &agentschema.TokenUsage{PromptTokens: promptTokens, CompletionTokens: 100, TotalTokens: promptTokens + 100},
 	}
 	response.ReasoningContent = "Check the river before advancing the story."
 	if !model.toolPending {
 		model.toolPending = true
 		response.Content = "I will inspect the river."
-		response.ToolCalls = []agent.ToolCall{{ID: "river-evidence", Type: "function", Function: agent.FunctionCall{Name: "read_river", Arguments: `{}`}}}
+		response.ToolCalls = []agentschema.ToolCall{{ID: "river-evidence", Type: "function", Function: agentschema.FunctionCall{Name: "read_river", Arguments: `{}`}}}
 		response.ResponseMeta.FinishReason = "tool_calls"
 	} else {
 		model.toolPending = false
@@ -59,12 +63,12 @@ func (model *automaticGameCheckpointModel) Generate(_ context.Context, messages 
 	return response, nil
 }
 
-func (model *automaticGameCheckpointModel) Stream(ctx context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+func (model *automaticGameCheckpointModel) Stream(ctx context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentstream.StreamReader[*agentschema.Message], error) {
 	response, err := model.Generate(ctx, messages, options...)
 	if err != nil {
 		return nil, err
 	}
-	return agent.StreamReaderFromArray([]*agent.Message{response}), nil
+	return agentstream.StreamReaderFromArray([]*agentschema.Message{response}), nil
 }
 
 func TestGameAutomaticCompactionSurvivesConsecutiveTurnsAndRestart(t *testing.T) {
@@ -111,23 +115,23 @@ func TestGameAutomaticCompactionSurvivesConsecutiveTurnsAndRestart(t *testing.T)
 	t.Cleanup(func() { _ = runtime.Close(ctx) })
 	cfg := &config.Config{Workspace: workspace, OpenAIContextWindowTokens: 32_000}
 	model := &automaticGameCheckpointModel{history: publicGameHistoryModel{narrative: "The traveler reached the next bridge."}}
-	identity := agent.CapabilityIdentity{Kind: "test.automatic-game-checkpoint", Version: 1}
+	identity := agentschema.CapabilityIdentity{Kind: "test.automatic-game-checkpoint", Version: 1}
 	manager, err := agentcompaction.NewAgentManagerForModel(cfg, config.AgentKindInteractiveStory, 32_000)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tool, err := agent.InferTool("read_river", "Read current river conditions", func(context.Context, struct{}) (string, error) {
+	tool, err := agenttool.InferTool("read_river", "Read current river conditions", func(context.Context, struct{}) (string, error) {
 		return "The river is calm and the bridge is open.", nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	toolset, err := agent.StaticToolsIdentified(agent.CapabilityIdentity{Kind: "tools.test.river-evidence", Version: 1}, agent.ToolDefinition{
-		Tool: tool, Descriptor: agent.ToolDescriptor{
-			Source: agent.ToolSourceRead, Execution: agent.ToolExecutionParallelRead,
-			MutationScope: agent.ToolMutationNone, PostCheck: agent.ToolPostCheckNone,
-			Recovery: agent.ToolRecoveryReadOnly, ResultProjection: agent.ToolResultBoundedModelContext,
-			ResultRetention: agent.ToolResultDeferred, Steering: agent.SteeringFinishCurrent, MaxResultBytes: 4 << 10,
+	toolset, err := agenttool.StaticToolsIdentified(agentschema.CapabilityIdentity{Kind: "tools.test.river-evidence", Version: 1}, agenttool.ToolDefinition{
+		Tool: tool, Descriptor: agenttool.ToolDescriptor{
+			Source: agenttool.ToolSourceRead, Execution: agenttool.ToolExecutionParallelRead,
+			MutationScope: agenttool.ToolMutationNone, PostCheck: agenttool.ToolPostCheckNone,
+			Recovery: agenttool.ToolRecoveryReadOnly, ResultProjection: agentschema.ToolResultBoundedModelContext,
+			ResultRetention: agentschema.ToolResultDeferred, Steering: agenttool.SteeringFinishCurrent, MaxResultBytes: 4 << 10,
 		},
 	})
 	if err != nil {
@@ -149,7 +153,7 @@ func TestGameAutomaticCompactionSurvivesConsecutiveTurnsAndRestart(t *testing.T)
 		operation, err := runtime.Start(ctx, agentexecution.StartRequest{Cycle: agentexecution.Cycle{
 			Definition: agent.Definition{
 				Key: "automatic-game-checkpoint", Name: "game", Model: model, ModelIdentity: identity,
-				Middlewares: []agent.Middleware{submission},
+				Middlewares: []agentmiddleware.Middleware{submission},
 				Compaction:  manager, Tools: toolset, Permission: agentpermission.FullAccess(),
 			},
 			Conversation: conversation, Options: options,

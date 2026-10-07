@@ -19,8 +19,8 @@ import (
 	appsettings "denova/internal/app/settings"
 	"denova/internal/interactive"
 
-	agent "github.com/alfredxw/denova/agent"
-	publicgoal "github.com/alfredxw/denova/agent/goal"
+	publicgoal "github.com/alfredxw/denova/agent/engine/goal"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 const (
@@ -95,30 +95,30 @@ func (a *App) foregroundGoalSession(binding ConversationConfigBinding) (*agentru
 	return bound, unlock, nil
 }
 
-func (a *App) ConversationGoal(ctx context.Context, binding ConversationConfigBinding) (agent.GoalState, bool, error) {
+func (a *App) ConversationGoal(ctx context.Context, binding ConversationConfigBinding) (publicgoal.GoalState, bool, error) {
 	if normalizeConversationMode(binding.Mode) == ConversationModeAgentChat {
 		return a.AgentChat().ConversationGoal(ctx, agentchatapp.Binding{ProjectID: binding.ProjectID, SessionID: binding.SessionID})
 	}
 	bound, release, err := a.foregroundGoalSession(binding)
 	if err != nil {
-		return agent.GoalState{}, false, err
+		return publicgoal.GoalState{}, false, err
 	}
 	defer release()
 	return bound.Goal(ctx)
 }
 
-func (a *App) MutateConversationGoal(ctx context.Context, binding ConversationConfigBinding, mutation ConversationGoalMutation) (agent.GoalState, error) {
+func (a *App) MutateConversationGoal(ctx context.Context, binding ConversationConfigBinding, mutation ConversationGoalMutation) (publicgoal.GoalState, error) {
 	action := strings.TrimSpace(mutation.Action)
 	if normalizeConversationMode(binding.Mode) == ConversationModeAgentChat {
 		return a.AgentChat().MutateConversationGoal(ctx, agentchatapp.Binding{ProjectID: binding.ProjectID, SessionID: binding.SessionID}, action, mutation.Objective, mutation.ExpectedRevision)
 	}
 	goalMutation, err := agentruntime.GoalMutation(action, mutation.Objective, mutation.ExpectedRevision)
 	if err != nil {
-		return agent.GoalState{}, err
+		return publicgoal.GoalState{}, err
 	}
 	bound, release, err := a.foregroundGoalSession(binding)
 	if err != nil {
-		return agent.GoalState{}, err
+		return publicgoal.GoalState{}, err
 	}
 	defer release()
 	return bound.UpdateGoal(ctx, goalMutation)
@@ -402,7 +402,7 @@ func (a *App) patchInteractiveConversationConfig(ctx context.Context, binding Co
 			return conversationconfig.Snapshot{}, agentruntime.ErrOperationActive
 		}
 		if err := runtime.ReleaseIdleForEngineSwitch(ctx, options); err != nil && !errors.Is(err, agentexecution.ErrRuntimeProjectionUnavailable) {
-			if errors.Is(err, agent.ErrSessionBusy) {
+			if errors.Is(err, agentschema.ErrSessionBusy) {
 				return conversationconfig.Snapshot{}, agentruntime.ErrOperationActive
 			}
 			return conversationconfig.Snapshot{}, err

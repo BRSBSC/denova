@@ -2,19 +2,19 @@ package modeltask
 
 import (
 	"context"
-	"denova/internal/agents/run"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
 
-	agent "github.com/alfredxw/denova/agent"
-	"github.com/alfredxw/denova/agent/providers"
-
 	"denova/config"
 	"denova/internal/agents/modelio"
 	"denova/internal/agents/prompts"
+	agentrun "denova/internal/agents/run"
 	"denova/internal/book/lore"
+
+	"github.com/alfredxw/denova/agent/model/providers"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 const loreClassificationInputMaxBytes = 256 * 1024
@@ -83,9 +83,9 @@ func generateLoreClassifications(ctx context.Context, cfg *config.Config, modelC
 	if err != nil {
 		return nil, err
 	}
-	messages := []*agent.Message{
-		agent.SystemMessage(composition.Instruction()),
-		agent.UserMessage(instruction),
+	messages := []*agentschema.Message{
+		agentschema.SystemMessage(composition.Instruction()),
+		agentschema.UserMessage(instruction),
 	}
 	if err := modelio.ValidateConfiguredInput(cfg, config.AgentKindToolAgent, messages, nil); err != nil {
 		return nil, err

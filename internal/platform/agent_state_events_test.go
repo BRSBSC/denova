@@ -7,14 +7,15 @@ import (
 	"strings"
 	"testing"
 
-	agent "github.com/alfredxw/denova/agent"
+	agentevent "github.com/alfredxw/denova/agent/lifecycle/event"
+	agentinteraction "github.com/alfredxw/denova/agent/lifecycle/interaction"
 )
 
 func TestAgentStateEventsContainObservableStatus(t *testing.T) {
 	execution := &agentExecution{}
-	for _, payload := range []agent.EventPayload{agent.RunStarted{}, agent.InteractionResolved{}} {
+	for _, payload := range []agentevent.EventPayload{agentevent.RunStarted{}, agentevent.InteractionResolved{}} {
 		execution.receipt.Result.Status = "waiting"
-		execution.consume(agent.Event{Payload: payload})
+		execution.consume(agentevent.Event{Payload: payload})
 		event := execution.events[len(execution.events)-1]
 		data, err := json.Marshal(event.Data)
 		if err != nil || event.Kind != "state" || string(data) != `{"status":"running"}` {
@@ -27,10 +28,10 @@ func TestAgentEventsSnapshotReplaysPendingQuestions(t *testing.T) {
 	for _, state := range []string{"pending", "resolved"} {
 		t.Run(state, func(t *testing.T) {
 			execution := &agentExecution{done: make(chan struct{}), generation: "test"}
-			question := agent.InteractionRequest{ID: "question", Kind: agent.InteractionAsk, Questions: []agent.InteractionQuestion{{ID: "mood", Prompt: "Target mood", AllowFreeText: true}}}
-			execution.consume(agent.Event{Payload: agent.InteractionRequested{Request: question}})
+			question := agentinteraction.InteractionRequest{ID: "question", Kind: agentinteraction.InteractionAsk, Questions: []agentinteraction.InteractionQuestion{{ID: "mood", Prompt: "Target mood", AllowFreeText: true}}}
+			execution.consume(agentevent.Event{Payload: agentevent.InteractionRequested{Request: question}})
 			if state == "resolved" {
-				execution.consume(agent.Event{Payload: agent.InteractionResolved{ID: question.ID}})
+				execution.consume(agentevent.Event{Payload: agentevent.InteractionResolved{ID: question.ID}})
 			}
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()

@@ -2,11 +2,11 @@ package chat
 
 import (
 	agentattachment "denova/internal/agents/attachment"
-	"denova/internal/agents/run"
-
 	"denova/internal/agents/prompts"
 	agentreview "denova/internal/agents/review"
-	agent "github.com/alfredxw/denova/agent"
+	agentrun "denova/internal/agents/run"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 // ReferenceFileByteLimit bounds one caller-selected workspace reference in the
@@ -40,7 +40,7 @@ type ChatRequest struct {
 	TellerID          string                   `json:"teller_id"`
 	Locale            string                   `json:"-"`
 	InputVisibility   agentrun.InputVisibility `json:"-"`
-	AttachedFiles     []agent.Attachment       `json:"-"`
+	AttachedFiles     []agentschema.Attachment `json:"-"`
 
 	// StyleRules 由后端按当前导演配置注入（场景 → 共享文风参考索引）。
 	// StyleScenes 非空时只注入用户本轮通过 # 指定的场景；为空时作为场景化建议参与本轮上下文。

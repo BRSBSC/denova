@@ -9,12 +9,12 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/alfredxw/denova/agent/providers"
-	toml "github.com/pelletier/go-toml/v2"
-
 	"denova/internal/revisionfile"
 	"denova/internal/style"
 	workspacelayout "denova/internal/workspace"
+
+	"github.com/alfredxw/denova/agent/model/providers"
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 // Settings 是用户设置的持久化模型。工作区文件只会从中取出 Agent 定制字段。

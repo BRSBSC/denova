@@ -12,27 +12,33 @@ import (
 	productagents "denova/internal/agents"
 	"denova/internal/agents/delegation"
 	"denova/internal/agents/prompts"
-	agent "github.com/alfredxw/denova/agent"
+
+	"github.com/alfredxw/denova/agent"
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	agentstream "github.com/alfredxw/denova/agent/model/stream"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agentsession "github.com/alfredxw/denova/agent/session"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 type pluginCallingModel struct{}
 
-func (pluginCallingModel) Generate(_ context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.Message, error) {
+func (pluginCallingModel) Generate(_ context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentschema.Message, error) {
 	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == agent.ToolRole {
-			return agent.AssistantMessage("Used plugin: "+messages[i].Content, nil), nil
+		if messages[i].Role == agentschema.ToolRole {
+			return agentschema.AssistantMessage("Used plugin: "+messages[i].Content, nil), nil
 		}
 	}
-	for _, tool := range agent.GetCommonOptions(nil, options...).Tools {
+	for _, tool := range agentmodel.GetCommonOptions(nil, options...).Tools {
 		if strings.HasPrefix(tool.Name, "plugin_") {
-			return agent.AssistantMessage("", []agent.ToolCall{{ID: "count-text", Type: "function", Function: agent.FunctionCall{Name: tool.Name, Arguments: `{"text":"A🌷中"}`}}}), nil
+			return agentschema.AssistantMessage("", []agentschema.ToolCall{{ID: "count-text", Type: "function", Function: agentschema.FunctionCall{Name: tool.Name, Arguments: `{"text":"A🌷中"}`}}}), nil
 		}
 	}
 	return nil, fmt.Errorf("model did not receive the selected plugin tool")
 }
-func (m pluginCallingModel) Stream(ctx context.Context, input []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+func (m pluginCallingModel) Stream(ctx context.Context, input []*agentschema.Message, options ...agentmodel.ModelOption) (*agentstream.StreamReader[*agentschema.Message], error) {
 	message, err := m.Generate(ctx, input, options...)
-	return agent.StreamReaderFromArray([]*agent.Message{message}), err
+	return agentstream.StreamReaderFromArray([]*agentschema.Message{message}), err
 }
 
 func pluginTestConfig(t *testing.T, m *Manager, projectID string) *config.Config {
@@ -76,18 +82,18 @@ func TestPluginToolThroughWritingWorkbenchAndGameAgents(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := definition.Tools.PrepareTools(ctx, agent.ToolRequest{}); err != nil {
+			if _, err := definition.Tools.PrepareTools(ctx, agenttool.ToolRequest{}); err != nil {
 				t.Fatal(err)
 			}
 			if len(m.RuntimeSnapshots()) != 0 {
 				t.Fatal("schema inspection started plugin code")
 			}
-			definition.Model, definition.ModelIdentity = pluginCallingModel{}, agent.CapabilityIdentity{Kind: "test.plugin_model", Version: 1}
+			definition.Model, definition.ModelIdentity = pluginCallingModel{}, agentschema.CapabilityIdentity{Kind: "test.plugin_model", Version: 1}
 			owner, err := agent.New(ctx, definition)
 			if err != nil {
 				t.Fatal(err)
 			}
-			sess, err := owner.Session(ctx, agent.SessionKey{Namespace: "test.plugins", ID: kind})
+			sess, err := owner.Session(ctx, agentsession.Key{Namespace: "test.plugins", ID: kind})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -99,7 +105,7 @@ func TestPluginToolThroughWritingWorkbenchAndGameAgents(t *testing.T) {
 			defer stop()
 			result, err := run.Wait(wait)
 			snapshot, snapshotErr := sess.Snapshot(wait)
-			if err != nil || snapshotErr != nil || result.Status != agent.ResultCompleted || len(snapshot.RecentRuns) == 0 || !strings.Contains(snapshot.RecentRuns[0].Output, `"value":3`) {
+			if err != nil || snapshotErr != nil || result.Status != agentschema.ResultCompleted || len(snapshot.RecentRuns) == 0 || !strings.Contains(snapshot.RecentRuns[0].Output, `"value":3`) {
 				t.Fatalf("Agent did not use plugin: %#v %v", result, err)
 			}
 			deadline := time.Now().Add(time.Second)
@@ -124,7 +130,7 @@ func TestEnabledPluginsAvailableWithoutConversationSelection(t *testing.T) {
 	if err != nil || set == nil {
 		t.Fatalf("enabled plugins must be available without a conversation selection: %v", err)
 	}
-	definitions, err := set.PrepareTools(context.Background(), agent.ToolRequest{})
+	definitions, err := set.PrepareTools(context.Background(), agenttool.ToolRequest{})
 	if err != nil || len(definitions) != 1 {
 		t.Fatalf("expected one public tool without duplicating its toolset: %d %v", len(definitions), err)
 	}
@@ -149,7 +155,7 @@ func TestPluginToolsReachDelegatedAgents(t *testing.T) {
 		t.Fatal("missing delegated Agents")
 	}
 	for _, child := range catalog.Children() {
-		tools, err := child.Definition.Tools.PrepareTools(context.Background(), agent.ToolRequest{})
+		tools, err := child.Definition.Tools.PrepareTools(context.Background(), agenttool.ToolRequest{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,13 +170,13 @@ func TestPluginToolsReachDelegatedAgents(t *testing.T) {
 			t.Fatalf("child %s lost plugin tools", child.Name)
 		}
 		definition := child.Definition
-		definition.Model, definition.ModelIdentity = pluginCallingModel{}, agent.CapabilityIdentity{Kind: "test.plugin_model", Version: 1}
+		definition.Model, definition.ModelIdentity = pluginCallingModel{}, agentschema.CapabilityIdentity{Kind: "test.plugin_model", Version: 1}
 		owner, err := agent.New(context.Background(), definition)
 		if err != nil {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = owner.Close(context.Background()) })
-		sess, err := owner.Session(context.Background(), agent.SessionKey{Namespace: "test.child", ID: child.Name})
+		sess, err := owner.Session(context.Background(), agentsession.Key{Namespace: "test.child", ID: child.Name})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -182,7 +188,7 @@ func TestPluginToolsReachDelegatedAgents(t *testing.T) {
 		result, err := run.Wait(wait)
 		snapshot, readErr := sess.Snapshot(wait)
 		cancel()
-		if err != nil || readErr != nil || result.Status != agent.ResultCompleted || len(snapshot.RecentRuns) == 0 || !strings.Contains(snapshot.RecentRuns[0].Output, `"value":3`) {
+		if err != nil || readErr != nil || result.Status != agentschema.ResultCompleted || len(snapshot.RecentRuns) == 0 || !strings.Contains(snapshot.RecentRuns[0].Output, `"value":3`) {
 			t.Fatalf("child %s did not use plugin: %#v %v %v", child.Name, result, err, readErr)
 		}
 	}
@@ -204,7 +210,7 @@ func TestSharedPluginSettingsAndScopeIsolation(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		tools, err := set.PrepareTools(ctx, agent.ToolRequest{})
+		tools, err := set.PrepareTools(ctx, agenttool.ToolRequest{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -236,7 +242,7 @@ func TestSharedPluginChangesApplyToNewExecutions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	oldTools, err := old.PrepareTools(ctx, agent.ToolRequest{})
+	oldTools, err := old.PrepareTools(ctx, agenttool.ToolRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,12 +256,12 @@ func TestSharedPluginChangesApplyToNewExecutions(t *testing.T) {
 	if old.Identity() == current.Identity() {
 		t.Fatal("changed settings must invalidate paused execution behavior")
 	}
-	currentTools, err := current.PrepareTools(ctx, agent.ToolRequest{})
+	currentTools, err := current.PrepareTools(ctx, agenttool.ToolRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, check := range []struct {
-		tool     agent.ToolDefinition
+		tool     agenttool.ToolDefinition
 		expected string
 	}{{oldTools[0], `"value":3`}, {currentTools[0], `"value":2`}} {
 		result, err := check.tool.Tool.Run(ctx, `{"text":"A B"}`)

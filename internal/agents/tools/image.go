@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/config"
 	"denova/internal/assetstore"
 	"denova/internal/book"
@@ -18,6 +16,9 @@ import (
 	imageasset "denova/internal/image/asset"
 	imagegen "denova/internal/image/generation"
 	imageprompting "denova/internal/image/prompting"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 const (
@@ -122,7 +123,7 @@ type generatedImageReceiptFile struct {
 	SizeBytes int    `json:"size_bytes,omitempty"`
 }
 
-func newIllustrationTools(cfg *config.Config) ([]agent.ToolDefinition, error) {
+func newIllustrationTools(cfg *config.Config) ([]agenttool.ToolDefinition, error) {
 	if cfg == nil {
 		return nil, nil
 	}
@@ -132,41 +133,41 @@ func newIllustrationTools(cfg *config.Config) ([]agent.ToolDefinition, error) {
 		imageprompting.ToolPromptContext(cfg),
 		imageprompting.SelectedGuide(cfg),
 	)
-	generateTool, err := agent.InferTool(generateImageToolName, description, func(ctx context.Context, input generateImageInput) (agent.ToolResult, error) {
+	generateTool, err := agenttool.InferTool(generateImageToolName, description, func(ctx context.Context, input generateImageInput) (agentschema.ToolResult, error) {
 		if workspace == "" {
-			return agent.ToolResult{}, fmt.Errorf("cannot generate an image because the current workspace is unavailable")
+			return agentschema.ToolResult{}, fmt.Errorf("cannot generate an image because the current workspace is unavailable")
 		}
 		bookService := book.NewService(workspace)
 		result, err := generateImageForTool(ctx, cfg, bookService, input)
 		if err != nil {
-			return agent.ToolResult{}, err
+			return agentschema.ToolResult{}, err
 		}
 		return newGeneratedImageToolResult(result)
 	})
 	if err != nil {
 		return nil, err
 	}
-	definedGenerateTool, err := defineTool(generateTool, workspaceWriteDescriptor(ToolSourceImage, config.AgentToolImageGeneration, agent.ToolRecoveryNonIdempotent))
+	definedGenerateTool, err := defineTool(generateTool, workspaceWriteDescriptor(ToolSourceImage, config.AgentToolImageGeneration, agenttool.ToolRecoveryNonIdempotent))
 	if err != nil {
 		return nil, err
 	}
-	return []agent.ToolDefinition{definedGenerateTool}, nil
+	return []agenttool.ToolDefinition{definedGenerateTool}, nil
 }
 
-func newGeneratedImageToolResult(value any) (agent.ToolResult, error) {
+func newGeneratedImageToolResult(value any) (agentschema.ToolResult, error) {
 	content, err := json.Marshal(value)
 	if err != nil {
-		return agent.ToolResult{}, fmt.Errorf("encode generated image result: %w", err)
+		return agentschema.ToolResult{}, fmt.Errorf("encode generated image result: %w", err)
 	}
 	receipt, target, err := generatedImageReceipt(value)
 	if err != nil {
-		return agent.ToolResult{}, err
+		return agentschema.ToolResult{}, err
 	}
 	details, err := json.Marshal(receipt)
 	if err != nil {
-		return agent.ToolResult{}, fmt.Errorf("encode generated image receipt: %w", err)
+		return agentschema.ToolResult{}, fmt.Errorf("encode generated image receipt: %w", err)
 	}
-	result := agent.TextToolResult(string(content))
+	result := agentschema.TextToolResult(string(content))
 	result.Details = details
 	result.Metadata.Target = target
 	return result, nil
