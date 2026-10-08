@@ -143,8 +143,10 @@ jobs:
             agent/go.sum
       - uses: ./.github/actions/setup-web
       - run: ./scripts/build.sh
-      # Tar preserves executable permissions, including bundled ripgrep.
-      - run: tar -cf ci-distribution.tar -C output .
+      # Tar preserves executable permissions, including bundled ripgrep. The
+      # built frontend travels along as dist/: the distribution serves only its
+      # embedded copy, and release packaging embeds this same tested build.
+      - run: tar -cf ci-distribution.tar -C output . -C ../web dist
       - uses: actions/upload-artifact@v7
         with:
           name: ci-distribution

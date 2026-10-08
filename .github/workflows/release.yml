@@ -95,7 +95,9 @@ jobs:
       - run: mkdir -p output && tar -xf ci-distribution.tar -C output
       - name: Package the tested frontend for this platform
         env:
-          DENOVA_RELEASE_FRONTEND_DIR: ${{ github.workspace }}/output/web
+          # output/web is an empty compatibility directory; CI ships the built
+          # frontend next to the distribution as dist/.
+          DENOVA_RELEASE_FRONTEND_DIR: ${{ github.workspace }}/output/dist
           RELEASE_TARGET: ${{ matrix.target }}
         run: bash scripts/build-github-release.sh "$RELEASE_TAG" "$RELEASE_TARGET"
       - uses: actions/upload-artifact@v7
