@@ -4,13 +4,31 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix9）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix10）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix9) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix10) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
 ## [Unreleased]
+
+## [v0.5.1fix10] - 2026-10-08
+
+### Brief / 简要说明
+
+#### 中文
+
+- 修复远程访问登录可被绕过的问题，并为登录增加失败限速。
+- 合并上游最新功能：资料库重做（文档式索引、分类、多图与音频素材）、市场与资源包、扩展与插件、游戏舞台背景与角色差分。
+- 应用内更新改为从本 fork 的 Release 获取，并修复 `fixN` 版本的比较与手动上传。
+- 修复保存 Agent 状态和会话记录时，磁盘写入失败未被发现的问题。
+
+#### English
+
+- Fix a remote access login bypass and slow repeated sign-in failures.
+- Merge the latest upstream features: the reworked Lore library (document-style index, categories, multiple images and audio), the Marketplace and resource packages, extensions and plugins, and Game stage backgrounds and character sprites.
+- In-app updates now come from this fork's releases, with `fixN` versions compared correctly and accepted by manual upload.
+- Fix failed disk writes going unnoticed while saving Agent state and session records.
 
 ### Security / 安全
 
