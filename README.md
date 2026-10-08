@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  当前版本：<strong>v0.5.1fix8</strong>（2026-10-07） · Beta · <a href="https://github.com/BRSBSC/denova/releases">下载最新版本</a>
+  当前版本：<strong>v0.5.1fix9</strong>（2026-10-08） · Beta · <a href="https://github.com/BRSBSC/denova/releases">下载最新版本</a>
 </p>
 
 ![Denova 写作](./img/ide.png)
@@ -82,7 +82,7 @@ Denova 把小说写作、互动故事、结构化资料库、AI Agent、图像�
 macOS / Linux 可以使用一键安装脚本：
 
 ```bash
-curl -fsSL https://github.com/BRSBSC/denova/releases/download/v0.5.1fix8/install.sh | sh
+curl -fsSL https://github.com/BRSBSC/denova/releases/download/v0.5.1fix9/install.sh | sh
 ```
 
 安装完成后运行 `denova`。Windows 用户以及希望手动安装的用户，可以从 [GitHub Releases](https://github.com/BRSBSC/denova/releases) 下载对应平台的压缩包；Windows 运行 `denova.exe`。

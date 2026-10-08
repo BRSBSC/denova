@@ -4,13 +4,27 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix8）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix9）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix8) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix9) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
 ## [Unreleased]
+
+## [v0.5.1fix9] - 2026-10-08
+
+### Brief / 简要说明
+
+#### 中文
+
+- 修复输入框上方排队指令的按钮无法点击的问题；旧任务遗留的排队指令可在空闲或新任务运行时删除，写作指令可退回编辑。
+- 修复任务中断后恢复冲突导致 Agent 界面持续卡在重连状态的问题。
+
+#### English
+
+- Fix the queued instruction buttons above the composer not responding to clicks; instructions left by an earlier task can be deleted while idle or during a new task, and returned to the writing editor.
+- Fix recovery conflicts leaving the Agent interface stuck reconnecting after a task is interrupted.
 
 ### Fixed / 修复
 
