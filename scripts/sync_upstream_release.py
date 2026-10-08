@@ -155,12 +155,10 @@ def finish(args):
         run("gh", "release", "create", mirror_tag, "--repo", args.repository, "--target", revision, "--draft", "--title", tag, "--notes-file", str(notes))
     files = sorted(str(path) for path in (args.directory / "assets").iterdir() if path.is_file())
     run("gh", "release", "upload", mirror_tag, *files, "--repo", args.repository, "--clobber")
-    latest = api(f"repos/{UPSTREAM}/releases/latest")
-    is_latest = latest["id"] == release["id"]
-    if is_latest:
-        run("docker", "buildx", "imagetools", "create", "--tag", f"{image}:latest", f"{image}:{tag}")
     notes.write_text(body + "\n" + completion_marker(release) + "\n", encoding="utf-8")
-    run("gh", "release", "edit", mirror_tag, "--repo", args.repository, "--draft=false", f"--latest={str(is_latest).lower()}", "--notes-file", str(notes))
+    # The latest image tag and the Latest release belong to this fork's source
+    # releases. An upstream build lacks the fork's fixes, so it never takes them.
+    run("gh", "release", "edit", mirror_tag, "--repo", args.repository, "--draft=false", "--latest=false", "--notes-file", str(notes))
     print(f"Published mirrored release {tag} and {image}:{tag}")
 
 

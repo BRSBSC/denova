@@ -30,7 +30,7 @@ on:
 permissions:
   contents: read
 
-# Do not interrupt a publication midway or let two runs move latest concurrently.
+# Do not interrupt a publication midway or let two runs publish the same release concurrently.
 concurrency:
   group: upstream-release-${{ github.repository }}-${{ github.event_name == 'pull_request' && github.event.number || 'publish' }}
   cancel-in-progress: false
@@ -107,7 +107,7 @@ jobs:
           build-args: |
             VERSION=${{ steps.upstream.outputs.version }}
             SOURCE_REPOSITORY=${{ github.repository }}
-      - name: Mirror release assets and promote latest
+      - name: Mirror release assets
         if: steps.upstream.outputs.changed == 'true'
         run: python3 -B scripts/sync_upstream_release.py finish --repository "${GITHUB_REPOSITORY}"
       - name: Report result

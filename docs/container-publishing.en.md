@@ -10,7 +10,7 @@ This fork checks the latest stable `alfredxw/denova` release at minute 23 of eve
 4. After the first publication, check **Packages → denova → Package settings**. Set visibility to Public for anonymous pulls; a public source repository does not guarantee a public package.
 5. Check the Actions logs and Summary for successful image and Release publication. GitHub may disable scheduled workflows in inactive public repositories; re-enable them in Actions when needed.
 
-Images are published as `ghcr.io/brsbsc/denova:v0.4.5` (example) and `ghcr.io/brsbsc/denova:latest`, supporting `linux/amd64` and `linux/arm64`. The publishing job is restricted to `BRSBSC/denova`. Other forks must adjust the repository condition and Compose image address.
+Images are published as `ghcr.io/brsbsc/denova:v0.4.5` (example), supporting `linux/amd64` and `linux/arm64`. Mirroring publishes version tags only; `ghcr.io/brsbsc/denova:latest` is moved only by this fork's source releases, described below. The publishing job is restricted to `BRSBSC/denova`. Other forks must adjust the repository condition and Compose image address.
 
 ## Publication and retries
 
@@ -19,8 +19,8 @@ Images are published as `ghcr.io/brsbsc/denova:v0.4.5` (example) and `ghcr.io/br
 - Application source fixes must first be included in the Linux bundle used by the image. Pushing an application patch to this fork or forcing a rebuild of the original version does not compile that patch into the image. Sync an upstream release containing the fix, or separately build and verify a patched bundle and image.
 - Build and test both architectures: version, HTTP frontend, rejection of unauthenticated access, login, settings access, and configuration/session persistence after restart. Push the version image only after these tests pass.
 - Keep the upstream version as the Release title, using an `upstream-vMAJOR.MINOR.PATCH` tag on this workflow's commit. Image tags remain `vMAJOR.MINOR.PATCH`. This avoids additional permissions for importing upstream workflows and does not trigger the existing `v*` source-release workflow. GitHub-generated Source code archives contain the fork's packaging configuration; use the linked upstream release for application source. Existing Releases without this workflow's ownership marker are never overwritten.
-- Promote the tested version image to `latest` only if it is still the latest upstream stable release. Publish the mirrored Release with a completion marker last. Failures leave no success marker and can be retried; a draft Release or version image may remain.
-- GHCR and GitHub Releases cannot be committed atomically. If the final Release publication fails, `latest` may already reference the tested image; the next retry completes the Release.
+- Mirroring never moves the `latest` image tag and never marks the mirrored Release as Latest: both belong to this fork's source releases, and an upstream build lacks their fixes. Publish the mirrored Release with a completion marker last. Failures leave no success marker and can be retried; a draft Release or version image may remain.
+- GHCR and GitHub Releases cannot be committed atomically. If the final Release publication fails, the version image may already be pushed; the next retry completes the Release.
 - Scheduled runs process only the current latest release, not all historical releases. Enter a manual `tag` to backfill a version. Enable `force` to rebuild a completed version. Pushing container or synchronization changes to `master` also rebuilds the latest version.
 - Mirrored attachments remain byte-for-byte upstream files, including upstream download URLs in the installer. Synchronization adds files or replaces matching names; it does not automatically delete previously archived attachments. Completion markers track the Release ID and asset IDs, sizes, and update times; replaced upstream assets trigger processing again. Images use only the Linux bundles downloaded and verified in the current run.
 
@@ -61,9 +61,9 @@ To roll back, select an earlier `DENOVA_IMAGE_TAG` and recreate the container. B
 
 The `Release` workflow builds source from each `v*` tag rather than using upstream bundles. It verifies full CI for the same commit, then packages all five platforms. After publishing the archives, it builds and smoke-tests `linux/amd64` and `linux/arm64` images from those Linux packages, then pushes the version tag and `latest`. The image revision label records the actual source commit.
 
-The `v0.5.1fix9` image is `ghcr.io/brsbsc/denova:v0.5.1fix9`. Set `DENOVA_IMAGE_TAG=v0.5.1fix9` in `docker/.env` and run the update commands above. Pinning the version avoids switching when a later upstream synchronization moves `latest`.
+The `v0.5.1fix9` image is `ghcr.io/brsbsc/denova:v0.5.1fix9`. Set `DENOVA_IMAGE_TAG=v0.5.1fix9` in `docker/.env` and run the update commands above. `latest` always references the most recent source release and is unaffected by mirroring. To run an unmodified upstream build, set `DENOVA_IMAGE_TAG` to the upstream version (for example `v0.5.1`).
 
-Source image publication shares the mirroring concurrency group to serialize `latest` promotion. Mirroring continues to process upstream stable releases and can publish a newer upstream version later. Installers attached to source releases install packages from this fork.
+Mirroring continues to process upstream stable releases and publishes the version image of a newer upstream version later, without changing `latest`. Installers attached to source releases install packages from this fork.
 
 ## Validation
 
