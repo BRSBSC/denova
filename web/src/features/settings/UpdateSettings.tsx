@@ -22,6 +22,7 @@ export function useUpdateSettings({ autoCheckEnabled }: { autoCheckEnabled: bool
   const [updateInstallProgress, setUpdateInstallProgress] = useState<UpdateInstallProgress | null>(null)
   const [operation, setOperation] = useState<UpdateOperation>('checking')
   const [updateError, setUpdateError] = useState<string | null>(null)
+  const [releasesURL, setReleasesURL] = useState('')
   const cancelReload = useRef<(() => void) | undefined>(undefined)
   const monitorRestart = useCallback((target: { id: string; version: string }) => {
     cancelReload.current?.()
@@ -38,6 +39,7 @@ export function useUpdateSettings({ autoCheckEnabled }: { autoCheckEnabled: bool
   const syncUpdateStatus = useCallback(async (signal?: AbortSignal) => {
     const status = await getUpdateStatus(AbortSignal.any([AbortSignal.timeout(5000), ...(signal ? [signal] : [])]))
     if (signal?.aborted) return
+    setReleasesURL(status.releases_url ?? '')
     setOperation('idle')
     setUpdateInstallResult(null)
     switch (status.phase) {
@@ -158,6 +160,7 @@ export function useUpdateSettings({ autoCheckEnabled }: { autoCheckEnabled: bool
     installProgress: updateInstallProgress,
     operation,
     error: updateError,
+    releasesURL,
     onCheck: () => void runUpdateCheck(),
     onInstall: () => void runUpdateInstall(),
     onApply: () => void runUpdateApply(),
@@ -171,6 +174,7 @@ export function UpdatePanel({
   installProgress,
   operation,
   error,
+  releasesURL,
   onCheck,
   onInstall,
   onApply,
@@ -301,12 +305,14 @@ export function UpdatePanel({
           <div className="flex min-w-0 flex-col gap-2 px-2 pt-2">
             <p className="text-xs text-[var(--nova-text-faint)]">{t('settings.updates.manualHint')}</p>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="link" size="sm" asChild>
-                <a href="https://github.com/alfredxw/denova/releases/latest" target="_blank" rel="noreferrer">
-                  <ExternalLink data-icon="inline-start" />
-                  {t('settings.updates.openRelease')}
-                </a>
-              </Button>
+              {releasesURL && (
+                <Button variant="link" size="sm" asChild>
+                  <a href={releasesURL} target="_blank" rel="noreferrer">
+                    <ExternalLink data-icon="inline-start" />
+                    {t('settings.updates.openRelease')}
+                  </a>
+                </Button>
+              )}
               <input
                 ref={fileInput}
                 type="file"

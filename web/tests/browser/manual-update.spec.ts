@@ -10,7 +10,7 @@ test('manual update stays tucked away and stages an upload before explicit resta
   let uploads = 0
   let applies = 0
   let pendingPhase = 'idle'
-  await page.route('**/api/update/status', route => route.fulfill({ json: { phase: pendingPhase, id: 'browser-update', current_version: '0.4.5', version: '0.5.0', log_path: '.denova-updates/pending-0.5.0-1234567890/apply.log' } }))
+  await page.route('**/api/update/status', route => route.fulfill({ json: { phase: pendingPhase, id: 'browser-update', current_version: '0.4.5', releases_url: 'https://github.com/owner/fork/releases/latest', version: '0.5.0', log_path: '.denova-updates/pending-0.5.0-1234567890/apply.log' } }))
   let finishUpload!: () => void
   const uploadReady = new Promise<void>(resolve => { finishUpload = resolve })
   await page.route('**/api/update/upload', async route => {
@@ -47,7 +47,7 @@ test('manual update stays tucked away and stages an upload before explicit resta
 
   const releaseFile = { name: 'denova-v0.5.0-windows-x64.zip', mimeType: 'application/zip', buffer: Buffer.from('browser upload fixture') }
   await page.getByRole('button', { name: '手动更新', exact: true }).click()
-  await expect(page.getByRole('link', { name: '打开 Release', exact: true })).toHaveAttribute('href', 'https://github.com/alfredxw/denova/releases/latest')
+  await expect(page.getByRole('link', { name: '打开 Release', exact: true })).toHaveAttribute('href', 'https://github.com/owner/fork/releases/latest')
   await page.getByLabel('选择安装包', { exact: true }).setInputFiles(releaseFile)
   const diagnostic = page.getByRole('alert')
   await expect(diagnostic).toContainText('安装包与当前电脑的操作系统或处理器架构不匹配。')

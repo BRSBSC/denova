@@ -1,6 +1,7 @@
 package update
 
 import (
+	"cmp"
 	"strconv"
 	"strings"
 )
@@ -21,8 +22,8 @@ func isDevVersion(v string) bool {
 func compareVersions(a, b string) int {
 	a = normalizeVersion(a)
 	b = normalizeVersion(b)
-	ap, aok := parseVersionParts(a)
-	bp, bok := parseVersionParts(b)
+	ap, ahotfix, aok := parseVersionParts(a)
+	bp, bhotfix, bok := parseVersionParts(b)
 	if !aok || !bok {
 		return strings.Compare(a, b)
 	}
@@ -41,25 +42,40 @@ func compareVersions(a, b string) int {
 			return 1
 		}
 	}
-	return 0
+	return cmp.Compare(ahotfix, bhotfix)
 }
 
-func parseVersionParts(v string) ([]int, bool) {
+// parseVersionParts splits a version into its numeric release parts and its
+// hotfix number. Hotfixes of a release are published as 0.5.1fix, 0.5.1fix2,
+// and so on: they follow that release and precede the next one. A bare "fix"
+// is the first hotfix, and a plain release has hotfix number zero.
+func parseVersionParts(v string) ([]int, int, bool) {
 	base := strings.Split(v, "-")[0]
+	hotfix := 0
+	if release, number, found := strings.Cut(base, "fix"); found {
+		base, hotfix = release, 1
+		if number != "" {
+			parsed, err := strconv.Atoi(number)
+			if err != nil {
+				return nil, 0, false
+			}
+			hotfix = parsed
+		}
+	}
 	if base == "" {
-		return nil, false
+		return nil, 0, false
 	}
 	raw := strings.Split(base, ".")
 	parts := make([]int, 0, len(raw))
 	for _, part := range raw {
 		if part == "" {
-			return nil, false
+			return nil, 0, false
 		}
 		n, err := strconv.Atoi(part)
 		if err != nil {
-			return nil, false
+			return nil, 0, false
 		}
 		parts = append(parts, n)
 	}
-	return parts, true
+	return parts, hotfix, true
 }

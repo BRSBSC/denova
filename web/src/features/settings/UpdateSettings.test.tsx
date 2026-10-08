@@ -85,3 +85,10 @@ it('restores the staged package if the install stream loses its result', async (
   await waitFor(() => expect(result.current.installResult).toMatchObject({ apply_ready: true, installed_version: '0.5.2' }))
   unmount()
 })
+
+it('links manual updates to the releases of the repository that built this version', async () => {
+  vi.mocked(getUpdateStatus).mockResolvedValueOnce({ phase: 'idle', current_version: '0.5.1fix9', releases_url: 'https://github.com/owner/fork/releases/latest' })
+  const { result, unmount } = renderHook(() => useUpdateSettings({ autoCheckEnabled: false }))
+  await waitFor(() => expect(result.current.releasesURL).toBe('https://github.com/owner/fork/releases/latest'))
+  unmount()
+})
