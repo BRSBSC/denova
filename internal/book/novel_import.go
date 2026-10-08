@@ -735,7 +735,7 @@ type splitChapterFilenameParts struct {
 
 func splitChapterTitleForFilename(title, language string) splitChapterFilenameParts {
 	title = strings.TrimSpace(strings.Trim(title, "# \t"))
-	patterns := []*regexp.Regexp{}
+	var patterns []*regexp.Regexp
 	switch language {
 	case NovelImportLanguageEnglish:
 		patterns = []*regexp.Regexp{

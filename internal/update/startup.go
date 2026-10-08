@@ -53,7 +53,8 @@ func PrepareStartup() (bool, error) {
 		return false, nil
 	case PhaseStarting:
 		var readyID string
-		if err := readJSONFile(path+".ready", &readyID); err == nil && readyID == m.ID {
+		// readErr keeps the outer err free for the phase write reported below.
+		if readErr := readJSONFile(path+".ready", &readyID); readErr == nil && readyID == m.ID {
 			err = setPhase(path, &m, PhaseSucceeded, nil)
 		} else {
 			err = setPhase(path, &m, PhaseFailed, fmt.Errorf("update startup was interrupted; inspect %s", m.LogPath))

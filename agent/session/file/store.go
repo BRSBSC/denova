@@ -296,7 +296,8 @@ func (log *logFile) Append(ctx context.Context, expected session.Revision, recor
 	if err != nil {
 		return log.revision, err
 	}
-	if _, err := file.Seek(log.validBytes, io.SeekStart); err == nil {
+	// Assign the outer err: a seek or truncate failure must stop the write.
+	if _, err = file.Seek(log.validBytes, io.SeekStart); err == nil {
 		err = file.Truncate(log.validBytes)
 	}
 	if err == nil {

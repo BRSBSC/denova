@@ -33,7 +33,6 @@ func NewCatalogWithContext(ctx context.Context, cfg *config.Config) *producttool
 		Bash:    discovered.Bash,
 		Pwsh:    discovered.Pwsh,
 		ShellRuntime: func() (producttools.ShellRuntime, error) {
-			environment := os.Environ()
 			bashOverride := ""
 			mode := config.ShellEnvironmentProcess
 			shell := ""
@@ -51,7 +50,7 @@ func NewCatalogWithContext(ctx context.Context, cfg *config.Config) *producttool
 			if err != nil {
 				return producttools.ShellRuntime{}, err
 			}
-			environment = snapshot.Environment
+			environment := snapshot.Environment
 			resolved := hostruntime.DiscoverForExecutableWithEnvironment(executablePath, environment, bashOverride)
 			return producttools.ShellRuntime{
 				Bash: resolved.Bash, Pwsh: resolved.Pwsh,

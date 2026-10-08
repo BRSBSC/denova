@@ -255,9 +255,6 @@ func (s *Session) RefreshCanonical(ctx context.Context) error {
 	if s == nil {
 		return fmt.Errorf("session is nil")
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.refreshCanonicalTailLocked(); err != nil {
