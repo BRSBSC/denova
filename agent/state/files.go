@@ -148,7 +148,8 @@ func writeSnapshot(root string, snapshot Snapshot) error {
 			return err
 		}
 		temporaryPath := temporary.Name()
-		if err := temporary.Chmod(0o600); err == nil {
+		// Assign the outer err: a failed write must not be renamed into place.
+		if err = temporary.Chmod(0o600); err == nil {
 			_, err = temporary.Write(file.Content)
 		}
 		if err == nil {
@@ -211,7 +212,8 @@ func atomicJSON(path string, value any) error {
 		return err
 	}
 	temporaryPath := temporary.Name()
-	if err := temporary.Chmod(0o600); err == nil {
+	// Assign the outer err: a failed write must not be renamed into place.
+	if err = temporary.Chmod(0o600); err == nil {
 		_, err = temporary.Write(encoded)
 	}
 	if err == nil {

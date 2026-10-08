@@ -51,6 +51,9 @@ Denova records only major user-visible features, important compatibility or data
 
 ### Fixed / 修复
 
+- 修复保存 Agent 状态文件或追加会话记录时，磁盘写入或定位失败未被发现、仍把不完整内容当作成功保存的问题；现在会报告错误并保留原有内容。
+- Fix failed disk writes or seeks while saving Agent state files or appending session records going unnoticed and being treated as saved. The error is now reported and the previous content is kept.
+
 - 应用内更新改为从构建所属仓库的 Release 获取，fork 构建不再被上游安装包替换；修复 `fixN` 版本号比较错误导致漏报更新，以及手动上传 `fixN` 安装包被判为无效的问题。此版本之前的 fork 构建仍指向上游，需手动升级一次。
 - In-app updates now come from the releases of the repository that built the app, so a fork build is no longer replaced by an upstream package. Fix `fixN` versions being ordered incorrectly, which hid available updates, and `fixN` packages being rejected by manual upload. Fork builds older than this version still point upstream and need one manual upgrade.
 

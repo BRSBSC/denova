@@ -102,3 +102,37 @@ func TestIncrementalCompactionPreservesPriorJournalOnFirstWrite(t *testing.T) {
 		t.Fatalf("incremental backup changed: %v", err)
 	}
 }
+
+func TestAppendReportsAFailedSeekInsteadOfWritingElsewhere(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	opened, err := store.Open(t.Context(), session.Key{Namespace: "test", ID: "failed-seek"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := opened.(*logFile)
+	defer log.Close()
+	record := session.Record{Kind: "session.capability_set", Version: 1, Data: json.RawMessage(`{"capability":"test.seek","state":{"id":"first","revision":1}}`)}
+	revision, err := log.Append(t.Context(), 0, record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(log.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An offset the file system rejects stands in for any seek or truncate failure.
+	log.validBytes = -1
+	if _, err := log.Append(t.Context(), revision, record); err == nil {
+		t.Fatal("append reported success although the journal position could not be set")
+	}
+	after, err := os.ReadFile(log.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(original, after) {
+		t.Fatal("a failed seek still wrote to the journal")
+	}
+}
