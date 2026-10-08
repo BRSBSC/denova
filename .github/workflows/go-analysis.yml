@@ -1,0 +1,76 @@
+name: Go analysis
+
+# Slower, advisory checks that the required CI leaves out: the race detector,
+# bug-class static analysis and known-vulnerability scanning. They run weekly
+# and on demand, so a finding never blocks an unrelated pull request. A pull
+# request that changes this file runs them once to validate the change.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/go-analysis.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  race:
+    name: Race detector (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ['.', agent]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            agent/go.sum
+      - name: Install ripgrep if needed
+        run: command -v rg || (sudo apt-get update && sudo apt-get install --yes ripgrep)
+      - name: Test with the race detector
+        working-directory: ${{ matrix.module }}
+        run: go test -race ./...
+
+  static:
+    name: Static analysis (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ['.', agent]
+    env:
+      # Bug-class checks only. The excluded checks have existing findings that
+      # were reviewed and change no behaviour: nil contexts in tests (SA1012),
+      # deprecated APIs (SA1019), duplicate cutset characters (SA1024), a
+      # repeated test condition (SA4000), an overwritten argument (SA4009), an
+      # unused pure call (SA4017), an always-true nil check (SA4023) and a
+      # case-insensitive comparison style (SA6005). Re-enable one after fixing
+      # its findings.
+      STATICCHECK_CHECKS: "SA*,-SA1012,-SA1019,-SA1024,-SA4000,-SA4009,-SA4017,-SA4023,-SA6005"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            agent/go.sum
+      - name: Report bugs found by static analysis
+        working-directory: ${{ matrix.module }}
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 -checks "$STATICCHECK_CHECKS" ./...
+      - name: Report known vulnerabilities reachable from the code
+        if: ${{ !cancelled() }}
+        working-directory: ${{ matrix.module }}
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...

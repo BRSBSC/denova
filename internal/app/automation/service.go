@@ -105,9 +105,6 @@ func (s *Service) Close(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()

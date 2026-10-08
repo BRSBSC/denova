@@ -111,8 +111,7 @@ func TestQueuedControlsRemainScopedAfterTheirRunIsAborted(t *testing.T) {
 		t.Fatal(err)
 	}
 	<-model.started
-	queued, err := sess.Queue(ctx, agentschema.Input{Text: "old instruction", IdempotencyKey: "queued-a"})
-	if err != nil {
+	if _, err := sess.Queue(ctx, agentschema.Input{Text: "old instruction", IdempotencyKey: "queued-a"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := owner.SuspendTree(ctx, key, SuspendRequest{RunID: run.ID(), IdempotencyKey: "pause-a"}); err != nil {
