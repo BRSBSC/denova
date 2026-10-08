@@ -114,7 +114,8 @@ def prepare(args):
         for architecture, package in (("amd64", "x64"), ("arm64", "arm64")):
             extract_bundle(assets / f"denova-{tag}-linux-{package}.tar.gz", args.directory / architecture)
             root = args.directory / architecture / "denova"
-            for required in ("denova", "denova-updater", "web/index.html", "LICENSE"):
+            # The frontend is embedded in the binary; web/ may be an empty directory.
+            for required in ("denova", "denova-updater", "LICENSE"):
                 if not (root / required).is_file():
                     raise ValueError(f"Missing bundle file: {architecture}/{required}")
             if not (root / "skills").is_dir():
