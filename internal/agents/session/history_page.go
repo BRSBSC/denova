@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/internal/agents/conversationjournal"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 // HistoryPage is a bounded chronological slice of the UI transcript. Before
@@ -74,7 +74,7 @@ func (s *Session) ReadHistoryPage(ctx context.Context, before, limit int) (Histo
 		ID: s.ID, CreatedAt: s.CreatedAt, UpdatedAt: s.UpdatedAt,
 		title: s.title, journalIncarnation: s.journalIncarnation,
 		partialMaterialization: true,
-		messages:               make([]*agent.Message, 0), records: make([]historyRecord, 0),
+		messages:               make([]*agentschema.Message, 0), records: make([]historyRecord, 0),
 	}
 	for _, record := range records {
 		if err := appendConversationRecord(temporary, record); err != nil {
@@ -91,7 +91,7 @@ func (s *Session) ReadHistoryPage(ctx context.Context, before, limit int) (Histo
 	boundaryLimit := min(len(entries)-1, requestedStart-anchor.Before)
 	for index := 0; index <= boundaryLimit; index++ {
 		entry := entries[index]
-		if entry.Role == string(agent.User) || entry.Type == historyTypeClear {
+		if entry.Role == string(agentschema.User) || entry.Type == historyTypeClear {
 			start = anchor.Before + index
 		}
 	}

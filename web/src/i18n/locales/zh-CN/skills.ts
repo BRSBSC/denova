@@ -1,5 +1,6 @@
 const skills = {
   "skills.library.title": "技能库",
+  "skills.library.export": "批量导出",
   "skills.library.search": "搜索名称或描述…",
   "skills.library.all": "全部",
   "skills.library.enabled": "已启用",

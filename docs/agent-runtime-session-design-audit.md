@@ -41,19 +41,19 @@ Native 向模型提供三个工具，复用现有 Session、Run、输入回执�
 
 | 工具 | 职责与实现 |
 | --- | --- |
-| `send` | 批量发送 `delegate / message / followup / steer / interrupt / resume / abort`，逐项返回结果；[输入、输出及校验](../agent/tools/agent_send.go) |
-| `await` | `timeout_ms = 0` 显式观察，可读取有界结果；正值只同步就绪状态，终态结果由 mailbox 投递；[契约](../agent/tools/task_wait_tool.go) |
-| `list_agents` | 发现定义、恢复可访问子实例引用；读取不启动 Agent、不获取写租约、不改写 journal；[契约](../agent/tools/agent_list.go) |
+| `send` | 批量发送 `delegate / message / followup / steer / interrupt / resume / abort`，逐项返回结果；[输入、输出及校验](../agent/tool/builtin/agent_send.go) |
+| `await` | `timeout_ms = 0` 显式观察，可读取有界结果；正值只同步就绪状态，终态结果由 mailbox 投递；[契约](../agent/tool/builtin/task_wait_tool.go) |
+| `list_agents` | 发现定义、恢复可访问子实例引用；读取不启动 Agent、不获取写租约、不改写 journal；[契约](../agent/tool/builtin/agent_list.go) |
 
 `message` 不启动工作，`followup` 开始新 Run；`interrupt / resume` 暂停和继续同一个 Run。父 Agent 在子任务运行时继续独立工作，只在依赖点和最终收口等待。独立上下文和并行处理是收益来源，不引入自动组队、空闲池、共享任务 DAG、广播或固定角色。
 
-协作说明仅在 Native 且启用委派能力时注入，提示词预览使用相同条件。外部 runtime 的工具、执行与恢复协议独立；[提示词边界](../internal/agents/prompts/runtime_contract.go)、[外部入口回归](../internal/agents/builder_external_test.go)覆盖写作、通用对话和游戏。模型实际接收的 schema 与行为以代码和[协作测试](../agent/tools/agent_coordination_test.go)为准，不维护第二份设计期 schema。
+协作说明仅在 Native 且启用委派能力时注入，提示词预览使用相同条件。外部 runtime 的工具、执行与恢复协议独立；[提示词边界](../internal/agents/prompts/runtime_contract.go)、[外部入口回归](../internal/agents/builder_external_test.go)覆盖写作、通用对话和游戏。模型实际接收的 schema 与行为以代码和[协作测试](../agent/tool/builtin/agent_coordination_test.go)为准，不维护第二份设计期 schema。
 
 ### Goal
 
 游戏不支持 Goal：输入框入口、API 能力和运行时构建均关闭；旧 journal 内容保留，不触发游戏自动续跑。游戏仍支持 Todo、排队、转向和暂停。
 
-Native 的 `internal/agents/lifecycle/goal.go` 委托独立 `agent/goal` 执行验收；外部的 `internal/agents/runtime/external_goal_evaluation.go` 只服务外部运行时。可以共用公开状态结构和 UI，但不共享验收执行器，也不把外部能力注入 Native Definition。
+Native 的 `internal/agents/lifecycle/goal.go` 委托独立 `agent/engine/goal` 执行验收；外部的 `internal/agents/runtime/external_goal_evaluation.go` 只服务外部运行时。可以共用公开状态结构和 UI，但不共享验收执行器，也不把外部能力注入 Native Definition。
 
 外部 Goal 暂不直接启用 provider 的自动循环。产品完成提交、待处理用户输入和暂停恢复仍需协调；当前可验证的公开协议不足以低成本替代这些边界。保留外部专用只读评估，其调用成本明确；不读取引擎私有 transcript 作为 Goal 完成依据。持久子 Agent 不在范围内。
 

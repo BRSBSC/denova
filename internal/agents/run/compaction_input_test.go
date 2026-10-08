@@ -5,10 +5,15 @@ import (
 	"strings"
 	"testing"
 
-	agent "github.com/alfredxw/denova/agent"
-	"github.com/alfredxw/denova/agent/compaction"
-	"github.com/alfredxw/denova/agent/providers"
+	"github.com/alfredxw/denova/agent"
+	agentcompaction "github.com/alfredxw/denova/agent/context/compaction"
+	agentmiddleware "github.com/alfredxw/denova/agent/engine/middleware"
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	"github.com/alfredxw/denova/agent/model/providers"
+	agentstream "github.com/alfredxw/denova/agent/model/stream"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 	agentsession "github.com/alfredxw/denova/agent/session"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 
 	"denova/internal/agents/prompts"
 )
@@ -29,22 +34,22 @@ func TestCompactionColdBatchesRespectProviderToolOverrides(t *testing.T) {
 			}
 			t.Run(limit.name+"/"+name, func(t *testing.T) {
 				capture := &compactionBoundaryModel{}
-				tools := []*agent.ToolInfo{{Name: "read", Desc: strings.Repeat("schema detail ", 500)}}
+				tools := []*agentschema.ToolInfo{{Name: "read", Desc: strings.Repeat("schema detail ", 500)}}
 				boundary := &modelInputLoggingChatModel{
 					inner: capture, agentKind: "ide", config: providers.ModelConfig{},
 					tools: tools, contextWindowTokens: limit.tokens, providerInputMaxBytes: limit.bytes,
 				}
 				payload := strings.Repeat("historical facts must survive. ", 1600)
-				source := []*agent.Message{agent.UserMessage(payload), agent.AssistantMessage("Saved chapter.", nil)}
-				snapshot := (&agent.ModelCall{
+				source := []*agentschema.Message{agentschema.UserMessage(payload), agentschema.AssistantMessage("Saved chapter.", nil)}
+				snapshot := (&agentmodel.ModelCall{
 					Model: boundary, Messages: source, Streaming: streaming,
-					Options: []agent.ModelOption{agent.WithTools(tools), agent.WithSessionKey("original-session")},
+					Options: []agentmodel.ModelOption{agentmodel.WithTools(tools), agentmodel.WithSessionKey("original-session")},
 				}).Snapshot()
-				summarizer, err := compaction.ModelSummarizer(compaction.ModelSummarizerConfig{})
+				summarizer, err := agentcompaction.ModelSummarizer(agentcompaction.ModelSummarizerConfig{})
 				if err != nil {
 					t.Fatal(err)
 				}
-				result, err := summarizer.Summarize(t.Context(), compaction.SummaryRequest{
+				result, err := summarizer.Summarize(t.Context(), agentcompaction.SummaryRequest{
 					Messages: source, ModelSnapshot: snapshot, ContextWindowTokens: limit.tokens,
 					HardLimitBytes: limit.bytes, SummaryLimitBytes: 1024,
 				})
@@ -80,19 +85,19 @@ func TestCompactionColdBatchesRespectProviderToolOverrides(t *testing.T) {
 }
 
 type compactionBoundaryModel struct {
-	inputs  [][]*agent.Message
-	options []*agent.Options
+	inputs  [][]*agentschema.Message
+	options []*agentmodel.Options
 }
 
-func (m *compactionBoundaryModel) Generate(_ context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.Message, error) {
+func (m *compactionBoundaryModel) Generate(_ context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentschema.Message, error) {
 	m.inputs = append(m.inputs, messages)
-	m.options = append(m.options, agent.GetCommonOptions(nil, options...))
-	return agent.AssistantMessage("Historical facts saved.", nil), nil
+	m.options = append(m.options, agentmodel.GetCommonOptions(nil, options...))
+	return agentschema.AssistantMessage("Historical facts saved.", nil), nil
 }
 
-func (m *compactionBoundaryModel) Stream(ctx context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+func (m *compactionBoundaryModel) Stream(ctx context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentstream.StreamReader[*agentschema.Message], error) {
 	result, err := m.Generate(ctx, messages, options...)
-	return agent.StreamReaderFromArray([]*agent.Message{result}), err
+	return agentstream.StreamReaderFromArray([]*agentschema.Message{result}), err
 }
 
 func TestOverLimitSessionCompactsAndContinuesWithProviderBoundary(t *testing.T) {
@@ -100,18 +105,18 @@ func TestOverLimitSessionCompactsAndContinuesWithProviderBoundary(t *testing.T) 
 		t.Run(mode, func(t *testing.T) {
 			ctx := t.Context()
 			capture := &compactionBoundaryModel{}
-			tool, err := agent.InferTool("read", strings.Repeat("schema detail ", 500), func(context.Context, struct{}) (string, error) {
+			tool, err := agenttool.InferTool("read", strings.Repeat("schema detail ", 500), func(context.Context, struct{}) (string, error) {
 				return "Read-only evidence.", nil
 			})
 			if err != nil {
 				t.Fatal(err)
 			}
-			tools, err := agent.StaticToolsIdentified(agent.CapabilityIdentity{Kind: "test.compaction-boundary-tools", Version: 1}, agent.ToolDefinition{
-				Tool: tool, Descriptor: agent.ToolDescriptor{
-					Source: agent.ToolSourceRead, Execution: agent.ToolExecutionParallelRead,
-					MutationScope: agent.ToolMutationNone, PostCheck: agent.ToolPostCheckNone,
-					Recovery: agent.ToolRecoveryReadOnly, ResultProjection: agent.ToolResultBoundedModelContext,
-					ResultRetention: agent.ToolResultDeferred, Steering: agent.SteeringFinishCurrent, MaxResultBytes: 1024,
+			tools, err := agenttool.StaticToolsIdentified(agentschema.CapabilityIdentity{Kind: "test.compaction-boundary-tools", Version: 1}, agenttool.ToolDefinition{
+				Tool: tool, Descriptor: agenttool.ToolDescriptor{
+					Source: agenttool.ToolSourceRead, Execution: agenttool.ToolExecutionParallelRead,
+					MutationScope: agenttool.ToolMutationNone, PostCheck: agenttool.ToolPostCheckNone,
+					Recovery: agenttool.ToolRecoveryReadOnly, ResultProjection: agentschema.ToolResultBoundedModelContext,
+					ResultRetention: agentschema.ToolResultDeferred, Steering: agenttool.SteeringFinishCurrent, MaxResultBytes: 1024,
 				},
 			})
 			if err != nil {
@@ -120,8 +125,8 @@ func TestOverLimitSessionCompactsAndContinuesWithProviderBoundary(t *testing.T) 
 			store := agentsession.Memory()
 			definition := agent.Definition{
 				Key: "compaction-boundary", Name: "writer", Model: capture, Tools: tools,
-				Middlewares: []agent.Middleware{NewModelInputLoggingMiddleware("ide", providers.ModelConfig{}, 6000, 128*1024, prompts.SystemPromptComposition{})},
-				Compaction: compaction.Standard(compaction.StandardConfig{
+				Middlewares: []agentmiddleware.Middleware{NewModelInputLoggingMiddleware("ide", providers.ModelConfig{}, 6000, 128*1024, prompts.SystemPromptComposition{})},
+				Compaction: agentcompaction.Standard(agentcompaction.StandardConfig{
 					TriggerBytes: 16 * 1024, HardLimitBytes: 128 * 1024, SummaryLimitBytes: 1024,
 					ContextWindowTokens: 6000,
 				}),
@@ -131,20 +136,20 @@ func TestOverLimitSessionCompactsAndContinuesWithProviderBoundary(t *testing.T) 
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = owner.Close(context.Background()) })
-			conversation, err := owner.Session(ctx, agent.NamedSession("overflowed-writing"))
+			conversation, err := owner.Session(ctx, agentsession.Named("overflowed-writing"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			raw := []*agent.Message{
-				agent.UserMessage(strings.Repeat("旧", 8000)), agent.AssistantMessage("First chapter saved.", nil),
-				agent.UserMessage(strings.Repeat("史", 8000)), agent.AssistantMessage("Second chapter saved.", nil),
-				agent.UserMessage("Keep the latest instruction."), agent.AssistantMessage("Latest work saved.", nil),
+			raw := []*agentschema.Message{
+				agentschema.UserMessage(strings.Repeat("旧", 8000)), agentschema.AssistantMessage("First chapter saved.", nil),
+				agentschema.UserMessage(strings.Repeat("史", 8000)), agentschema.AssistantMessage("Second chapter saved.", nil),
+				agentschema.UserMessage("Keep the latest instruction."), agentschema.AssistantMessage("Latest work saved.", nil),
 			}
 			if err := conversation.LoadCanonicalMessages(ctx, raw); err != nil {
 				t.Fatal(err)
 			}
 			if mode == "manual_restart" {
-				result, err := conversation.Compact(ctx, agent.CompactionRequest{Force: true})
+				result, err := conversation.Compact(ctx, agentcompaction.CompactionRequest{Force: true})
 				if err != nil || !result.Changed {
 					t.Fatalf("manual recovery: changed=%t error=%v", result.Changed, err)
 				}
@@ -155,7 +160,7 @@ func TestOverLimitSessionCompactsAndContinuesWithProviderBoundary(t *testing.T) 
 				if err != nil {
 					t.Fatal(err)
 				}
-				conversation, err = owner.Session(ctx, agent.NamedSession("overflowed-writing"))
+				conversation, err = owner.Session(ctx, agentsession.Named("overflowed-writing"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -165,7 +170,7 @@ func TestOverLimitSessionCompactsAndContinuesWithProviderBoundary(t *testing.T) 
 				t.Fatal(err)
 			}
 			result, err := run.Wait(ctx)
-			if err != nil || result.Status != agent.ResultCompleted {
+			if err != nil || result.Status != agentschema.ResultCompleted {
 				t.Fatalf("continuation: result=%+v error=%v", result, err)
 			}
 			snapshot, err := conversation.Snapshot(ctx)

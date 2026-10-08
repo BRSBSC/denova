@@ -1,4 +1,6 @@
 import { lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { BookCreationProvider } from './book-creation'
+import { PluginWorkspaceProvider } from '@/features/platform/PluginWorkspace'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
 import { WRITING_COMPOSER_SETTING_DEFAULTS } from '@/components/Chat/AgentPanel'
@@ -20,6 +22,7 @@ import { useWritingChangeReview } from '@/features/changes/use-writing-change-re
 import type { ReviewFeedbackBatch, ReviewFeedbackSelection } from '@/features/changes/agent/ReviewFeedbackTray'
 import type { WorkspaceChangeMetadata } from '@/features/changes/types'
 import { useDocumentReview } from '@/features/document-review/use-document-review'
+import { useLoreCategories } from '@/features/lore/use-lore-categories'
 import { loreImportanceLabel, loreLoadModeLabel, loreTypeLabel } from '@/features/lore/options'
 import { tabKey } from './TabController'
 import { WorkbenchShell } from './WorkbenchShell'
@@ -124,7 +127,7 @@ export function ModeRouter(props: ModeRouterProps) {
     onQuickSwitchBook,
     onBeforeWorkspaceSwitch,
     onBooksChange,
-    onAgentChatBookCreated,
+    onBookCreated,
     onOpenCharacterCardImport,
     onSetSidebarView,
     onSelectSearchResult,
@@ -172,6 +175,7 @@ export function ModeRouter(props: ModeRouterProps) {
     onExitChatPlanMode,
     onDismissNotice,
   } = props
+  const { categories: loreCategories } = useLoreCategories(projectId)
   const resourceTarget = useMemo(
     () => projectId.trim() ? projectResourceTarget(projectId) : GLOBAL_RESOURCE_TARGET,
     [projectId],
@@ -266,6 +270,11 @@ export function ModeRouter(props: ModeRouterProps) {
     return onBeforeWorkspaceSwitch()
   }, [flushAgentChatDrafts, flushComposerSettingsBestEffort, flushLoreLibraryDraft, onBeforeWorkspaceSwitch])
 
+  const bookCreation = useMemo(() => ({
+    beforeCreate: flushBeforeWorkspaceSwitch,
+    onCreated: onBookCreated,
+  }), [flushBeforeWorkspaceSwitch, onBookCreated])
+
   const quickSwitchBook = useCallback(async (path: string): Promise<boolean> => {
     flushComposerSettingsBestEffort()
     if (!(await flushLoreLibraryDraft())) return false
@@ -305,13 +314,13 @@ export function ModeRouter(props: ModeRouterProps) {
     value: item.id,
     label: item.name,
     description: t('planning.loreDescription', {
-      type: loreTypeLabel(item.type, t),
+      type: loreCategories.find((category) => category.id === item.type)?.name || loreTypeLabel(item.type, t),
       importance: loreImportanceLabel(item.importance, t),
       loadMode: loreLoadModeLabel(item.load_mode, t),
       tags: item.tags?.length ? ` · ${item.tags.join(i18n.language.startsWith('zh') ? '、' : ', ')}` : '',
       brief: item.brief_description ? t('planning.loreBrief', { brief: item.brief_description }) : '',
     }),
-  })), [i18n.language, loreItems, t])
+  })), [i18n.language, loreItems, loreCategories, t])
   const loreEmpty = Boolean(workspace) && loreItems.length === 0
   const selectWorkspacePath = useCallback((path: string) => {
     if (isLoreItemsPath(path)) return onOpenLoreTab()
@@ -534,9 +543,6 @@ export function ModeRouter(props: ModeRouterProps) {
   const openAgentChangeReview = useCallback((reviewThreadID: string, groupID: string) => {
     void openChangeReview(reviewThreadID, groupID)
   }, [openChangeReview])
-  const persistNarrativeStyle = useCallback((id: string) => (
-    composerSettings.persist('interactive_story_teller_id', id)
-  ), [composerSettings.persist])
   const readingTypography = useMemo(() => ({
     fontFamily: readingFontFamily,
     fontSize: readingFontSize,
@@ -742,7 +748,6 @@ export function ModeRouter(props: ModeRouterProps) {
             active={presentedMainRoute === 'interactive'}
             recentNarrativeStyleID={composerSettings.values.interactive_story_teller_id}
             narrativeStyleLoading={composerSettings.loading}
-            onNarrativeStyleChange={persistNarrativeStyle}
             imagePresets={imagePresets}
             loreEmpty={loreEmpty}
             loreItems={loreItems}
@@ -806,7 +811,7 @@ export function ModeRouter(props: ModeRouterProps) {
         autoSaveDelayMs={editorAutoSaveDelayMs}
         readingTypography={readingTypography}
         onBeforeCreateBook={flushBeforeWorkspaceSwitch}
-        onBookCreated={onAgentChatBookCreated}
+        onBookCreated={onBookCreated}
         onBooksChange={onBooksChange}
         onFlushHandlerChange={handleAgentChatFlushHandlerChange}
         onWorkspaceChanged={onWorkspaceChanged}
@@ -818,6 +823,7 @@ export function ModeRouter(props: ModeRouterProps) {
   return (
     <TrajectoryNavigationProvider value={trajectoryNavigation}>
       <ToolNavigationProvider value={toolNavigation}>
+        <PluginWorkspaceProvider>
         <WorkbenchShell
           mode={mode}
           presentedLayout={presentedLayout}
@@ -832,7 +838,7 @@ export function ModeRouter(props: ModeRouterProps) {
           settingsOpen={settingsOpen}
           developerMode={developerMode}
           sidebar={sidebar}
-          main={main}
+          main={<BookCreationProvider value={bookCreation}>{main}</BookCreationProvider>}
           rightPanelContent={writingAgent.content}
           notice={notice}
           onSetMode={onSetMode}
@@ -844,6 +850,7 @@ export function ModeRouter(props: ModeRouterProps) {
           onDismissNotice={onDismissNotice}
         />
         {writingAgent.portal}
+        </PluginWorkspaceProvider>
       </ToolNavigationProvider>
     </TrajectoryNavigationProvider>
   )

@@ -2,7 +2,6 @@ package external
 
 import (
 	"context"
-	"denova/internal/observability"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +15,9 @@ import (
 	"denova/internal/agents/session"
 	agenttool "denova/internal/agents/tool"
 	"denova/internal/i18n"
-	agent "github.com/alfredxw/denova/agent"
+	"denova/internal/observability"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 // Operation is one accepted command. Wait executes at most once and must run
@@ -36,7 +37,7 @@ type Operation struct {
 	workers         sync.WaitGroup
 	runContext      context.Context
 	mutations       []agenttool.Mutation
-	usage           *agent.TokenUsage
+	usage           *agentschema.TokenUsage
 	output          strings.Builder
 }
 
@@ -138,7 +139,7 @@ func (operation *Operation) Wait(ctx context.Context) agentrun.Outcome {
 		}
 		operation.outcome = projectOutcome(settled, result.Text, runErr)
 		if settled == externaljournal.Completed && runtimeSession != nil && operation.request.AfterCommit != nil {
-			runtimeSession.EvaluationUsage = func(ctx context.Context, usage *agent.TokenUsage) error {
+			runtimeSession.EvaluationUsage = func(ctx context.Context, usage *agentschema.TokenUsage) error {
 				display := UsageDisplay(usage)
 				display.RunID, display.AgentKind = operation.id, operation.request.ToolPolicy.AgentKind
 				if err := operation.request.Session.AppendDisplayEvent(display); err != nil {
@@ -289,7 +290,7 @@ func (operation *Operation) close(ctx context.Context, target externaljournal.St
 		transaction := session.ExternalTransaction{}
 		if status == externaljournal.Completed || result.Text != "" {
 			messageID = operation.id + "-output"
-			transaction.Message = &agent.Message{Role: agent.Assistant, Content: result.Text}
+			transaction.Message = &agentschema.Message{Role: agentschema.Assistant, Content: result.Text}
 			transaction.Metadata = session.MessageMetadata{MessageID: messageID, RunID: operation.id,
 				AgentOperationID: operation.id, AgentCommandID: operation.request.CommandID, AgentCycle: 1, AgentKind: state.Config.AgentKind}
 		}
@@ -321,12 +322,12 @@ func (operation *Operation) close(ctx context.Context, target externaljournal.St
 	return status, err
 }
 
-func (operation *Operation) addUsage(usage *agent.TokenUsage) {
+func (operation *Operation) addUsage(usage *agentschema.TokenUsage) {
 	if usage == nil {
 		return
 	}
 	if operation.usage == nil {
-		operation.usage = &agent.TokenUsage{}
+		operation.usage = &agentschema.TokenUsage{}
 	}
 	operation.usage.PromptTokens += usage.PromptTokens
 	operation.usage.PromptTokenDetails.CachedTokens += usage.PromptTokenDetails.CachedTokens

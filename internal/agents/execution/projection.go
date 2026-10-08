@@ -2,10 +2,15 @@ package execution
 
 import (
 	"context"
-	"denova/internal/agents/run"
 	"errors"
 
-	agent "github.com/alfredxw/denova/agent"
+	agentrun "denova/internal/agents/run"
+
+	"github.com/alfredxw/denova/agent"
+	agentgoal "github.com/alfredxw/denova/agent/engine/goal"
+	agentinteraction "github.com/alfredxw/denova/agent/lifecycle/interaction"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agentsession "github.com/alfredxw/denova/agent/session"
 )
 
 // ErrRuntimeProjectionUnavailable means this Service has no live Agent owner.
@@ -21,18 +26,18 @@ func (s *Runtime) RuntimeStatusProjection(ctx context.Context, options agentrun.
 }
 
 // Goal returns the public Agent-owned Goal state for one exact Denova binding.
-func (s *Runtime) Goal(ctx context.Context, options agentrun.Options) (agent.GoalState, bool, error) {
+func (s *Runtime) Goal(ctx context.Context, options agentrun.Options) (agentgoal.GoalState, bool, error) {
 	if s == nil || s.public == nil {
-		return agent.GoalState{}, false, ErrRuntimeProjectionUnavailable
+		return agentgoal.GoalState{}, false, ErrRuntimeProjectionUnavailable
 	}
 	return s.public.goal(ctx, options)
 }
 
 // UpdateGoal applies one revisioned mutation through the public Session
 // capability. Product stores never mirror this state.
-func (s *Runtime) UpdateGoal(ctx context.Context, options agentrun.Options, mutation agent.GoalMutation) (agent.GoalState, error) {
+func (s *Runtime) UpdateGoal(ctx context.Context, options agentrun.Options, mutation agentschema.GoalMutation) (agentgoal.GoalState, error) {
 	if s == nil || s.public == nil {
-		return agent.GoalState{}, ErrRuntimeProjectionUnavailable
+		return agentgoal.GoalState{}, ErrRuntimeProjectionUnavailable
 	}
 	return s.public.updateGoal(ctx, options, mutation)
 }
@@ -50,22 +55,22 @@ func (s *Runtime) ResolveInteraction(
 	ctx context.Context,
 	options agentrun.Options,
 	interactionID string,
-	response agent.InteractionResponse,
-) (agent.InteractionRequest, agent.InteractionResolution, error) {
+	response agentinteraction.InteractionResponse,
+) (agentinteraction.InteractionRequest, agentinteraction.InteractionResolution, error) {
 	if s == nil || s.public == nil {
-		return agent.InteractionRequest{}, agent.InteractionResolution{}, ErrRuntimeProjectionUnavailable
+		return agentinteraction.InteractionRequest{}, agentinteraction.InteractionResolution{}, ErrRuntimeProjectionUnavailable
 	}
 	return s.public.resolveInteraction(ctx, options, interactionID, response)
 }
 
-func (s *Runtime) closeRuntimeBindings(ctx context.Context, selector agent.SessionSelector) error {
+func (s *Runtime) closeRuntimeBindings(ctx context.Context, selector agentsession.Selector) error {
 	if s == nil || s.public == nil {
 		return ErrRuntimeProjectionUnavailable
 	}
 	return s.public.closeSessions(ctx, selector)
 }
 
-func (s *Runtime) deleteRuntimeBindings(ctx context.Context, selector agent.SessionSelector) error {
+func (s *Runtime) deleteRuntimeBindings(ctx context.Context, selector agentsession.Selector) error {
 	if s == nil || s.public == nil {
 		return ErrRuntimeProjectionUnavailable
 	}
@@ -101,7 +106,7 @@ func (s *Runtime) CloseProjectSessionBindings(ctx context.Context, projectID, se
 
 // ProjectSessionBindings snapshots all root streams in a product conversation.
 // Hold product admission until the journal and these roots' children are deleted.
-func (s *Runtime) ProjectSessionBindings(ctx context.Context, projectID, sessionID string) ([]agent.SessionKey, error) {
+func (s *Runtime) ProjectSessionBindings(ctx context.Context, projectID, sessionID string) ([]agentsession.Key, error) {
 	if s == nil || s.public == nil || s.public.agent == nil {
 		return nil, ErrRuntimeProjectionUnavailable
 	}
@@ -114,12 +119,12 @@ func (s *Runtime) ProjectSessionBindings(ctx context.Context, projectID, session
 
 // DeleteSessionChildren removes a root's entire persistent child tree without
 // mutating its product-owned journal. The root may already have been deleted.
-func (s *Runtime) DeleteSessionChildren(ctx context.Context, root agent.SessionKey) error {
+func (s *Runtime) DeleteSessionChildren(ctx context.Context, root agentsession.Key) error {
 	attributes, err := agent.ChildSessionAttributes(root)
 	if err != nil {
 		return err
 	}
-	return s.deleteRuntimeBindings(ctx, agent.SessionSelector{Attributes: attributes})
+	return s.deleteRuntimeBindings(ctx, agentsession.Selector{Attributes: attributes})
 }
 
 // CloseProjectBindings evicts all runtime actors owned by a Project.
@@ -158,7 +163,7 @@ func (s *Runtime) DeleteSessionBindings(ctx context.Context, agentKind, projectI
 
 // CloseStoryBindings evicts every Agent binding for an exact story scope.
 func (s *Runtime) CloseStoryBindings(ctx context.Context, projectID, storyID, branchID string) error {
-	return s.forEachStorySelector(projectID, storyID, branchID, func(selector agent.SessionSelector) error {
+	return s.forEachStorySelector(projectID, storyID, branchID, func(selector agentsession.Selector) error {
 		return s.closeRuntimeBindings(ctx, selector)
 	})
 }
@@ -166,12 +171,12 @@ func (s *Runtime) CloseStoryBindings(ctx context.Context, projectID, storyID, br
 // DeleteStoryBindings permanently removes every public game/director Session
 // in the selected story or branch scope.
 func (s *Runtime) DeleteStoryBindings(ctx context.Context, projectID, storyID, branchID string) error {
-	return s.forEachStorySelector(projectID, storyID, branchID, func(selector agent.SessionSelector) error {
+	return s.forEachStorySelector(projectID, storyID, branchID, func(selector agentsession.Selector) error {
 		return s.deleteRuntimeBindings(ctx, selector)
 	})
 }
 
-func (s *Runtime) forEachStorySelector(projectID, storyID, branchID string, apply func(agent.SessionSelector) error) error {
+func (s *Runtime) forEachStorySelector(projectID, storyID, branchID string, apply func(agentsession.Selector) error) error {
 	base, err := agentrun.StoryBindingSelector(projectID, storyID, branchID)
 	if err != nil {
 		return err

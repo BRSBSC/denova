@@ -11,6 +11,7 @@ export interface SpeechSettings {
 }
 
 export interface Settings {
+  game_creation_defaults?: import('@/features/interactive/game-creation-defaults').GameCreationDefaults
   speech?: SpeechSettings
   agent_runtimes?: Partial<Record<'ide' | 'general' | 'interactive_story', import('@/features/agent-runtime/types').RuntimePreferences>>
   openai_api_key?: string
@@ -89,7 +90,11 @@ export interface Settings {
   agent_quick_prompts?: AgentQuickPromptRegistry
   agent_quick_prompts_in_commands?: boolean | null
   interactive_stage_font_size?: number | null
+  interactive_stage_scrim_opacity?: number | null
   interactive_stage_line_height?: number | null
+  interactive_stage_text_max_width?: number | null
+  interactive_stage_character_layout?: StageCharacterLayout | null
+  interactive_stage_character_size?: number | null
 }
 
 export interface LabSettings {
@@ -651,6 +656,7 @@ export interface UpdateInstallResult {
 }
 
 export interface UpdateApplyResult {
+  id: string
   status: 'restarting' | string
   version: string
   log_path?: string
@@ -664,3 +670,15 @@ export interface UpdateInstallProgress {
   total_bytes?: number
   percent?: number
 }
+
+export interface UpdateStatus {
+  current_version: string
+  id?: string
+  version?: string
+  phase: 'idle' | 'staged' | 'waiting' | 'backing_up' | 'applying' | 'starting' | 'rolling_back' | 'succeeded' | 'failed'
+  error?: string
+  log_path?: string
+}
+
+/** Display-only arrangement; does not change the saved scene or Agent choices. */
+export type StageCharacterLayout = 'center' | 'left' | 'right' | 'sides'

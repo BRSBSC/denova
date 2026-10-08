@@ -21,7 +21,8 @@ import (
 	appagentruntime "denova/internal/app/agentruntime"
 	conversationapp "denova/internal/app/conversation"
 	apptask "denova/internal/app/task"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 // StartTask starts one project-scoped turn without switching the foreground
@@ -288,7 +289,7 @@ func (service *Service) AcceptTurn(ctx context.Context, input TurnRequest) (*Acc
 		if errors.Is(err, agentrun.ErrInvalidCommand) {
 			return nil, fmt.Errorf("%w: command_id=%q", apptask.ErrCommandConflict, request.CommandID)
 		}
-		if errors.Is(err, agent.ErrSessionBusy) {
+		if errors.Is(err, agentschema.ErrSessionBusy) {
 			return nil, agentruntime.ErrOperationActive
 		}
 		return nil, err

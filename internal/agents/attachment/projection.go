@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	"denova/internal/portablepath"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 // ProjectFiles resolves canonical copies only within their owning conversation.
 // The returned paths are for the current host and are never serialized.
-func ProjectFiles(stateRoot string, scope Scope, files []agent.Attachment) ([]agent.Attachment, error) {
-	projected := append([]agent.Attachment(nil), files...)
+func ProjectFiles(stateRoot string, scope Scope, files []agentschema.Attachment) ([]agentschema.Attachment, error) {
+	projected := append([]agentschema.Attachment(nil), files...)
 	prefix := "attachments/v1/" + scopeKey(scope) + "/"
 	for index := range projected {
 		file := &projected[index]

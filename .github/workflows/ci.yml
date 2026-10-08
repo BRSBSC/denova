@@ -39,13 +39,16 @@ jobs:
           git cat-file -e "$BASE" 2>/dev/null || git fetch --depth=1 origin "$BASE"
           git diff --check "$BASE" HEAD
           files=$(git diff --name-only "$BASE" HEAD)
+          # Read the list from a here-string, not a pipe: grep -q exits at its
+          # first match, and with pipefail a list larger than the pipe buffer
+          # then fails the writer and silently skips every suite.
           # Skill Markdown is executable product context and is not excluded.
-          if printf '%s\n' "$files" | grep -qvE '^(docs/|README(\.en)?\.md$|AGENTS\.md$|CHANGELOG\.md$|LICENSE$)'; then
+          if grep -qvE '^(docs/|README(\.en)?\.md$|AGENTS\.md$|CHANGELOG\.md$|LICENSE$)' <<<"$files"; then
             echo 'code=true' >> "$GITHUB_OUTPUT"
           else
             echo 'code=false' >> "$GITHUB_OUTPUT"
           fi
-          if printf '%s\n' "$files" | grep -qE '^(agent/)?go\.(mod|sum)$'; then
+          if grep -qE '^(agent/)?go\.(mod|sum)$' <<<"$files"; then
             echo 'manifests=true' >> "$GITHUB_OUTPUT"
           else
             echo 'manifests=false' >> "$GITHUB_OUTPUT"
@@ -84,6 +87,26 @@ jobs:
         run: |
           scripts/install_test.sh
           bash scripts/build-github-release_test.sh
+
+  updater:
+    name: Native updater (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            agent/go.sum
+      - run: go test -tags integration ./internal/update
+      - run: go vet ./internal/update
 
   unit:
     name: Frontend unit tests
@@ -165,7 +188,7 @@ jobs:
   test-build:
     name: Test and build
     if: ${{ always() }}
-    needs: [changes, go, unit, build, browser-tests]
+    needs: [changes, go, updater, unit, build, browser-tests]
     runs-on: ubuntu-latest
     steps:
       - name: Require applicable suites to pass
@@ -173,13 +196,14 @@ jobs:
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
           GO: ${{ needs.go.result }}
+          UPDATER: ${{ needs.updater.result }}
           UNIT: ${{ needs.unit.result }}
           BUILD: ${{ needs.build.result }}
           BROWSER: ${{ needs.browser-tests.result }}
         run: |
           test "$CHANGES" = success
           if [[ "$CODE" == true ]]; then
-            for result in "$GO" "$UNIT" "$BUILD" "$BROWSER"; do
+            for result in "$GO" "$UPDATER" "$UNIT" "$BUILD" "$BROWSER"; do
               test "$result" = success
             done
           fi

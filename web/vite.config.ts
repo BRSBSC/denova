@@ -75,6 +75,9 @@ export default defineConfig({
             { name: 'pierre-diffs', test: /node_modules[\\/]@pierre[\\/]diffs[\\/]/, priority: 50 },
             { name: 'shiki', test: /node_modules[\\/](?:shiki|@shikijs)[\\/]/, priority: 40 },
             { name: 'monaco', test: /node_modules[\\/](?:monaco-editor|@monaco-editor)[\\/]/, priority: 30 },
+            // Radix primitives initialize shared contexts at module scope. Splitting
+            // them by size can call those factories before their chunk initializes.
+            { name: 'radix', test: /node_modules[\\/](?:radix-ui|@radix-ui)[\\/]/, priority: 25 },
             { name: 'ai-sdk', test: /node_modules[\\/](?:ai|@ai-sdk)[\\/]/, priority: 20 },
             { name: 'markdown', test: /node_modules[\\/](?:react-markdown|remark-|rehype-|micromark|mdast|hast|unified)[^\\/]*[\\/]/, priority: 10 },
             { name: 'vendor', test: /node_modules[\\/]/, maxSize: 450 * 1024, priority: 1, entriesAware: true },
@@ -84,6 +87,9 @@ export default defineConfig({
     },
   },
   server: {
+    // Test workspaces contain their own HTML/JS packages. Their writes must not
+    // reload the host application in the middle of a browser interaction.
+    watch: { ignored: ['**/test-results/**', '**/playwright-report/**'] },
     proxy: {
       '/api': {
         target: `http://127.0.0.1:${backendPort}`,
@@ -95,6 +101,13 @@ export default defineConfig({
         // AgentChat terminals attach over /api/terminal/sessions/:id/attach, so the dev proxy
         // has to forward WebSocket upgrade requests as well.
         ws: true,
+        configure(proxy) {
+          // The proxy's WebSocket xfwd path omits Host. Preserve the actual
+          // browser endpoint so the backend can enforce the same origin rule.
+          proxy.on('proxyReqWs', (outgoing, incoming) => {
+            outgoing.setHeader('X-Forwarded-Host', incoming.headers.host ?? '')
+          })
+        },
       },
     },
   },

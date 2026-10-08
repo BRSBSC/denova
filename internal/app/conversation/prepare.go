@@ -96,12 +96,8 @@ func prepareWriting(ctx context.Context, runtime Runtime, request agentchat.Chat
 	if err := reviewapp.Resolve(ctx, ReviewRuntime(runtime), &request); err != nil {
 		return Runtime{}, request, err
 	}
-	residentBytes, err := booklore.NewStore(runtime.Workspace).ResidentContentBytes()
-	if err != nil {
-		return Runtime{}, request, fmt.Errorf("read resident lore budget / 读取常驻资料预算失败: %w", err)
-	}
-	if residentBytes > booklore.ResidentLoreSafetyMaxBytes {
-		return Runtime{}, request, fmt.Errorf("resident lore is unexpectedly large (%d KB); check for oversized resident files / 常驻资料正文异常过大（%d KB），请检查是否误将大型文件设为常驻资料", (residentBytes+1023)/1024, (residentBytes+1023)/1024)
+	if _, err := booklore.NewStore(runtime.Workspace).ProgressiveContextMarkdown(); err != nil {
+		return Runtime{}, request, fmt.Errorf("prepare lore index context: %w", err)
 	}
 	if _, err := agentconversation.ApplySession(runtime.Session, &runtime.Config, runtime.AgentKind); err != nil {
 		return Runtime{}, request, err

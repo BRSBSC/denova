@@ -42,7 +42,9 @@ for (const product of ['general', 'writing', 'game'] as const) {
       await submitAgentChatMessage(page, composer, `Keep task A waiting. ${marker}`)
       await expect.poll(async () => (await getModelStatus(request)).delayed_waiting_by_marker[marker] ?? 0).toBe(1)
       await expect.poll(() => activeURL).not.toBe('')
+      await expect.poll(async () => (await readActive()).phase).toBe('running')
       const taskA = await readActive()
+      expect(taskA.active_operation_id).not.toBe('')
       await expect(page.locator('[data-action="stop"]').filter({ visible: true })).toBeEnabled()
       await expect(composer).toHaveText('')
       const queue = page.getByRole('region', { name: '排队中的指令' }).filter({ visible: true })
@@ -70,6 +72,10 @@ for (const product of ['general', 'writing', 'game'] as const) {
       await expect.poll(async () => (await readActive()).queue?.length).toBe(2)
       await submitAgentChatMessage(page, composer, `Keep task B waiting. ${marker}`)
       await expect.poll(async () => (await getModelStatus(request)).delayed_waiting_by_marker[marker] ?? 0).toBe(1)
+      await expect.poll(async () => {
+        const active = await readActive()
+        return active.phase === 'running' && active.active_operation_id !== taskA.active_operation_id
+      }).toBe(true)
       const taskB = await readActive()
       expect(taskB.active_operation_id).not.toBe(taskA.active_operation_id)
       expect(taskB.queue.every((item: { operation_id: string }) => item.operation_id === taskA.active_operation_id)).toBe(true)

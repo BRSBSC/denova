@@ -1,5 +1,5 @@
 import { APIError, fetchAPI, jsonHeaders, parseSSEStream, readErrorMessage, requestJSON } from '@/lib/api-client'
-import type { ComfyUIWorkflowCatalog, ComfyUIWorkflowSnapshot, ImageAPIEndpointSettings, ImageAPIProfileSettings, ImagePingResult, LayeredSettings, ModelCatalog, ModelDiscoveryResult, ModelEndpointSettings, ModelPingResult, ModelProfileSettings, SettingsLayer, UpdateApplyResult, UpdateCheckResult, UpdateInstallResult } from './types'
+import type { ComfyUIWorkflowCatalog, ComfyUIWorkflowSnapshot, ImageAPIEndpointSettings, ImageAPIProfileSettings, ImagePingResult, LayeredSettings, ModelCatalog, ModelDiscoveryResult, ModelEndpointSettings, ModelPingResult, ModelProfileSettings, SettingsLayer, UpdateStatus, UpdateApplyResult, UpdateCheckResult, UpdateInstallResult } from './types'
 import type { SSEEvent } from '@/lib/api-client'
 import { projectAPIPath } from '@/lib/api-client/project-scope'
 import { queryClient } from '@/lib/query-client'
@@ -193,4 +193,8 @@ export function loadComfyUIWorkflow(endpoint: ImageAPIEndpointSettings, profile:
     body: JSON.stringify({ endpoint, profile, path }),
     signal,
   })
+}
+
+export function getUpdateStatus(signal?: AbortSignal): Promise<UpdateStatus> {
+  return requestJSON('/api/update/status', { signal, cache: 'no-store' })
 }

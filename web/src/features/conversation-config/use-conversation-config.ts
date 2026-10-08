@@ -109,9 +109,9 @@ export function useConversationConfig(binding?: ConversationConfigBinding): Conv
   }, [bindingKey, source])
 
   useEffect(() => {
-    if (snapshot?.revision !== 0) return
+    if (snapshot?.revision !== 0 && !error) return
     return subscribeSettingsTarget(GLOBAL_SETTINGS_TARGET, () => { void reload() })
-  }, [reload, snapshot?.revision])
+  }, [error, reload, snapshot?.revision])
 
   const patch = useCallback(async (changes: ConversationConfigChanges) => {
     if (!normalizedBinding || savingRef.current || !hasChanges(changes)) return false

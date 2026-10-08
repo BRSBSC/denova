@@ -1,4 +1,5 @@
-import { Children, Fragment, cloneElement, isValidElement, memo, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizedMessageState } from './VirtualizedMessageState'
+import { Children, Fragment, cloneElement, isValidElement, memo, useContext, useLayoutEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { math } from '@streamdown/math'
@@ -230,9 +231,9 @@ export function ThinkingBlock({ projectId, message, content, streaming, showAgen
   const { t } = useTranslation()
   const preview = agentContentPreview(content)
   const autoExpandThinking = useContext(ThinkingExpansionPreference)
-  const [expanded, setExpanded] = useState(streaming && autoExpandThinking)
-  const userToggledRef = useRef(false)
-  const wasStreamingRef = useRef(streaming)
+  const [expanded, setExpanded] = useVirtualizedMessageState('thinking-expanded', streaming && autoExpandThinking)
+  const [userToggled, setUserToggled] = useVirtualizedMessageState('thinking-toggled', false)
+  const [wasStreaming, setWasStreaming] = useVirtualizedMessageState('thinking-streaming', streaming)
   const contentScrollLock = useBottomScrollLock<HTMLDivElement>({
     enabled: streaming && expanded,
     resetKey: `${message.id || message.created_at || 'thinking'}:thinking-stream`,
@@ -240,20 +241,19 @@ export function ThinkingBlock({ projectId, message, content, streaming, showAgen
   })
 
   useLayoutEffect(() => {
-    const wasStreaming = wasStreamingRef.current
-    wasStreamingRef.current = streaming
+    setWasStreaming(streaming)
     if (!wasStreaming && streaming) {
-      userToggledRef.current = false
+      setUserToggled(false)
       setExpanded(autoExpandThinking)
-    } else if (streaming && !userToggledRef.current) {
+    } else if (streaming && !userToggled) {
       setExpanded(autoExpandThinking)
-    } else if (wasStreaming && !streaming && !userToggledRef.current) {
+    } else if (wasStreaming && !streaming && !userToggled) {
       setExpanded(false)
     }
   }, [autoExpandThinking, streaming])
 
   const handleOpenChange = (open: boolean) => {
-    userToggledRef.current = true
+    setUserToggled(true)
     setExpanded(open)
   }
 

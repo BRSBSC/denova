@@ -1,6 +1,7 @@
 package versions
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -134,7 +135,7 @@ func TestGoGitVersionCreateDiffAndRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status, err := service.Status(settings)
+	status, err := service.Status(context.Background(), settings)
 	if err != nil {
 		t.Fatalf("Status failed: %v", err)
 	}
@@ -173,7 +174,7 @@ func TestGoGitVersionCreateDiffAndRestore(t *testing.T) {
 		t.Fatalf("restore should not create .nova/versions metadata directory, err=%v", err)
 	}
 
-	cleanStatus, err := service.Status(settings)
+	cleanStatus, err := service.Status(context.Background(), settings)
 	if err != nil {
 		t.Fatalf("Status after restore failed: %v", err)
 	}
@@ -292,7 +293,7 @@ func TestGoGitVersionTracksNovaDeletesWhenGitIgnored(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, ".nova", "lore", "items.json")); err != nil {
 		t.Fatal(err)
 	}
-	status, err := service.Status(settings)
+	status, err := service.Status(context.Background(), settings)
 	if err != nil {
 		t.Fatalf("Status failed: %v", err)
 	}
@@ -334,7 +335,7 @@ func TestGoGitVersionExcludesRunLedgers(t *testing.T) {
 	}
 
 	writeFile(t, dir, ".nova/runs/run-2.jsonl", `{"type":"run_finished"}`)
-	status, err := service.Status(settings)
+	status, err := service.Status(context.Background(), settings)
 	if err != nil {
 		t.Fatalf("Status failed: %v", err)
 	}
@@ -432,7 +433,7 @@ func TestGoGitVersionExcludesInteractiveData(t *testing.T) {
 	}
 
 	writeFile(t, dir, ".nova/interactive/stories/story-2.json", `{"title":"新故事"}`)
-	status, err := service.Status(settings)
+	status, err := service.Status(context.Background(), settings)
 	if err != nil {
 		t.Fatalf("Status failed: %v", err)
 	}
@@ -487,7 +488,7 @@ func TestGoGitVersionRestorePathsKeepsCurrentHead(t *testing.T) {
 		t.Fatalf("file missing in target should be removed, err=%v", err)
 	}
 
-	status, err := service.Status(settings)
+	status, err := service.Status(context.Background(), settings)
 	if err != nil {
 		t.Fatalf("Status after path restore failed: %v", err)
 	}
@@ -543,7 +544,7 @@ func TestGoGitVersionRestoreIgnoredLorePath(t *testing.T) {
 	if got := readFile(t, dir, ".nova/lore/items.json"); got != `["old"]` {
 		t.Fatalf("restored lore = %q", got)
 	}
-	status, err := service.Status(settings)
+	status, err := service.Status(context.Background(), settings)
 	if err != nil {
 		t.Fatalf("Status failed: %v", err)
 	}
@@ -577,7 +578,7 @@ func TestGoGitVersionRestorePublicLorePath(t *testing.T) {
 	if got := readFile(t, dir, lorePath); got != oldCollection {
 		t.Fatalf("restored public Lore = %q", got)
 	}
-	status, err := service.Status(settings)
+	status, err := service.Status(context.Background(), settings)
 	if err != nil {
 		t.Fatalf("Status failed: %v", err)
 	}

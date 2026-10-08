@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"denova/internal/assetstore"
 	"denova/internal/book/versions"
 	workspacelayout "denova/internal/workspace"
 )
@@ -49,6 +50,9 @@ func (registry *Registry) EnsureStore(record Record) (Layout, error) {
 		return Layout{}, err
 	}
 	if complete {
+		if layout.Type == TypeBook {
+			return layout, assetstore.Migrate(layout.ContentRoot, layout.StoreRoot)
+		}
 		return layout, nil
 	}
 	legacy := []struct {
@@ -102,6 +106,9 @@ func (registry *Registry) EnsureStore(record Record) (Layout, error) {
 	}
 	if err := writeFileAtomic(receiptPath, append(raw, '\n'), 0o600); err != nil {
 		return Layout{}, fmt.Errorf("write Project Store migration receipt: %w", err)
+	}
+	if layout.Type == TypeBook {
+		return layout, assetstore.Migrate(layout.ContentRoot, layout.StoreRoot)
 	}
 	return layout, nil
 }

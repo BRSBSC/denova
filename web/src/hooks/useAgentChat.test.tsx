@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import v8 from 'node:v8'
 import { runInNewContext } from 'node:vm'
 import { act, renderHook, waitFor } from '@testing-library/react'

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/config"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 // AgentSessionID resolves the fixed journal session for a built-in background Agent.
@@ -53,13 +53,13 @@ func PersistAgentCall(store *Store, agentKind, instruction, response string) err
 	if instruction == "" {
 		instruction = "(empty input)"
 	}
-	if err := sess.Append(agent.UserMessage(instruction)); err != nil {
+	if err := sess.Append(agentschema.UserMessage(instruction)); err != nil {
 		return fmt.Errorf("write Agent input: %w", err)
 	}
 	if response == "" {
 		response = "(empty output)"
 	}
-	if err := sess.Append(agent.AssistantMessage(response, nil)); err != nil {
+	if err := sess.Append(agentschema.AssistantMessage(response, nil)); err != nil {
 		return fmt.Errorf("write Agent output: %w", err)
 	}
 	return nil

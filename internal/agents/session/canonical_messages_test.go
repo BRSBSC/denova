@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	agent "github.com/alfredxw/denova/agent"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 func TestReadCanonicalMessagesRebuildsBeyondResidentWindow(t *testing.T) {
@@ -20,9 +20,9 @@ func TestReadCanonicalMessagesRebuildsBeyondResidentWindow(t *testing.T) {
 	}
 
 	total := sessionRecentTransactionLimit + 25
-	batch := make([]*agent.Message, total)
+	batch := make([]*agentschema.Message, total)
 	for index := 0; index < total; index++ {
-		batch[index] = agent.UserMessage(fmt.Sprintf("message-%03d", index))
+		batch[index] = agentschema.UserMessage(fmt.Sprintf("message-%03d", index))
 	}
 	if err := sess.AppendContextMessages(batch...); err != nil {
 		t.Fatal(err)
@@ -61,13 +61,13 @@ func TestReadCanonicalMessagesStartsAfterLatestClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := sess.Append(agent.UserMessage("before clear")); err != nil {
+	if err := sess.Append(agentschema.UserMessage("before clear")); err != nil {
 		t.Fatal(err)
 	}
 	if err := sess.Clear(); err != nil {
 		t.Fatal(err)
 	}
-	if err := sess.Append(agent.UserMessage("after clear")); err != nil {
+	if err := sess.Append(agentschema.UserMessage("after clear")); err != nil {
 		t.Fatal(err)
 	}
 

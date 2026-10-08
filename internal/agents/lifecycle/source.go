@@ -10,7 +10,9 @@ import (
 	agentchat "denova/internal/agents/chat"
 	agentrun "denova/internal/agents/run"
 
-	agent "github.com/alfredxw/denova/agent"
+	"github.com/alfredxw/denova/agent"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agentcanonical "github.com/alfredxw/denova/agent/session/canonical"
 )
 
 const turnHostDataType = "denova.turn"
@@ -74,7 +76,7 @@ func TurnInput(kind TurnKind, request agentchat.ChatRequest, options agentrun.Op
 		return agent.Input{}, fmt.Errorf("encode Denova Agent turn HostData: %w", err)
 	}
 	return agent.Input{
-		Text: caller.Message, Attachments: append([]agent.Attachment(nil), request.AttachedFiles...),
+		Text: caller.Message, Attachments: append([]agentschema.Attachment(nil), request.AttachedFiles...),
 		IdempotencyKey: strings.TrimSpace(caller.CommandID),
 		HostData:       &agent.HostData{Type: turnHostDataType, Version: 2, Data: encoded},
 	}, nil
@@ -151,7 +153,7 @@ type DefinitionResolver interface {
 // DefinitionResolver. It must not prepare a model, Toolset, or Context; the
 // public Runtime calls it before Definition preparation can be preempted.
 type CanonicalInputResolver interface {
-	ResolveCanonicalInput(context.Context, DefinitionRequest) (agent.CanonicalAdapter, error)
+	ResolveCanonicalInput(context.Context, DefinitionRequest) (agentcanonical.CanonicalAdapter, error)
 }
 
 type DefinitionResolverFunc func(context.Context, DefinitionRequest) (agent.Definition, error)
@@ -177,7 +179,7 @@ func (source denovaSource) Prepare(ctx context.Context, request agent.PrepareReq
 	return source.resolve(ctx, request)
 }
 
-func (source denovaSource) CanonicalInput(ctx context.Context, request agent.PrepareRequest) (agent.CanonicalAdapter, error) {
+func (source denovaSource) CanonicalInput(ctx context.Context, request agent.PrepareRequest) (agentcanonical.CanonicalAdapter, error) {
 	if strings.HasPrefix(request.Session.Key.Namespace, "task.") || request.Reason == agent.TurnReasonGoalMutation {
 		return nil, nil
 	}

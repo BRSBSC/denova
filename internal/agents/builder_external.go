@@ -13,8 +13,10 @@ import (
 	"denova/internal/agents/toolruntime"
 	producttools "denova/internal/agents/tools"
 	"denova/internal/book"
-	agent "github.com/alfredxw/denova/agent"
-	publictools "github.com/alfredxw/denova/agent/tools"
+
+	agentcontext "github.com/alfredxw/denova/agent/context"
+	agenttool "github.com/alfredxw/denova/agent/tool"
+	publictools "github.com/alfredxw/denova/agent/tool/builtin"
 )
 
 // ExternalAssembly contains reusable product capabilities only. The caller
@@ -22,8 +24,8 @@ import (
 // and durable tool dispatch. No Native Definition or model is constructed.
 type ExternalAssembly struct {
 	Composition  prompts.SystemPromptComposition
-	Tools        []agent.ToolDefinition
-	Context      agent.ContextSource
+	Tools        []agenttool.ToolDefinition
+	Context      agentcontext.ContextSource
 	ToolSettings config.ResolvedAgentToolSettings
 }
 
@@ -78,9 +80,9 @@ func buildExternalAssembly(ctx context.Context, cfg *config.Config, state *book.
 	}
 	// Root tools are application-owned capabilities. Ask reuses its schema only;
 	// the external Host resolves it from the product journal instead of Run state.
-	var asks []agent.ToolDefinition
+	var asks []agenttool.ToolDefinition
 	if kind != config.AgentKindInteractiveStory {
-		asks, err = publictools.Ask().PrepareTools(ctx, agent.ToolRequest{})
+		asks, err = publictools.Ask().PrepareTools(ctx, agenttool.ToolRequest{})
 		if err != nil {
 			return ExternalAssembly{}, err
 		}
@@ -97,7 +99,7 @@ func buildExternalAssembly(ctx context.Context, cfg *config.Config, state *book.
 	if err != nil {
 		return ExternalAssembly{}, err
 	}
-	source, err := agent.CombineContextSources(project, agentprofile.ContextSource(cfg, kind))
+	source, err := agentcontext.CombineContextSources(project, agentprofile.ContextSource(cfg, kind))
 	if err != nil {
 		return ExternalAssembly{}, fmt.Errorf("compose external product context: %w", err)
 	}

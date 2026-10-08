@@ -26,7 +26,7 @@ func (a *App) InstallLocalUpdate(ctx context.Context, name string, archive io.Re
 }
 
 func (a *App) ApplyUpdate(ctx context.Context) (update.ApplyResult, error) {
-	return update.NewService().Apply(ctx)
+	return update.NewService().Apply(ctx, a.Close, a.cfg.RuntimeWebPort)
 }
 
 // StartInstallUpdateTask retains the initiating request's language throughout
@@ -44,3 +44,5 @@ func (a *App) StartInstallUpdateTask(locale string) *apptask.Task {
 		emit(agentrun.Event{Type: "update_result", Data: result})
 	})
 }
+
+func (a *App) UpdateStatus() (update.Status, error) { return update.NewService().Status() }

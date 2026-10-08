@@ -3,7 +3,7 @@ package execution
 import (
 	"context"
 
-	agent "github.com/alfredxw/denova/agent"
+	"github.com/alfredxw/denova/agent"
 	agentsession "github.com/alfredxw/denova/agent/session"
 )
 
@@ -18,7 +18,7 @@ func (backend *publicBackend) taskSessions(ctx context.Context, root *agent.Sess
 		if err != nil {
 			return nil, err
 		}
-		keys, err := backend.agent.ListSessions(ctx, agent.SessionSelector{Attributes: attributes})
+		keys, err := backend.agent.ListSessions(ctx, agentsession.Selector{Attributes: attributes})
 		if err != nil {
 			return nil, err
 		}

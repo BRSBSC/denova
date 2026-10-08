@@ -35,6 +35,11 @@ func (s *Service) InstallLocal(ctx context.Context, name string, archive io.Read
 		return InstallResult{}, ErrUpdateBusy
 	}
 	defer updateOperation.Unlock()
+	releaseLock, lockErr := s.lockOperation()
+	if lockErr != nil {
+		return InstallResult{}, lockErr
+	}
+	defer releaseLock()
 	if isDevVersion(s.currentVersion) {
 		return InstallResult{}, ErrPackageVersion
 	}

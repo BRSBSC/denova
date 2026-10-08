@@ -141,11 +141,20 @@ jobs:
           sed -i "s|REPOSITORY=\"alfredxw/denova\"|REPOSITORY=\"$GITHUB_REPOSITORY\"|" install.sh
           sed -i "s|https://github.com/alfredxw/denova/releases/latest/download/install.sh|https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/install.sh|" RELEASE_NOTES.md
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            # Published assets are immutable: replacing them races clients that
+            # already pinned this release's checksums.
+            if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != true ]]; then
+              echo "Refusing to replace published assets; publish a new version instead." >&2
+              exit 1
+            fi
             gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file RELEASE_NOTES.md
             gh release upload "$RELEASE_TAG" denova-* checksums.txt install.sh --clobber
           else
-            gh release create "$RELEASE_TAG" denova-* checksums.txt install.sh --title "$RELEASE_TAG" --notes-file RELEASE_NOTES.md
+            gh release create "$RELEASE_TAG" --draft denova-* checksums.txt install.sh --title "$RELEASE_TAG" --notes-file RELEASE_NOTES.md
           fi
+          # Latest only points to this version once every archive and checksum
+          # has finished uploading. Interrupted uploads leave a private draft.
+          gh release edit "$RELEASE_TAG" --draft=false
 
   container:
     name: Publish verified source Docker images

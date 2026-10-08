@@ -274,6 +274,10 @@ func bindCompleteLoreItemInput(c *app.RequestContext, resourceID string) (booklo
 }
 
 func writeProjectBookError(c *app.RequestContext, err error, fallbackKey string) {
+	if errors.Is(err, booklore.ErrNameRequiredForID) {
+		writeErrorKey(c, consts.StatusBadRequest, "api.lore.nameRequiredForID")
+		return
+	}
 	status := consts.StatusBadRequest
 	if errors.Is(err, os.ErrNotExist) {
 		status = consts.StatusNotFound

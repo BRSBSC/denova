@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"denova/config"
 	"denova/internal/agents/canonicalstore"
@@ -24,15 +25,18 @@ import (
 	imageapp "denova/internal/app/image"
 	loreapp "denova/internal/app/lore"
 	modelsapp "denova/internal/app/models"
+	platformapp "denova/internal/app/platform"
 	projectbookapp "denova/internal/app/projectbook"
 	projectfilesapp "denova/internal/app/projectfiles"
 	resourcecatalogapp "denova/internal/app/resourcecatalog"
+	"denova/internal/app/resourceexchange"
 	settingsapp "denova/internal/app/settings"
 	apptask "denova/internal/app/task"
 	"denova/internal/book"
 	"denova/internal/concurrency"
 	"denova/internal/interactive"
 	"denova/internal/localfs"
+	"denova/internal/platform"
 	"denova/internal/portablepath"
 	projectdomain "denova/internal/project"
 	"denova/internal/terminal"
@@ -91,12 +95,15 @@ type App struct {
 	activityApp        *activityapp.Service
 	bookApp            *bookapp.Service
 	resourceCatalog    *resourcecatalogapp.Service
+	resourceMarket     *resourceexchange.Market
+	resourceExchange   *resourceexchange.Service
 	settingsApp        *settingsapp.Service
 	modelsApp          *modelsapp.Service
 	imageApp           *imageapp.Service
 	projectBook        *projectbookapp.Service
 	projectFiles       *projectfilesapp.Service
 	servicesOnce       sync.Once
+	platform           *platform.Manager
 
 	mu sync.RWMutex
 	// Keep concurrent manual selections ordered across their conversation and
@@ -146,6 +153,9 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("initialize Agents Project profiles: %w", err)
 	}
 	registry := projectdomain.NewRegistry(dataDir)
+	if err := resourceexchange.Recover(dataDir, registry); err != nil {
+		return nil, fmt.Errorf("recover resource installation: %w", err)
+	}
 	agentsRecord, err := registry.EnsureAgents(config.AgentProfilesRoot(dataDir))
 	if err != nil {
 		return nil, fmt.Errorf("register Agents Project: %w", err)
@@ -197,6 +207,13 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize canonical Agent Session Store: %w", err)
 	}
+	app.platform = platform.New(dataDir, registry)
+	if err := resourceexchange.New(dataDir, registry, nil, app.platform).MigrateSources(ctx); err != nil {
+		return nil, fmt.Errorf("migrate resource sources: %w", err)
+	}
+	app.platform.ConfigureAgents(canonicalSessions, platformapp.NewModels(platformHost{app}).Resolve)
+	app.platform.ConfigureResources(platformapp.NewResources(platformHost{app}))
+	app.platform.ConfigureStories(platformapp.NewStories(platformHost{app}))
 	executionRuntime, err := agentexecution.NewAgentRuntime(
 		ctx,
 		dataDir,
@@ -243,7 +260,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 		slog.InfoContext(ctx, "[app] No workspace or previously opened book at startup; waiting for frontend selection")
 		cfg.Workspace = ""
 		app.Automation().StartScheduler(ctx)
-		app.startSkillUpdates(ctx)
+		app.startResourceUpdates(ctx)
 		return app, nil
 	}
 
@@ -274,7 +291,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	app.applyRuntime(runtime)
 	app.mu.Unlock()
 	app.Automation().StartScheduler(ctx)
-	app.startSkillUpdates(ctx)
+	app.startResourceUpdates(ctx)
 	return app, nil
 }
 
@@ -320,6 +337,8 @@ func (a *App) ensureServices() {
 		a.activityApp = activityapp.NewService(dataDir, a.automationApp)
 		a.bookApp = bookapp.NewService(dataDir, a.projectRegistry, a.bookMetaStore)
 		a.resourceCatalog = resourcecatalogapp.NewService(dataDir, resourceCatalogHost{app: a})
+		a.resourceMarket = resourceexchange.NewMarket(dataDir)
+		a.resourceExchange = resourceexchange.New(dataDir, a.projectRegistry, a.resourceCatalog, a.platform)
 		a.settingsApp = settingsapp.NewService(settingsHost{app: a})
 		a.modelsApp = modelsapp.NewService(modelHost{app: a})
 		a.imageApp = imageapp.NewService(imageHost{app: a})
@@ -473,6 +492,9 @@ func (a *App) Close() {
 		return
 	}
 	a.closeOnce.Do(func() {
+		started := time.Now()
+		slog.Info("app_shutdown_started")
+		defer func() { slog.Info("app_shutdown_finished", "duration", time.Since(started)) }()
 		a.ensureServices()
 		a.mu.Lock()
 		a.closed = true
@@ -488,6 +510,11 @@ func (a *App) Close() {
 		}
 		if a.terminals != nil {
 			a.terminals.CloseAll()
+		}
+		if a.platform != nil {
+			if err := a.platform.Close(context.Background()); err != nil {
+				slog.Error("platform_close_failed", "error", err)
+			}
 		}
 		// Admission closes before cancellation so no task can slip between the
 		// final registry snapshot and the resource barrier.

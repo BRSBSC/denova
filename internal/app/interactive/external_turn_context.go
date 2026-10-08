@@ -13,8 +13,10 @@ import (
 	"denova/internal/agents/runtime/external"
 	"denova/internal/agents/session"
 	"denova/internal/interactive"
-	agent "github.com/alfredxw/denova/agent"
+
 	publiccontext "github.com/alfredxw/denova/agent/context"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 func gameRuntimeBoundary(snapshot interactive.Snapshot) string {
@@ -68,7 +70,7 @@ func (turn *ExternalTurn) prepareInput(ctx context.Context, mode external.Operat
 		return external.Input{}, err
 	}
 	if source := turn.config.Assembly.Context; source != nil {
-		shared, err := source.Materialize(ctx, agent.ContextRequest{})
+		shared, err := source.Materialize(ctx, publiccontext.ContextRequest{})
 		if err != nil {
 			return external.Input{}, err
 		}
@@ -78,18 +80,18 @@ func (turn *ExternalTurn) prepareInput(ctx context.Context, mode external.Operat
 	var dynamic strings.Builder
 	for _, fragment := range fragments {
 		switch fragment.Placement {
-		case agent.ContextLeadingMessage, agent.ContextStateMessage:
+		case agentschema.ContextLeadingMessage, agentschema.ContextStateMessage:
 			if len(fragment.Content) > fragment.HardLimit {
 				return external.Input{}, fmt.Errorf("external Game context exceeds source limit: %s", fragment.Source)
 			}
 			dynamic.WriteString("\n\n" + fragment.Content)
-		case agent.ContextAuditOnly:
+		case agentschema.ContextAuditOnly:
 		default:
 			return external.Input{}, fmt.Errorf("unsupported external Game context placement %q", fragment.Placement)
 		}
 	}
 	for i := len(prepared.ModelContext.Messages) - 1; i >= 0; i-- {
-		if message := prepared.ModelContext.Messages[i]; message != nil && message.Role == agent.User {
+		if message := prepared.ModelContext.Messages[i]; message != nil && message.Role == agentschema.User {
 			input.Text, input.Attachments = message.Content, message.Attachments
 			break
 		}
@@ -115,7 +117,7 @@ func (turn *ExternalTurn) prepareInput(ctx context.Context, mode external.Operat
 	if err != nil {
 		return external.Input{}, err
 	}
-	historyMessages := append(append([]*agent.Message(nil), projection.Messages...), turn.restored...)
+	historyMessages := append(append([]*agentschema.Message(nil), projection.Messages...), turn.restored...)
 	input.History = externalGameMessages(historyMessages)
 	input.HistoryBoundary = fmt.Sprintf("%s/%s/%d", gameRuntimeBoundary(story.Snapshot), turn.identity.OperationID, c.modelContextBatchSequence)
 	if err := c.loadTurnDraft(); err != nil {
@@ -126,7 +128,7 @@ func (turn *ExternalTurn) prepareInput(ctx context.Context, mode external.Operat
 	} else if narrative != "" {
 		input.Text += "\n\nThe following narrative has already been accepted. Retain it verbatim and complete only missing turn submission modules:\n" + narrative
 	}
-	turn.tools = make(map[string]agent.ToolDefinition)
+	turn.tools = make(map[string]agenttool.ToolDefinition)
 	for _, definition := range turn.config.Assembly.Tools {
 		if err := definition.Validate(ctx); err != nil {
 			return external.Input{}, err
@@ -154,7 +156,7 @@ func (turn *ExternalTurn) prepareInput(ctx context.Context, mode external.Operat
 
 func (turn *ExternalTurn) prepareRuntimeInput(ctx context.Context, source external.Input, adapter external.Adapter) (external.Input, error) {
 	var usageErr error
-	preparation := external.HistoryPreparation{Input: source, Adapter: adapter, ProviderInputMaxBytes: turn.inputLimit(), ResolveMedia: turn.media().Resolve, AddUsage: func(usage *agent.TokenUsage) { usageErr = turn.recordUsage(usage) }}
+	preparation := external.HistoryPreparation{Input: source, Adapter: adapter, ProviderInputMaxBytes: turn.inputLimit(), ResolveMedia: turn.media().Resolve, AddUsage: func(usage *agentschema.TokenUsage) { usageErr = turn.recordUsage(usage) }}
 	prepare := turn.config.PrepareHistory
 	if prepare == nil {
 		prepare = func(ctx context.Context, preparation external.HistoryPreparation) (external.Input, error) {
@@ -171,14 +173,14 @@ func (turn *ExternalTurn) prepareRuntimeInput(ctx context.Context, source extern
 	return input, nil
 }
 
-func externalGameMessages(messages []*agent.Message) []external.Message {
+func externalGameMessages(messages []*agentschema.Message) []external.Message {
 	result := make([]external.Message, 0, len(messages))
 	for _, message := range messages {
 		if message == nil {
 			continue
 		}
 		projected := external.Message{Role: string(message.Role), Text: message.Content, Attachments: message.Attachments, Cursor: uint64(len(result) + 1)}
-		if message.Role == agent.ToolRole {
+		if message.Role == agentschema.ToolRole {
 			projected.Role, projected.Text = "user", "Confirmed tool observation ("+message.ToolName+"):\n"+message.Content
 			projected.ToolImages, projected.Attachments = message.Attachments, nil
 		}
@@ -194,7 +196,7 @@ func (turn *ExternalTurn) inputLimit() int {
 }
 
 func (turn *ExternalTurn) media() external.MediaProjection {
-	resolver, _ := turn.config.Conversation.ToolArtifactStore().(agent.ToolArtifactPathResolver)
+	resolver, _ := turn.config.Conversation.ToolArtifactStore().(agenttool.ToolArtifactPathResolver)
 	return external.MediaProjection{Root: turn.config.Config.ProjectStoreDir,
 		Scope: attachment.StoryScope(turn.config.Conversation.storyID), Artifacts: resolver}
 }
@@ -203,11 +205,11 @@ func (turn *ExternalTurn) projectMedia(ctx context.Context, input external.Input
 	return turn.media().Prepare(ctx, input, turn.inputLimit())
 }
 
-func (turn *ExternalTurn) projectToolImages(ctx context.Context, files []agent.Attachment) ([]agent.Attachment, error) {
+func (turn *ExternalTurn) projectToolImages(ctx context.Context, files []agentschema.Attachment) ([]agentschema.Attachment, error) {
 	return turn.media().ResolveToolImages(ctx, files)
 }
 
-func (turn *ExternalTurn) recordUsage(usage *agent.TokenUsage) error {
+func (turn *ExternalTurn) recordUsage(usage *agentschema.TokenUsage) error {
 	if usage == nil {
 		return nil
 	}
