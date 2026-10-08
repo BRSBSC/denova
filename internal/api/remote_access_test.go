@@ -157,6 +157,38 @@ func TestRemoteAccessOriginAndHTTPSCookie(t *testing.T) {
 	}
 }
 
+// Loopback peers skip the login, so every signal that the browser is somewhere
+// else must win: a proxy-reported address, a forwarded host, or a Host header
+// that only a tunnel or a rebound DNS name can produce.
+func TestRemoteAccessLocalTrustRequiresLoopbackClientAndHost(t *testing.T) {
+	_, h, _ := testRemoteAccess(t)
+	local := "http://127.0.0.1:8080/api/private"
+	for _, test := range []struct {
+		name    string
+		method  string
+		url     string
+		headers []ut.Header
+		want    int
+	}{
+		{"direct local browser", "GET", "http://localhost:8080/api/private", nil, 200},
+		{"direct IPv6 loopback", "GET", "http://[::1]:8080/api/private", nil, 200},
+		{"local browser through the dev proxy", "GET", local, []ut.Header{{Key: "X-Forwarded-For", Value: "::ffff:127.0.0.1"}, {Key: "X-Forwarded-Host", Value: "localhost:5173"}}, 200},
+		{"client-supplied loopback before the proxy address", "GET", local, []ut.Header{{Key: "X-Forwarded-For", Value: "127.0.0.1, 192.168.1.8"}}, 401},
+		{"unparseable proxy address", "GET", local, []ut.Header{{Key: "X-Forwarded-For", Value: "127.0.0.1, unknown"}}, 401},
+		{"proxy reporting only X-Real-IP", "GET", local, []ut.Header{{Key: "X-Real-IP", Value: "192.168.1.8"}}, 401},
+		{"proxy forwarding a public host", "GET", local, []ut.Header{{Key: "X-Forwarded-Host", Value: "denova.example"}}, 401},
+		{"tunnelled or rebound host", "GET", "http://rebound.example:8080/api/private", nil, 401},
+		{"same-origin write from a rebound host", "POST", "http://rebound.example:8080/api/private", []ut.Header{{Key: "Origin", Value: "http://rebound.example:8080"}}, 401},
+		{"request without a host", "GET", "/api/private", nil, 401},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if res := ut.PerformRequest(h.Engine, test.method, test.url, nil, test.headers...); res.Code != test.want {
+				t.Fatalf("%s %s %v = %d, want %d", test.method, test.url, test.headers, res.Code, test.want)
+			}
+		})
+	}
+}
+
 func TestRemoteAccessCorruptStoreFailsClosed(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "remote-access-sessions.json")

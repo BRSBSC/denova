@@ -57,13 +57,18 @@ func TestIsLocalClientIP(t *testing.T) {
 	}
 }
 
-func TestForwardedClientIPUsesFirstValidAddress(t *testing.T) {
-	got := forwardedClientIP(" 192.168.1.8, 127.0.0.1")
-	if got != "192.168.1.8" {
+func TestForwardedClientIPUsesProxyAppendedAddress(t *testing.T) {
+	// Earlier entries are supplied by the client and must never be trusted.
+	if got := forwardedClientIP(" 127.0.0.1, 192.168.1.8"); got != "192.168.1.8" {
 		t.Fatalf("forwardedClientIP = %q", got)
 	}
-	if got := forwardedClientIP("unknown, "); got != "" {
-		t.Fatalf("invalid forwarded header should be ignored: %q", got)
+	if got := forwardedClientIP("192.168.1.8,::ffff:127.0.0.1"); got != "::ffff:127.0.0.1" {
+		t.Fatalf("forwardedClientIP = %q", got)
+	}
+	for _, header := range []string{"127.0.0.1, unknown", "127.0.0.1, ", ""} {
+		if got := forwardedClientIP(header); got != "" {
+			t.Fatalf("forwardedClientIP(%q) = %q, want no trusted address", header, got)
+		}
 	}
 }
 
@@ -84,5 +89,22 @@ func TestLocalHostEffectMiddlewareRejectsForwardedRemoteClient(t *testing.T) {
 	)
 	if response.Code != http.StatusForbidden || called {
 		t.Fatalf("remote host effect response = %d called=%v body=%s", response.Code, called, response.Body.String())
+	}
+}
+
+func TestLocalHostEffectMiddlewareRejectsNonLoopbackHost(t *testing.T) {
+	called := false
+	server := hertzserver.Default()
+	server.POST("/native", localHostEffectMiddleware, func(_ context.Context, c *app.RequestContext) {
+		called = true
+		c.Status(http.StatusNoContent)
+	})
+	response := ut.PerformRequest(server.Engine, http.MethodPost, "http://rebound.example:8080/native", nil)
+	if response.Code != http.StatusForbidden || called {
+		t.Fatalf("rebound host effect response = %d called=%v", response.Code, called)
+	}
+	response = ut.PerformRequest(server.Engine, http.MethodPost, "http://localhost:8080/native", nil)
+	if response.Code != http.StatusNoContent || !called {
+		t.Fatalf("local host effect response = %d called=%v", response.Code, called)
 	}
 }

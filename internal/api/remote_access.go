@@ -39,7 +39,7 @@ func (g *remoteAccessGate) middleware(ctx context.Context, c *app.RequestContext
 		abortWithLocalizedError(c, consts.StatusForbidden, "api.access.originRejected")
 		return
 	}
-	if isLocalClientIP(requestClientIP(c)) {
+	if isLocalRequest(c) {
 		c.Next(ctx)
 		return
 	}
@@ -142,7 +142,7 @@ func (g *remoteAccessGate) lanHTTPURL(c *app.RequestContext) string {
 }
 
 func (g *remoteAccessGate) status(_ context.Context, c *app.RequestContext) {
-	local := isLocalClientIP(requestClientIP(c))
+	local := isLocalRequest(c)
 	access := g.config()
 	result := map[string]any{"local": local, "authenticated": local || g.sessions.authorized(string(c.Cookie(g.cookieName)), access)}
 	if local && access.AllowLANAccess && g.listeningLAN {
@@ -178,7 +178,7 @@ func (g *remoteAccessGate) login(ctx context.Context, c *app.RequestContext) {
 	}
 	g.setCookie(c, token, int(browserSessionLifetime.Seconds()))
 	slog.InfoContext(ctx, "remote_login_succeeded", "client_ip", requestClientIP(c))
-	c.JSON(consts.StatusOK, map[string]any{"local": isLocalClientIP(requestClientIP(c)), "authenticated": true})
+	c.JSON(consts.StatusOK, map[string]any{"local": isLocalRequest(c), "authenticated": true})
 }
 
 func (g *remoteAccessGate) logout(ctx context.Context, c *app.RequestContext) {
@@ -192,12 +192,8 @@ func (g *remoteAccessGate) logout(ctx context.Context, c *app.RequestContext) {
 }
 
 func (g *remoteAccessGate) link(ctx context.Context, c *app.RequestContext) {
-	// Link creation grants access without a password; require a loopback host as well as a local peer.
-	host, err := url.Parse("http://" + string(c.Host()))
-	if err != nil || (host.Hostname() != "localhost" && !isLocalClientIP(host.Hostname())) {
-		abortWithLocalizedError(c, consts.StatusForbidden, "api.access.localHostEffect")
-		return
-	}
+	// Link creation grants access without a password; localHostEffectMiddleware
+	// has already required a local browser on a loopback host.
 	access := g.config()
 	if !access.AllowLANAccess || !g.listeningLAN {
 		abortWithLocalizedError(c, consts.StatusForbidden, "api.access.lanDisabled")
@@ -233,7 +229,7 @@ func (g *remoteAccessGate) pair(ctx context.Context, c *app.RequestContext) {
 	}
 	g.setCookie(c, token, int(browserSessionLifetime.Seconds()))
 	slog.InfoContext(ctx, "remote_pairing_succeeded", "client_ip", requestClientIP(c))
-	c.JSON(consts.StatusOK, map[string]any{"local": isLocalClientIP(requestClientIP(c)), "authenticated": true})
+	c.JSON(consts.StatusOK, map[string]any{"local": isLocalRequest(c), "authenticated": true})
 }
 
 func (g *remoteAccessGate) setCookie(c *app.RequestContext, token string, maxAge int) {

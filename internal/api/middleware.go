@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net"
+	"net/url"
 	"strings"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -48,7 +49,7 @@ func corsMiddleware(ctx context.Context, c *app.RequestContext) {
 // windows on the machine that runs Denova. Remote browsers cannot usefully
 // select a server-local absolute path in any case.
 func localHostEffectMiddleware(ctx context.Context, c *app.RequestContext) {
-	if !isLocalClientIP(requestClientIP(c)) {
+	if !isLocalRequest(c) {
 		abortWithLocalizedError(c, consts.StatusForbidden, "api.access.localHostEffect")
 		return
 	}
@@ -67,14 +68,50 @@ func localeHeader(c *app.RequestContext) string {
 	return strings.TrimSpace(string(c.Request.Header.Peek("X-Nova-Locale")))
 }
 
+// isLocalRequest reports whether the browser runs on the machine that hosts
+// Denova. Such requests skip the login, so a loopback peer alone is not enough:
+// a same-host reverse proxy, a tunnel and a rebound DNS name all connect from
+// loopback. The client a proxy reports and every host name the browser used
+// must be loopback as well. A same-host proxy must therefore forward the client
+// address or the original Host; one that hides both is indistinguishable from a
+// local browser.
+func isLocalRequest(c *app.RequestContext) bool {
+	if !isLocalClientIP(requestClientIP(c)) || !isLoopbackHost(string(c.Host())) {
+		return false
+	}
+	forwardedHost := strings.Join(c.Request.Header.GetAll("X-Forwarded-Host"), ",")
+	return forwardedHost == "" || isLoopbackHost(forwardedHost)
+}
+
+// isLoopbackHost reports whether a Host header value names this machine.
+func isLoopbackHost(hostport string) bool {
+	parsed, err := url.Parse("http://" + hostport)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(parsed.Hostname(), "localhost") || isLocalClientIP(parsed.Hostname())
+}
+
+// requestClientIP returns the browser address. Only a loopback peer may be a
+// proxy reporting another client; a remote peer's own headers are ignored.
 func requestClientIP(c *app.RequestContext) string {
-	remote := directClientIP(c)
-	if isLocalClientIP(remote) {
-		if forwarded := forwardedClientIP(string(c.Request.Header.Peek("X-Forwarded-For"))); forwarded != "" {
-			return forwarded
+	client := directClientIP(c)
+	if !isLocalClientIP(client) {
+		return client
+	}
+	// A proxy may set one header and pass the client's copy of the other
+	// through, so every report present has to agree that the client is local.
+	for _, name := range []string{"X-Forwarded-For", "X-Real-IP"} {
+		// Repeated header lines form one list in arrival order.
+		header := strings.Join(c.Request.Header.GetAll(name), ",")
+		if header == "" {
+			continue
+		}
+		if client = forwardedClientIP(header); !isLocalClientIP(client) {
+			return client
 		}
 	}
-	return remote
+	return client
 }
 
 func directClientIP(c *app.RequestContext) string {
@@ -90,14 +127,15 @@ func directClientIP(c *app.RequestContext) string {
 	return c.ClientIP()
 }
 
+// forwardedClientIP returns the address appended by the nearest proxy. Earlier
+// entries come from the client and can claim any address, so an unreadable
+// last entry yields no address instead of falling back to them.
 func forwardedClientIP(header string) string {
-	for _, part := range strings.Split(header, ",") {
-		value := strings.TrimSpace(part)
-		if net.ParseIP(value) != nil {
-			return value
-		}
+	value := strings.TrimSpace(header[strings.LastIndexByte(header, ',')+1:])
+	if net.ParseIP(value) == nil {
+		return ""
 	}
-	return ""
+	return value
 }
 
 func isLocalClientIP(value string) bool {
