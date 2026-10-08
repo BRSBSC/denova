@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/alfredxw/denova/agent/providers"
+	"github.com/alfredxw/denova/agent/model/providers"
 )
 
 const (

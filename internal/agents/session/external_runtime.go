@@ -12,7 +12,8 @@ import (
 	"denova/internal/agents/conversationconfig"
 	"denova/internal/agents/conversationjournal"
 	externaljournal "denova/internal/agents/runtime/external/journal"
-	agent "github.com/alfredxw/denova/agent"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 // ExternalState is an immutable projection captured under the canonical
@@ -37,7 +38,7 @@ type ExternalState struct {
 // tool calls, network I/O or writes outside this transaction.
 type ExternalTransaction struct {
 	Records  []externaljournal.Record
-	Message  *agent.Message
+	Message  *agentschema.Message
 	Metadata MessageMetadata
 }
 
@@ -122,7 +123,7 @@ func validateExternalMessagePair(change ExternalTransaction, record externaljour
 		if err := json.Unmarshal(record.Data, &delivered); err != nil {
 			return err
 		}
-		if change.Message == nil || change.Message.Role != agent.User || delivered.MessageID != change.Metadata.MessageID {
+		if change.Message == nil || change.Message.Role != agentschema.User || delivered.MessageID != change.Metadata.MessageID {
 			return errors.New("external guidance must atomically publish its exact user message")
 		}
 	case externaljournal.OperationAccepted:
@@ -130,7 +131,7 @@ func validateExternalMessagePair(change ExternalTransaction, record externaljour
 		if err := json.Unmarshal(record.Data, &accepted); err != nil {
 			return err
 		}
-		if change.Message == nil || change.Message.Role != agent.User || accepted.InputMessageID != change.Metadata.MessageID {
+		if change.Message == nil || change.Message.Role != agentschema.User || accepted.InputMessageID != change.Metadata.MessageID {
 			return errors.New("external acceptance must atomically publish its exact user message")
 		}
 	case externaljournal.OperationClosed:
@@ -138,7 +139,7 @@ func validateExternalMessagePair(change ExternalTransaction, record externaljour
 		if err := json.Unmarshal(record.Data, &closed); err != nil {
 			return err
 		}
-		if (closed.Status == externaljournal.Completed || closed.MessageID != "") && (change.Message == nil || change.Message.Role != agent.Assistant || closed.MessageID != change.Metadata.MessageID) {
+		if (closed.Status == externaljournal.Completed || closed.MessageID != "") && (change.Message == nil || change.Message.Role != agentschema.Assistant || closed.MessageID != change.Metadata.MessageID) {
 			return errors.New("external completion must atomically publish its exact assistant message")
 		}
 	}

@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/internal/agents/conversationconfig"
 	"denova/internal/agents/conversationjournal"
 	externaljournal "denova/internal/agents/runtime/external/journal"
 	"denova/internal/agents/sessionjournal"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 const (
@@ -43,7 +43,7 @@ type messageLocator struct {
 type domainCommitLocator struct {
 	MessageIndex int                        `json:"message_index"`
 	Cursor       conversationjournal.Cursor `json:"cursor"`
-	Role         agent.RoleType             `json:"role"`
+	Role         agentschema.RoleType       `json:"role"`
 	Metadata     MessageMetadata            `json:"metadata"`
 	Hash         string                     `json:"hash"`
 }
@@ -82,20 +82,21 @@ type assistantTargetCheckpoint struct {
 // conversation index. It deliberately stores locators and current state only;
 // the canonical JSONL remains the sole source of transcript and display text.
 type sessionJournalProjection struct {
-	Version               int                        `json:"version"`
-	SessionID             string                     `json:"session_id"`
-	Generation            string                     `json:"generation"`
-	Title                 string                     `json:"title"`
-	CreatedAt             time.Time                  `json:"created_at"`
-	UpdatedAt             time.Time                  `json:"updated_at"`
-	MessageCount          int                        `json:"message_count"`
-	VisibleMessageCount   int                        `json:"visible_message_count"`
-	HistoryCount          int                        `json:"history_count"`
-	ClearAfter            int                        `json:"clear_after"`
-	ClearCursor           conversationjournal.Cursor `json:"clear_cursor,omitempty"`
-	ContextRevision       uint64                     `json:"context_revision"`
-	RuntimeConfig         *conversationconfig.Config `json:"runtime_config,omitempty"`
-	RuntimeConfigRevision uint64                     `json:"runtime_config_revision,omitempty"`
+	Version               int                                   `json:"version"`
+	SessionID             string                                `json:"session_id"`
+	Generation            string                                `json:"generation"`
+	Title                 string                                `json:"title"`
+	CreatedAt             time.Time                             `json:"created_at"`
+	UpdatedAt             time.Time                             `json:"updated_at"`
+	MessageCount          int                                   `json:"message_count"`
+	VisibleMessageCount   int                                   `json:"visible_message_count"`
+	HistoryCount          int                                   `json:"history_count"`
+	ClearAfter            int                                   `json:"clear_after"`
+	ClearCursor           conversationjournal.Cursor            `json:"clear_cursor,omitempty"`
+	ContextRevision       uint64                                `json:"context_revision"`
+	RuntimeConfig         *conversationconfig.Config            `json:"runtime_config,omitempty"`
+	RuntimeConfigRevision uint64                                `json:"runtime_config_revision,omitempty"`
+	PlatformRecords       map[string]conversationjournal.Cursor `json:"platform_records,omitempty"`
 
 	RecentCursors              []conversationjournal.Cursor                   `json:"recent_cursors,omitempty"`
 	MessageLocators            []messageLocator                               `json:"message_locators,omitempty"`
@@ -232,6 +233,16 @@ func (projection *sessionJournalProjection) Apply(record conversationjournal.Rec
 		return projection.applyHeader(record.Payload)
 	}
 	switch typed.Type {
+	case platformRecordType:
+		value, err := decodePlatformRecord(record.Payload)
+		if err != nil {
+			return err
+		}
+		if projection.PlatformRecords == nil {
+			projection.PlatformRecords = map[string]conversationjournal.Cursor{}
+		}
+		projection.PlatformRecords[value.Key] = record.Location.Cursor
+		return nil
 	case "":
 		return projection.applyLegacyMessage(record)
 	case historyTypeMessage, historyTypeContextMessage:
@@ -462,17 +473,17 @@ func (projection *sessionJournalProjection) applyMessage(record conversationjour
 	if kind == historyTypeMessage {
 		projection.VisibleMessageCount++
 		visible := true
-		safeBoundary := message.Message.Role == agent.User
+		safeBoundary := message.Message.Role == agentschema.User
 		if safeBoundary {
 			projection.clearAssistantDigests()
-		} else if message.Message.Role == agent.Assistant && !metadata.SubAgent {
+		} else if message.Message.Role == agentschema.Assistant && !metadata.SubAgent {
 			visible = !projection.consumeCompleteAssistantRun(metadata.RunID, message.Message.Content)
 		}
 		if visible {
 			projection.rememberHistoryRow(record.Location.Cursor, safeBoundary)
 		}
 	}
-	if projection.Title == defaultSessionTitle && message.Message.Role == agent.User && strings.TrimSpace(message.Message.Content) != "" {
+	if projection.Title == defaultSessionTitle && message.Message.Role == agentschema.User && strings.TrimSpace(message.Message.Content) != "" {
 		projection.Title = deriveTitle(message.Message.Content)
 	}
 	projection.advanceRevision(metadata.ContextRevision)
@@ -481,7 +492,7 @@ func (projection *sessionJournalProjection) applyMessage(record conversationjour
 }
 
 func (projection *sessionJournalProjection) applyLegacyMessage(record conversationjournal.Record) error {
-	var message agent.Message
+	var message agentschema.Message
 	if err := json.Unmarshal(record.Payload, &message); err != nil {
 		return err
 	}
@@ -490,12 +501,12 @@ func (projection *sessionJournalProjection) applyLegacyMessage(record conversati
 	}
 	projection.rememberMessage(record.Location, message.Role, MessageMetadata{}, "")
 	projection.VisibleMessageCount++
-	safeBoundary := message.Role == agent.User
+	safeBoundary := message.Role == agentschema.User
 	if safeBoundary {
 		projection.clearAssistantDigests()
 	}
 	projection.rememberHistoryRow(record.Location.Cursor, safeBoundary)
-	if projection.Title == defaultSessionTitle && message.Role == agent.User && strings.TrimSpace(message.Content) != "" {
+	if projection.Title == defaultSessionTitle && message.Role == agentschema.User && strings.TrimSpace(message.Content) != "" {
 		projection.Title = deriveTitle(message.Content)
 	}
 	projection.advanceRevision(0)
@@ -513,7 +524,7 @@ func (projection *sessionJournalProjection) rememberCursor(cursor conversationjo
 	}
 }
 
-func (projection *sessionJournalProjection) rememberMessage(location conversationjournal.Location, role agent.RoleType, metadata MessageMetadata, hash string) {
+func (projection *sessionJournalProjection) rememberMessage(location conversationjournal.Location, role agentschema.RoleType, metadata MessageMetadata, hash string) {
 	index := projection.MessageCount
 	projection.MessageCount++
 	locator := messageLocator{Index: index, Cursor: location.Cursor, RecordIndex: location.RecordIndex}

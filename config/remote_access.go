@@ -94,6 +94,9 @@ func selectLANAddress(addrs []net.Addr) string {
 // replacing the user-level settings file. Blank password input preserves the
 // existing password hash.
 func PrepareUserSettingsForWrite(existing, incoming Settings) (Settings, error) {
+	if incoming.GameCreationDefaults != nil {
+		return Settings{}, fmt.Errorf("game creation defaults belong to a Project")
+	}
 	out := preserveTerminalCommandRegistryPresence(incoming)
 	if err := validateSettingsCheckpointGuidance(out); err != nil {
 		return Settings{}, err

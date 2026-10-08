@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"denova/config"
-	agents "denova/internal/agents"
+	"denova/internal/agents"
 	agentattachment "denova/internal/agents/attachment"
 	"denova/internal/agents/canonicalstore"
 	agentchat "denova/internal/agents/chat"
@@ -22,7 +22,7 @@ import (
 	"denova/internal/agents/sessionjournal"
 	agentchatapp "denova/internal/app/agentchat"
 
-	agent "github.com/alfredxw/denova/agent"
+	"github.com/alfredxw/denova/agent"
 	agentsession "github.com/alfredxw/denova/agent/session"
 )
 

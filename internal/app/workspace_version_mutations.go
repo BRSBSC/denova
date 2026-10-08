@@ -57,12 +57,11 @@ func (a *App) VersionStatus(ctx context.Context) (book.VersionStatus, error) {
 }
 
 func (s *workspaceService) VersionStatus(ctx context.Context) (book.VersionStatus, error) {
-	_ = ctx
 	versionService := s.versionService()
 	if versionService == nil {
 		return book.VersionStatus{}, ErrNoWorkspace
 	}
-	return versionService.Status(s.versionAutoSettings())
+	return versionService.Status(ctx, s.versionAutoSettings())
 }
 
 // VersionHistory 返回当前书籍 workspace 的版本历史。

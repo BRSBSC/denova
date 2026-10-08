@@ -4,10 +4,11 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	agentcontext "denova/internal/agents/context"
 	"denova/internal/agents/session"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
 )
 
 func TestRuntimeTodoHistoryIsAPlanSnapshotWithoutToolExecution(t *testing.T) {
@@ -41,9 +42,9 @@ func TestMessagesFromHistoryPreservesCompactionFactsWithoutSummary(t *testing.T)
 
 func TestMessagesFromHistoryConvertsLegacyEntries(t *testing.T) {
 	createdAt := time.Date(2026, 7, 8, 12, 0, 0, 0, time.UTC)
-	presentation := agent.ToolPresentation{
-		Call:   agent.ToolPresentationImage,
-		Result: agent.ToolPresentationInteractiveMedia,
+	presentation := agenttool.ToolPresentation{
+		Call:   agenttool.ToolPresentationImage,
+		Result: agenttool.ToolPresentationInteractiveMedia,
 	}
 	entries := []session.HistoryEntry{
 		{ID: "user-1", Role: "user", Content: "你好", CreatedAt: createdAt, UserReferences: []agentcontext.UserReference{{Kind: "file", Label: "chapters/ch01.md"}}},
@@ -109,15 +110,15 @@ func TestMessagesFromHistoryConvertsLegacyEntries(t *testing.T) {
 	if executionSummary["run_started_at"] != "2026-07-08T12:00:00Z" || executionSummary["duration_ms"] != int64(61_000) || executionSummary["run_status"] != "completed" {
 		t.Fatalf("execution summary payload = %#v", executionSummary)
 	}
-	agentMetadata := messages[3].Metadata["tool_presentation"].(agent.ToolPresentation)
-	if agentMetadata.Call != agent.ToolPresentationImage || agentMetadata.Result != agent.ToolPresentationInteractiveMedia {
+	agentMetadata := messages[3].Metadata["tool_presentation"].(agenttool.ToolPresentation)
+	if agentMetadata.Call != agenttool.ToolPresentationImage || agentMetadata.Result != agenttool.ToolPresentationInteractiveMedia {
 		t.Fatalf("tool presentation metadata = %#v", agentMetadata)
 	}
 }
 
 func TestMessagesFromHistoryProjectsAttachmentMetadataWithoutLocalPath(t *testing.T) {
 	messages := MessagesFromHistory([]session.HistoryEntry{{
-		ID: "user-files", Role: "user", Attachments: []agent.Attachment{{
+		ID: "user-files", Role: "user", Attachments: []agentschema.Attachment{{
 			ID: "att-1", Name: "notes.md", MediaType: "text/markdown", Size: 42, Path: "/private/user-data/notes.md",
 		}},
 	}})

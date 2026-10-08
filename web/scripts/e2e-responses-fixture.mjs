@@ -43,6 +43,11 @@ export function runtimeCompletion(body) {
   const input = JSON.stringify(lastUser?.content)
   if (input.includes('CONTEXT CHECKPOINT COMPACTION')) return { content: `${marker} checkpoint: read evidence verified.`, summary: true }
   if (input.includes('[Goal evaluation request]')) {
+    // A built-in plan may remain available in a read-only fork. Exercise it to
+    // verify that its events and context never alter the primary conversation.
+    if (body.tools?.some(tool => tool.function?.name === 'update_plan') && !body.messages.some(message => message.tool_call_id === 'call-goal-evaluation-plan')) return {
+      tool: 'update_plan', id: 'call-goal-evaluation-plan', arguments: JSON.stringify({ plan: [{ step: 'E2E_EVALUATION_ONLY_PLAN', status: 'completed' }] }),
+    }
     const completed = serialized.includes(`${marker} final proof.`)
     return { content: JSON.stringify({ verdict: completed ? 'complete' : 'continue', reason: completed ? 'Both requested proofs are present.' : 'The final proof is still required.', next_instruction: completed ? '' : `${marker} FINISH_GOAL` }), summary: true }
   }

@@ -91,8 +91,8 @@ export interface ModeRouterProps {
   onQuickSwitchBook: (path: string) => Promise<boolean>
   onBeforeWorkspaceSwitch: EditorFlushHandler
   onBooksChange: () => void | Promise<void>
-  /** Synchronizes a Book created inside Agent Chat without leaving the shared Agent Chat route. */
-  onAgentChatBookCreated: (workspace: string) => void | Promise<void>
+  /** Synchronizes a newly created Book without leaving the current route. */
+  onBookCreated: (workspace: string) => void | Promise<void>
   onOpenCharacterCardImport: () => void
   onSetSidebarView: (view: 'outline' | 'files' | 'search') => void
   onSelectSearchResult: (result: WorkspaceSearchResult, query: string) => void | Promise<void>

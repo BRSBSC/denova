@@ -9,17 +9,19 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/alfredxw/denova/agent/providers"
-	toml "github.com/pelletier/go-toml/v2"
-
 	"denova/internal/revisionfile"
 	"denova/internal/style"
 	workspacelayout "denova/internal/workspace"
+
+	"github.com/alfredxw/denova/agent/model/providers"
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 // Settings 是用户设置的持久化模型。工作区文件只会从中取出 Agent 定制字段。
 // 指针类型用于区分 "未设置"（继承上层）与 "显式置零"。
 type Settings struct {
+	Extensions           *ExtensionSettings    `toml:"extensions,omitempty" json:"extensions,omitempty"`
+	GameCreationDefaults *GameCreationDefaults `toml:"game_creation_defaults,omitempty" json:"game_creation_defaults,omitempty"`
 
 	// 模型
 	OpenAIAPIKey              string                  `toml:"openai_api_key,omitempty" json:"openai_api_key,omitempty"`
@@ -132,9 +134,15 @@ type Settings struct {
 	TerminalScrollbackKB       *int `toml:"terminal_scrollback_kb,omitempty" json:"terminal_scrollback_kb,omitempty"`
 
 	// 游戏模式
-	InteractiveStoryTellerID   string   `toml:"interactive_story_teller_id,omitempty" json:"interactive_story_teller_id,omitempty"`
-	InteractiveStageFontSize   *int     `toml:"interactive_stage_font_size,omitempty" json:"interactive_stage_font_size,omitempty"`
-	InteractiveStageLineHeight *float64 `toml:"interactive_stage_line_height,omitempty" json:"interactive_stage_line_height,omitempty"`
+	InteractiveStoryTellerID     string   `toml:"interactive_story_teller_id,omitempty" json:"interactive_story_teller_id,omitempty"`
+	InteractiveStageFontSize     *int     `toml:"interactive_stage_font_size,omitempty" json:"interactive_stage_font_size,omitempty"`
+	InteractiveStageScrimOpacity *float64 `toml:"interactive_stage_scrim_opacity,omitempty" json:"interactive_stage_scrim_opacity,omitempty"`
+	InteractiveStageLineHeight   *float64 `toml:"interactive_stage_line_height,omitempty" json:"interactive_stage_line_height,omitempty"`
+	// Character layout is a user display preference shared by all Projects.
+	InteractiveStageCharacterLayout string `toml:"interactive_stage_character_layout,omitempty" json:"interactive_stage_character_layout,omitempty"`
+	// Character size is the fraction of stage height, independent of cast size.
+	InteractiveStageCharacterSize *float64 `toml:"interactive_stage_character_size,omitempty" json:"interactive_stage_character_size,omitempty"`
+	InteractiveStageTextMaxWidth  *int     `toml:"interactive_stage_text_max_width,omitempty" json:"interactive_stage_text_max_width,omitempty"`
 }
 
 func boolPtr(v bool) *bool        { return &v }
@@ -223,20 +231,24 @@ func DefaultSettings() Settings {
 			VersionSummary:   AgentModelOverride{ThinkingLevel: string(providers.ThinkingLevelOff)},
 			ToolAgent:        AgentModelOverride{ThinkingLevel: string(providers.ThinkingLevelOff)},
 		},
-		AgentTools:                 DefaultAgentToolSettings(),
-		WebAccess:                  DefaultWebAccessSettings(),
-		Labs:                       DefaultLabSettings(),
-		AgentSkills:                AgentSkillSettings{},
-		AgentContexts:              DefaultAgentContextSettings(),
-		GeneralSubAgents:           DefaultAgentGeneralSubAgentSettings(),
-		SubAgents:                  nil,
-		PlanModeDefault:            boolPtr(false),
-		IDEStoryTellerID:           style.DefaultID,
-		IDEImagePresetID:           "game-cg",
-		WritingSkillDefault:        DefaultWritingSkillName,
-		InteractiveStoryTellerID:   style.DefaultID,
-		InteractiveStageFontSize:   intPtr(16),
-		InteractiveStageLineHeight: floatPtr(1.78),
+		AgentTools:                      DefaultAgentToolSettings(),
+		WebAccess:                       DefaultWebAccessSettings(),
+		Labs:                            DefaultLabSettings(),
+		AgentSkills:                     AgentSkillSettings{},
+		AgentContexts:                   DefaultAgentContextSettings(),
+		GeneralSubAgents:                DefaultAgentGeneralSubAgentSettings(),
+		SubAgents:                       nil,
+		PlanModeDefault:                 boolPtr(false),
+		IDEStoryTellerID:                style.DefaultID,
+		IDEImagePresetID:                "game-cg",
+		WritingSkillDefault:             DefaultWritingSkillName,
+		InteractiveStoryTellerID:        style.DefaultID,
+		InteractiveStageFontSize:        intPtr(16),
+		InteractiveStageLineHeight:      floatPtr(1.78),
+		InteractiveStageScrimOpacity:    floatPtr(0.75),
+		InteractiveStageTextMaxWidth:    intPtr(896),
+		InteractiveStageCharacterLayout: "center",
+		InteractiveStageCharacterSize:   floatPtr(0.7),
 	}
 }
 
@@ -459,8 +471,20 @@ func Merge(parent, child Settings) Settings {
 	if child.InteractiveStageFontSize != nil {
 		out.InteractiveStageFontSize = child.InteractiveStageFontSize
 	}
+	if child.InteractiveStageScrimOpacity != nil {
+		out.InteractiveStageScrimOpacity = child.InteractiveStageScrimOpacity
+	}
 	if child.InteractiveStageLineHeight != nil {
 		out.InteractiveStageLineHeight = child.InteractiveStageLineHeight
+	}
+	if child.InteractiveStageTextMaxWidth != nil {
+		out.InteractiveStageTextMaxWidth = child.InteractiveStageTextMaxWidth
+	}
+	if child.InteractiveStageCharacterLayout != "" {
+		out.InteractiveStageCharacterLayout = child.InteractiveStageCharacterLayout
+	}
+	if child.InteractiveStageCharacterSize != nil {
+		out.InteractiveStageCharacterSize = child.InteractiveStageCharacterSize
 	}
 	return out
 }
@@ -778,6 +802,9 @@ func LoadLayeredWithGlobalAt(novaDir, workspace, projectConfigPath string, globa
 		global.NovaDir = globalDir
 	}
 	eff := Merge(Merge(Merge(def, global), user), ws)
+	// Creation defaults are Project-owned, never inherited from another book
+	// or the user's last-used global resource selection.
+	eff.GameCreationDefaults = ws.GameCreationDefaults
 	inherited := SettingsInheritance{
 		User:      withResolvedLabs(Merge(Merge(def, global), ws)),
 		Workspace: withResolvedLabs(Merge(Merge(def, global), user)),
@@ -853,11 +880,12 @@ func withResolvedLabs(settings Settings) Settings {
 	return settings
 }
 
-// PrepareWorkspaceAgentSettingsForWrite replaces only the Agent overrides that
+// PrepareWorkspaceAgentSettingsForWrite replaces only the overrides that
 // are intentionally workspace-scoped. Legacy general settings remain on disk so
 // the transition is reversible, but LoadLayered no longer applies them.
 func PrepareWorkspaceAgentSettingsForWrite(existing, incoming Settings) Settings {
 	scoped := workspaceAgentSettings(incoming)
+	existing.GameCreationDefaults = scoped.GameCreationDefaults
 	existing.AgentRuntimes = scoped.AgentRuntimes
 	existing.AgentTools = scoped.AgentTools
 	existing.AgentPrompts = scoped.AgentPrompts
@@ -872,10 +900,11 @@ func PrepareWorkspaceAgentSettingsForWrite(existing, incoming Settings) Settings
 }
 
 // workspaceAgentSettings defines the narrow workspace configuration boundary.
-// Native model selection and general Settings remain user-scoped. External
-// runtime preferences are Agent configuration and may have workspace overrides.
+// Native model selection and display preferences remain user-scoped. External
+// runtime preferences may have workspace overrides.
 func workspaceAgentSettings(settings Settings) Settings {
 	return Settings{
+		GameCreationDefaults:     settings.GameCreationDefaults,
 		AgentRuntimes:            settings.AgentRuntimes,
 		AgentTools:               settings.AgentTools,
 		AgentPrompts:             settings.AgentPrompts,

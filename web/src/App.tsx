@@ -466,9 +466,9 @@ function App() {
     notifyProjectStructureChange()
   }, [notifyProjectStructureChange, notifyVersionChange, refreshAll, setMode])
 
-  const handleAgentChatBookCreated = useCallback(async (newPath: string) => {
+  const handleBookCreated = useCallback(async (newPath: string) => {
     await refreshAll()
-    console.info('[App.tsx] synchronized the Book created from Agent Chat', { workspace: newPath })
+    console.info('[App.tsx] synchronized the created Book', { workspace: newPath })
     notifyVersionChange()
     notifyProjectStructureChange()
   }, [notifyProjectStructureChange, notifyVersionChange, refreshAll])
@@ -947,7 +947,7 @@ function App() {
           onQuickSwitchBook={handleQuickWorkspaceSwitch}
           onBeforeWorkspaceSwitch={flushEditorDraft}
           onBooksChange={refreshBooks}
-          onAgentChatBookCreated={handleAgentChatBookCreated}
+          onBookCreated={handleBookCreated}
           onOpenCharacterCardImport={handleOpenCharacterCardImportFromBooks}
           onSetSidebarView={setSidebarView}
           onSelectSearchResult={handleSelectSearchResult}

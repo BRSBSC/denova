@@ -57,6 +57,8 @@ type Config struct {
 	ProjectID           string `toml:"-"`
 	ProjectStoreDir     string `toml:"-"`
 	ActiveCustomAgentID string `toml:"-"`
+	// Plugin calls are scoped to the current conversation at runtime.
+	AgentPluginScope AgentPluginScope `toml:"-" json:"-"`
 	// ActiveAgentRuntime is request-local and is resolved from the conversation
 	// snapshot. Agent defaults must never override it during execution.
 	ActiveAgentRuntime          *RuntimeSelection         `toml:"-" json:"-"`

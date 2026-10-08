@@ -21,9 +21,15 @@ import (
 	agenttoolruntime "denova/internal/agents/toolruntime"
 	"denova/internal/interactive"
 	"denova/internal/project"
-	agent "github.com/alfredxw/denova/agent"
-	"github.com/alfredxw/denova/agent/permission"
-	"github.com/alfredxw/denova/agent/toolresult"
+
+	"github.com/alfredxw/denova/agent"
+	agentmiddleware "github.com/alfredxw/denova/agent/engine/middleware"
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	agentstream "github.com/alfredxw/denova/agent/model/stream"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
+	"github.com/alfredxw/denova/agent/tool/permission"
+	toolresult "github.com/alfredxw/denova/agent/tool/result"
 )
 
 const incrementalIntent = "Verify 24 sources. Corrected budget is 72519, not 72591; preserve evidence IDs."
@@ -34,7 +40,7 @@ type countedWritingHistory struct {
 	request agentchat.ChatRequest
 }
 
-func (c countedWritingHistory) CanonicalMessages(ctx context.Context) ([]*agent.Message, error) {
+func (c countedWritingHistory) CanonicalMessages(ctx context.Context) ([]*agentschema.Message, error) {
 	*c.reads++
 	return c.SessionConversation.CanonicalMessages(ctx)
 }
@@ -47,7 +53,7 @@ type countedGameHistory struct {
 	reads *int
 }
 
-func (c countedGameHistory) CanonicalMessages(ctx context.Context) ([]*agent.Message, error) {
+func (c countedGameHistory) CanonicalMessages(ctx context.Context) ([]*agentschema.Message, error) {
 	*c.reads++
 	return c.Conversation.CanonicalMessages(ctx)
 }
@@ -58,20 +64,20 @@ type longProductModel struct {
 	t               *testing.T
 	step, summaries int
 	resume          bool
-	inputs          [][]*agent.Message
+	inputs          [][]*agentschema.Message
 	inputEstimates  []int
 }
 
-func (m *longProductModel) Generate(_ context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.Message, error) {
+func (m *longProductModel) Generate(_ context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentschema.Message, error) {
 	if strings.HasPrefix(messages[len(messages)-1].Content, "[Runtime context compaction request]") {
 		m.summaries++
 		if m.summaries > 1 && !containsMessageContent(messages, "Incremental evidence checkpoint") {
 			m.t.Error("summary lost previous checkpoint")
 		}
-		return agent.AssistantMessage(fmt.Sprintf("Incremental evidence checkpoint %d. Goal: verify 24 sources. Budget corrected from 72591 to 72519. Evidence IDs: source-1 through source-%d. Completed sources remain verified. Pending: read remaining sources, then report.", m.summaries, m.step-1), nil), nil
+		return agentschema.AssistantMessage(fmt.Sprintf("Incremental evidence checkpoint %d. Goal: verify 24 sources. Budget corrected from 72591 to 72519. Evidence IDs: source-1 through source-%d. Completed sources remain verified. Pending: read remaining sources, then report.", m.summaries, m.step-1), nil), nil
 	}
 	m.inputs = append(m.inputs, messages)
-	estimate := agent.EstimateRequestTextTokens(messages, agent.GetCommonOptions(nil, options...).Tools)
+	estimate := agentmodel.EstimateRequestTextTokens(messages, agentmodel.GetCommonOptions(nil, options...).Tools)
 	m.inputEstimates = append(m.inputEstimates, estimate)
 	if !m.resume && !containsMessageContent(messages, incrementalIntent) {
 		m.t.Error("current input disappeared")
@@ -81,35 +87,36 @@ func (m *longProductModel) Generate(_ context.Context, messages []*agent.Message
 		for _, call := range message.ToolCalls {
 			calls[call.ID] = true
 		}
-		if message.Role == agent.ToolRole && !calls[message.ToolCallID] {
+		if message.Role == agentschema.ToolRole && !calls[message.ToolCallID] {
 			m.t.Errorf("orphan result %s", message.ToolCallID)
 		}
 	}
 	if m.step > 0 && !m.resume && !containsMessageContent(messages, fmt.Sprintf("source-%d", m.step)) {
 		m.t.Errorf("latest source %d disappeared", m.step)
 	}
-	var response *agent.Message
+	var response *agentschema.Message
 	if m.step == 24 || m.resume {
-		response = agent.AssistantMessage("All evidence verified. Corrected budget 72519.", nil)
+		response = agentschema.AssistantMessage("All evidence verified. Corrected budget 72519.", nil)
 	} else {
 		m.step++
-		response = agent.AssistantMessage("Inspect the next source", []agent.ToolCall{{ID: fmt.Sprintf("evidence-%d", m.step), Type: "function", Function: agent.FunctionCall{Name: "evidence", Arguments: fmt.Sprintf(`{"step":%d}`, m.step)}}})
+		response = agentschema.AssistantMessage("Inspect the next source", []agentschema.ToolCall{{ID: fmt.Sprintf("evidence-%d", m.step), Type: "function", Function: agentschema.FunctionCall{Name: "evidence", Arguments: fmt.Sprintf(`{"step":%d}`, m.step)}}})
 	}
-	response.ResponseMeta = &agent.ResponseMeta{Usage: &agent.TokenUsage{PromptTokens: estimate}}
+	response.ResponseMeta = &agentschema.ResponseMeta{Usage: &agentschema.TokenUsage{PromptTokens: estimate}}
 	return response, nil
 }
-func (m *longProductModel) Stream(ctx context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+func (m *longProductModel) Stream(ctx context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentstream.StreamReader[*agentschema.Message], error) {
 	result, err := m.Generate(ctx, messages, options...)
 	if err != nil {
 		return nil, err
 	}
-	return agent.StreamReaderFromArray([]*agent.Message{result}), nil
+	return agentstream.StreamReaderFromArray([]*agentschema.Message{result}), nil
 }
 
 func TestProductsCompactRepeatedlyWithinOneRunAndColdReopen(t *testing.T) {
 	for _, kind := range []string{agentrun.AgentKindIDE, agentrun.AgentKindInteractiveStory} {
 		for _, maintenance := range []string{"summary_only", "elision_then_summary"} {
 			t.Run(kind+"/"+maintenance, func(t *testing.T) {
+				t.Parallel()
 				ctx := t.Context()
 				workspace, dataDir := t.TempDir(), t.TempDir()
 				registry := project.NewRegistry(dataDir)
@@ -151,13 +158,13 @@ func TestProductsCompactRepeatedlyWithinOneRunAndColdReopen(t *testing.T) {
 				defer func() { _ = runtime.Close(context.Background()) }()
 				cfg := &config.Config{Workspace: workspace, OpenAIContextWindowTokens: 64_000}
 				model := &longProductModel{t: t}
-				identity := agent.CapabilityIdentity{Kind: "test.long-product", Version: 1}
+				identity := agentschema.CapabilityIdentity{Kind: "test.long-product", Version: 1}
 				manager, err := agentcompaction.NewAgentManagerForModel(cfg, kind, 64_000)
 				if err != nil {
 					t.Fatal(err)
 				}
 				executions := map[int]int{}
-				tool, err := agent.InferTool("evidence", "Read one source", func(_ context.Context, input struct {
+				tool, err := agenttool.InferTool("evidence", "Read one source", func(_ context.Context, input struct {
 					Step int `json:"step"`
 				}) (string, error) {
 					executions[input.Step]++
@@ -166,7 +173,7 @@ func TestProductsCompactRepeatedlyWithinOneRunAndColdReopen(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				toolset, err := agent.StaticToolsIdentified(agent.CapabilityIdentity{Kind: "test.long-product-tools", Version: 1}, agent.ToolDefinition{Tool: tool, Descriptor: agent.ToolDescriptor{Source: agent.ToolSourceRead, Execution: agent.ToolExecutionParallelRead, MutationScope: agent.ToolMutationNone, PostCheck: agent.ToolPostCheckNone, Recovery: agent.ToolRecoveryReadOnly, ResultRecoveryKind: agent.ToolResultRecoveryRead, ResultProjection: agent.ToolResultBoundedModelContext, ResultRetention: agent.ToolResultDeferred, Steering: agent.SteeringFinishCurrent, MaxResultBytes: 32 << 10}})
+				toolset, err := agenttool.StaticToolsIdentified(agentschema.CapabilityIdentity{Kind: "test.long-product-tools", Version: 1}, agenttool.ToolDefinition{Tool: tool, Descriptor: agenttool.ToolDescriptor{Source: agenttool.ToolSourceRead, Execution: agenttool.ToolExecutionParallelRead, MutationScope: agenttool.ToolMutationNone, PostCheck: agenttool.ToolPostCheckNone, Recovery: agenttool.ToolRecoveryReadOnly, ResultRecoveryKind: agentschema.ToolResultRecoveryRead, ResultProjection: agentschema.ToolResultBoundedModelContext, ResultRetention: agentschema.ToolResultDeferred, Steering: agenttool.SteeringFinishCurrent, MaxResultBytes: 32 << 10}})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -187,7 +194,7 @@ func TestProductsCompactRepeatedlyWithinOneRunAndColdReopen(t *testing.T) {
 						game := NewConversation(stories, "", workspace, story.ID, "main", input, 800, cfg)
 						conversation = countedGameHistory{game, &historyReads}
 						if input != "" {
-							definition.Middlewares = []agent.Middleware{gameSubmissionForTest(t, game, input, input)}
+							definition.Middlewares = []agentmiddleware.Middleware{gameSubmissionForTest(t, game, input, input)}
 						}
 					}
 					return agentexecution.Cycle{Definition: definition, Conversation: conversation, Options: options, Request: agentchat.ChatRequest{CommandID: command, Message: input}}
@@ -267,7 +274,7 @@ func TestProductsCompactRepeatedlyWithinOneRunAndColdReopen(t *testing.T) {
 				if model.summaries != summariesBeforeReopen {
 					t.Fatal("manual compaction caused another summary on cold continuation")
 				}
-				var previousUsage *agent.ResponseMeta
+				var previousUsage *agentschema.ResponseMeta
 				for index := len(latest) - 1; index >= 0; index-- {
 					if latest[index].ResponseMeta != nil && latest[index].ResponseMeta.Usage != nil {
 						previousUsage = latest[index].ResponseMeta
@@ -277,7 +284,7 @@ func TestProductsCompactRepeatedlyWithinOneRunAndColdReopen(t *testing.T) {
 				// Game materializes its final narrative separately, so the latest
 				// retained provider usage may belong to the preceding tool response.
 				previousEstimates := model.inputEstimates[:len(model.inputEstimates)-1]
-				if previousUsage == nil || previousUsage.InputEstimate == nil || previousUsage.InputEstimate.Version != agent.InputEstimateVersion || previousUsage.InputEstimate.Model != identity || previousUsage.Usage.PromptTokens != previousUsage.InputEstimate.Tokens || !slices.Contains(previousEstimates, previousUsage.InputEstimate.Tokens) {
+				if previousUsage == nil || previousUsage.InputEstimate == nil || previousUsage.InputEstimate.Version != agentmodel.InputEstimateVersion || previousUsage.InputEstimate.Model != identity || previousUsage.Usage.PromptTokens != previousUsage.InputEstimate.Tokens || !slices.Contains(previousEstimates, previousUsage.InputEstimate.Tokens) {
 					if previousUsage != nil {
 						t.Fatalf("product journal lost the original request/usage pair after compaction and reopen: usage=%+v estimate=%+v; original estimates=%v", previousUsage.Usage, previousUsage.InputEstimate, previousEstimates)
 					}

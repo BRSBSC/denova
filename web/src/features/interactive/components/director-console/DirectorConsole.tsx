@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { LoreItem } from '@/lib/api-client/types'
 import type {
   BranchSummary,
   GamePlanningTemplate,
@@ -6,6 +7,7 @@ import type {
   InteractiveStoryUpdateInput,
   Snapshot,
   StorySummary,
+  PresentationMaterial,
   Teller,
 } from '../../types'
 import type { StoryStateDisplayPreference } from '../story-state/display-preference'
@@ -21,6 +23,7 @@ export interface DirectorConsoleProps {
   projectId?: string
   storyId?: string
   story?: StorySummary
+  loreItems?: LoreItem[]
   planningTemplates?: GamePlanningTemplate[]
   tellers?: Teller[]
   imagePresets?: ImagePreset[]
@@ -31,6 +34,7 @@ export interface DirectorConsoleProps {
   branches: BranchSummary[]
   snapshot: Snapshot | null
   branchPlanEditingDisabled?: boolean
+  onBackgroundChange?: (turnId: string, background?: PresentationMaterial) => Promise<void>
   onBranchPlanUpdate?: (markdown: string, baseRevision: string) => void | Promise<void>
   stateError?: string
   stateDisplayPreference: StoryStateDisplayPreference
@@ -43,6 +47,7 @@ export function DirectorConsole({
   projectId,
   storyId,
   story,
+  loreItems,
   planningTemplates = [],
   tellers = [],
   imagePresets = [],
@@ -53,6 +58,7 @@ export function DirectorConsole({
   branches,
   snapshot,
   branchPlanEditingDisabled = false,
+  onBackgroundChange,
   onBranchPlanUpdate,
   stateError,
   stateDisplayPreference,
@@ -91,6 +97,9 @@ export function DirectorConsole({
   } else if (activeTab === 'controls') {
     activeView = (
       <StoryTuningView
+        currentTurn={snapshot?.current_turn}
+        onBackgroundChange={onBackgroundChange}
+        backgroundDisabled={branchPlanEditingDisabled}
         projectId={projectId}
         story={story}
         planningTemplates={planningTemplates}
@@ -107,6 +116,9 @@ export function DirectorConsole({
     activeView = (
       <OverviewView
         key={branchId}
+        projectId={projectId}
+        loreItems={loreItems}
+        protagonist={story?.protagonist}
         snapshot={snapshot}
         stateError={stateError}
         plan={snapshot?.branch_plan}

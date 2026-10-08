@@ -11,12 +11,12 @@ import (
 	"sort"
 	"strings"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	agentconversation "denova/internal/agents/conversation"
 	agentrun "denova/internal/agents/run"
 	"denova/internal/agents/session"
 	"denova/internal/agents/trajectory"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 type AgentAskAnswer = agentconversation.HostAskAnswer
@@ -24,7 +24,7 @@ type AgentAskSelectedOption = agentconversation.HostAskSelectedOption
 type AgentAskAnswerResult = agentconversation.HostAskAnswerResult
 type AgentAskResolution = agentconversation.HostAskResolution
 
-var ErrAgentAskNotFound = agent.ErrInteractionStale
+var ErrAgentAskNotFound = agentschema.ErrInteractionStale
 
 const defaultGlobalAgentRunTraceLimit = 100
 

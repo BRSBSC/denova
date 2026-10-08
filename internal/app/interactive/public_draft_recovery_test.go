@@ -24,8 +24,14 @@ import (
 	"denova/internal/interactive"
 	"denova/internal/project"
 
-	agent "github.com/alfredxw/denova/agent"
-	agentpermission "github.com/alfredxw/denova/agent/permission"
+	"github.com/alfredxw/denova/agent"
+	sdkexecution "github.com/alfredxw/denova/agent/engine/execution"
+	agentmiddleware "github.com/alfredxw/denova/agent/engine/middleware"
+	agentmodel "github.com/alfredxw/denova/agent/model"
+	agentstream "github.com/alfredxw/denova/agent/model/stream"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agenttool "github.com/alfredxw/denova/agent/tool"
+	agentpermission "github.com/alfredxw/denova/agent/tool/permission"
 )
 
 // This uses the native Game tools and the same embedded Story journal as the
@@ -69,9 +75,9 @@ func TestGameDraftPauseAndColdResumeThroughCanonicalRuntime(t *testing.T) {
 			narrative := strings.TrimSpace(strings.Repeat("The gate opens and the path becomes clear. ", 700))
 			partialArgs := `{"state_changes":[{"op":"replace","actor_id":"story","field_id":"当前事件","value":"The gate is open"}],"plan_update":{"mode":"replace_sections","sections":[{"heading":"Direction","markdown":"Accepted direction."},{"heading":"Next","markdown":"## Invalid nested section\nRejected"}]}}`
 			repairArgs := `{"choices":["Enter","Observe","Listen","Inspect","Wait"],"plan_update":{"mode":"replace_sections","sections":[{"heading":"Next","markdown":"Repaired next."}]}}`
-			model := &draftRecoveryModel{responses: []*agent.Message{
-				agent.AssistantMessage("", []agent.ToolCall{{ID: "locked-rule", Type: "function", Function: agent.FunctionCall{Name: "prepare_interactive_turn", Arguments: `{"action":"Open the gate","intent":"Reach the path","challenge":"The gate is stuck","cost":"Making noise","state":"Standing by the gate","difficulty":"normal","outcomes":{"critical_success":{"result":"The gate opens"},"success":{"result":"The gate opens"},"failure":{"result":"The gate opens with noise"},"critical_failure":{"result":"The gate opens with loud noise"}}}`}}}),
-				agent.AssistantMessage(narrative, nil), draftSubmissionMessage("partial", partialArgs),
+			model := &draftRecoveryModel{responses: []*agentschema.Message{
+				agentschema.AssistantMessage("", []agentschema.ToolCall{{ID: "locked-rule", Type: "function", Function: agentschema.FunctionCall{Name: "prepare_interactive_turn", Arguments: `{"action":"Open the gate","intent":"Reach the path","challenge":"The gate is stuck","cost":"Making noise","state":"Standing by the gate","difficulty":"normal","outcomes":{"critical_success":{"result":"The gate opens"},"success":{"result":"The gate opens"},"failure":{"result":"The gate opens with noise"},"critical_failure":{"result":"The gate opens with loud noise"}}}`}}}),
+				agentschema.AssistantMessage(narrative, nil), draftSubmissionMessage("partial", partialArgs),
 			}, blocked: make(chan struct{})}
 			var submissions atomic.Int32
 			var rulings atomic.Int32
@@ -95,15 +101,15 @@ func TestGameDraftPauseAndColdResumeThroughCanonicalRuntime(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				toolset, err := agent.StaticToolsIdentified(agent.CapabilityIdentity{Kind: "tools.test.draft", Version: 1}, definitions...)
+				toolset, err := agenttool.StaticToolsIdentified(agentschema.CapabilityIdentity{Kind: "tools.test.draft", Version: 1}, definitions...)
 				if err != nil {
 					t.Fatal(err)
 				}
 				return agentexecution.Cycle{Definition: agent.Definition{
 					Key: "test.game-draft", Name: "game", Model: model, Tools: toolset, Context: contextSource, Permission: agentpermission.FullAccess(),
-					ModelIdentity: agent.CapabilityIdentity{Kind: "model.test.draft", Version: 1},
-					Execution:     agent.ExecutionPolicy{ModelMaxAttempts: 4},
-					Middlewares: []agent.Middleware{agentinteractive.NewTurnProtocolMiddleware(agentinteractive.InteractiveStoryToolContext{
+					ModelIdentity: agentschema.CapabilityIdentity{Kind: "model.test.draft", Version: 1},
+					Execution:     sdkexecution.ExecutionPolicy{ModelMaxAttempts: 4},
+					Middlewares: []agentmiddleware.Middleware{agentinteractive.NewTurnProtocolMiddleware(agentinteractive.InteractiveStoryToolContext{
 						TurnResultReady: conversation.InteractiveNarrativeReady, LoadNarrativeCandidate: conversation.LoadNarrativeCandidate, AcceptNarrativeCandidate: conversation.AcceptNarrativeCandidate,
 					})},
 				}, Conversation: conversation, Request: request, Options: agentrun.Options{
@@ -193,7 +199,7 @@ func TestGameDraftPauseAndColdResumeThroughCanonicalRuntime(t *testing.T) {
 				}
 			}
 			store = interactive.NewStore(workspace)
-			model = &draftRecoveryModel{responses: []*agent.Message{draftSubmissionMessage("repair", repairArgs)}, blocked: make(chan struct{})}
+			model = &draftRecoveryModel{responses: []*agentschema.Message{draftSubmissionMessage("repair", repairArgs)}, blocked: make(chan struct{})}
 			runtime = newRuntime()
 			observation, err := runtime.OpenRecoveryObservation(ctx, cycle.Options)
 			if err != nil {
@@ -251,23 +257,23 @@ func TestGameDraftPauseAndColdResumeThroughCanonicalRuntime(t *testing.T) {
 	}
 }
 
-func draftSubmissionMessage(id, args string) *agent.Message {
-	return agent.AssistantMessage("", []agent.ToolCall{{ID: id, Type: "function", Function: agent.FunctionCall{Name: producttools.SubmitInteractiveTurnToolName, Arguments: args}}})
+func draftSubmissionMessage(id, args string) *agentschema.Message {
+	return agentschema.AssistantMessage("", []agentschema.ToolCall{{ID: id, Type: "function", Function: agentschema.FunctionCall{Name: producttools.SubmitInteractiveTurnToolName, Arguments: args}}})
 }
 
 type draftRecoveryModel struct {
 	mu        sync.Mutex
-	responses []*agent.Message
-	inputs    [][]*agent.Message
+	responses []*agentschema.Message
+	inputs    [][]*agentschema.Message
 	blocked   chan struct{}
 }
 
-func (model *draftRecoveryModel) Generate(ctx context.Context, messages []*agent.Message, _ ...agent.ModelOption) (*agent.Message, error) {
+func (model *draftRecoveryModel) Generate(ctx context.Context, messages []*agentschema.Message, _ ...agentmodel.ModelOption) (*agentschema.Message, error) {
 	model.mu.Lock()
 	index := len(model.inputs)
-	model.inputs = append(model.inputs, append([]*agent.Message(nil), messages...))
+	model.inputs = append(model.inputs, append([]*agentschema.Message(nil), messages...))
 	if index < len(model.responses) {
-		response := agent.CloneMessage(model.responses[index])
+		response := agentschema.CloneMessage(model.responses[index])
 		model.mu.Unlock()
 		return response, nil
 	}
@@ -283,12 +289,12 @@ func (model *draftRecoveryModel) Generate(ctx context.Context, messages []*agent
 	}
 }
 
-func (model *draftRecoveryModel) Stream(ctx context.Context, messages []*agent.Message, options ...agent.ModelOption) (*agent.StreamReader[*agent.Message], error) {
+func (model *draftRecoveryModel) Stream(ctx context.Context, messages []*agentschema.Message, options ...agentmodel.ModelOption) (*agentstream.StreamReader[*agentschema.Message], error) {
 	response, err := model.Generate(ctx, messages, options...)
 	if err != nil {
 		return nil, err
 	}
-	return agent.StreamReaderFromArray([]*agent.Message{response}), nil
+	return agentstream.StreamReaderFromArray([]*agentschema.Message{response}), nil
 }
 
 func (model *draftRecoveryModel) count() int {

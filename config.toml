@@ -58,7 +58,7 @@ default_image_api_profile_id = "default"
 #
 # 图像模型。内置 OpenAI、xAI/Grok、ComfyUI、火山 Seedream、Google Gemini；
 # 自定义端点可选择任一已支持协议。可配置多个 profile。
-# 生成结果会保存到当前工作区 assets/image/generated/。
+# 生成结果会保存到当前工作区 assets/writing/。
 
 [[image_api_profiles]]
 id = "default"

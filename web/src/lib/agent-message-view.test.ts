@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentUIMessage } from '@/lib/agent-ui'
-import { agentViewToRenderMessage, buildAgentMessageViews } from './agent-message-view'
+import { agentViewToRenderMessage, buildAgentMessageViews, shareAgentMessageViews } from './agent-message-view'
 
 describe('agentViewToRenderMessage', () => {
   const chapter = 'Chapter body. '.repeat(500)
@@ -27,5 +27,22 @@ describe('agentViewToRenderMessage', () => {
     expect(agentViewToRenderMessage(view)).toMatchObject({ role: 'assistant', streaming: true })
     expect(agentViewToRenderMessage(view, { forceDone: true })).toMatchObject({ role: 'assistant', streaming: false })
     expect(agentViewToRenderMessage(view)).toMatchObject({ streaming: true })
+  })
+
+  it('shares completed parts across cloned cumulative snapshots without hiding tool updates', () => {
+    const messages: AgentUIMessage[] = [{ ...history[0], parts: [...history[0].parts, { type: 'text', text: 'Drafting', state: 'streaming' }] }]
+    const previous = buildAgentMessageViews(messages)
+    const snapshot = structuredClone(messages)
+    snapshot[0].parts[1] = { type: 'text', text: 'Drafting the next chapter', state: 'streaming' }
+    const next = shareAgentMessageViews(previous, buildAgentMessageViews(snapshot))
+    expect(next[0]).toBe(previous[0])
+    expect(agentViewToRenderMessage(next[0])).toBe(agentViewToRenderMessage(previous[0]))
+    expect(next[1]).not.toBe(previous[1])
+    const completed = structuredClone(snapshot)
+    completed[0].parts[0] = { ...completed[0].parts[0], output: 'Updated result' } as AgentUIMessage['parts'][number]
+    const changed = shareAgentMessageViews(next, buildAgentMessageViews(completed))
+    expect(changed[0]).not.toBe(next[0])
+    expect(agentViewToRenderMessage(changed[0])).toMatchObject({ result: 'Updated result' })
+    expect(changed[1]).toBe(next[1])
   })
 })

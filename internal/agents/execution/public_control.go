@@ -6,7 +6,12 @@ import (
 
 	agentrun "denova/internal/agents/run"
 
-	agent "github.com/alfredxw/denova/agent"
+	"github.com/alfredxw/denova/agent"
+	agentgoal "github.com/alfredxw/denova/agent/engine/goal"
+	agentevent "github.com/alfredxw/denova/agent/lifecycle/event"
+	agentinteraction "github.com/alfredxw/denova/agent/lifecycle/interaction"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agentsession "github.com/alfredxw/denova/agent/session"
 )
 
 func (backend *publicBackend) openSession(ctx context.Context, options agentrun.Options) (*agent.Session, agentrun.RuntimeBinding, error) {
@@ -57,18 +62,18 @@ func (backend *publicBackend) status(ctx context.Context, options agentrun.Optio
 	return status, nil
 }
 
-func (backend *publicBackend) goal(ctx context.Context, options agentrun.Options) (agent.GoalState, bool, error) {
+func (backend *publicBackend) goal(ctx context.Context, options agentrun.Options) (agentgoal.GoalState, bool, error) {
 	session, _, err := backend.openSession(ctx, options)
 	if err != nil {
-		return agent.GoalState{}, false, err
+		return agentgoal.GoalState{}, false, err
 	}
 	return session.Goal(ctx)
 }
 
-func (backend *publicBackend) updateGoal(ctx context.Context, options agentrun.Options, mutation agent.GoalMutation) (agent.GoalState, error) {
+func (backend *publicBackend) updateGoal(ctx context.Context, options agentrun.Options, mutation agentschema.GoalMutation) (agentgoal.GoalState, error) {
 	session, _, err := backend.openSession(ctx, options)
 	if err != nil {
-		return agent.GoalState{}, err
+		return agentgoal.GoalState{}, err
 	}
 	return session.UpdateGoal(ctx, mutation)
 }
@@ -81,7 +86,7 @@ func (backend *publicBackend) clearSession(ctx context.Context, options agentrun
 	return session.Clear(ctx)
 }
 
-func publicRuntimeStatus(binding agentrun.RuntimeBinding, snapshot agent.SessionSnapshot) agentrun.RuntimeStatus {
+func publicRuntimeStatus(binding agentrun.RuntimeBinding, snapshot agentevent.SessionSnapshot) agentrun.RuntimeStatus {
 	status := agentrun.RuntimeStatus{
 		Binding: binding, Cursor: agentrun.Cursor(snapshot.Cursor), Phase: agentrun.RunPhaseIdle,
 		ActiveCommandID:     agentrun.CommandID(snapshot.ActiveCommandID),
@@ -97,7 +102,7 @@ func publicRuntimeStatus(binding agentrun.RuntimeBinding, snapshot agent.Session
 	}
 	if snapshot.ActiveRunID != "" {
 		status.Phase = agentrun.RunPhaseRunning
-		if snapshot.ActiveStatus == agent.ResultSuspended {
+		if snapshot.ActiveStatus == agentschema.ResultSuspended {
 			status.Phase = agentrun.RunPhaseSuspended
 		}
 	}
@@ -140,7 +145,7 @@ func publicRuntimeStatus(binding agentrun.RuntimeBinding, snapshot agent.Session
 		}
 		status.Compaction = projected
 	}
-	status.PendingInteractions = append([]agent.InteractionRequest(nil), snapshot.PendingInteractions...)
+	status.PendingInteractions = append([]agentinteraction.InteractionRequest(nil), snapshot.PendingInteractions...)
 	return status
 }
 
@@ -148,33 +153,33 @@ func (backend *publicBackend) resolveInteraction(
 	ctx context.Context,
 	options agentrun.Options,
 	interactionID string,
-	response agent.InteractionResponse,
-) (agent.InteractionRequest, agent.InteractionResolution, error) {
+	response agentinteraction.InteractionResponse,
+) (agentinteraction.InteractionRequest, agentinteraction.InteractionResolution, error) {
 	session, _, err := backend.openSession(ctx, options)
 	if err != nil {
-		return agent.InteractionRequest{}, agent.InteractionResolution{}, err
+		return agentinteraction.InteractionRequest{}, agentinteraction.InteractionResolution{}, err
 	}
 	sessions, err := backend.taskSessions(ctx, session)
 	if err != nil {
-		return agent.InteractionRequest{}, agent.InteractionResolution{}, err
+		return agentinteraction.InteractionRequest{}, agentinteraction.InteractionResolution{}, err
 	}
 	for _, candidate := range sessions {
 		request, resolution, err := candidate.Respond(ctx, interactionID, response)
-		if errors.Is(err, agent.ErrInteractionStale) {
+		if errors.Is(err, agentschema.ErrInteractionStale) {
 			continue
 		}
 		return request, resolution, err
 	}
-	return agent.InteractionRequest{}, agent.InteractionResolution{}, agent.ErrInteractionStale
+	return agentinteraction.InteractionRequest{}, agentinteraction.InteractionResolution{}, agentschema.ErrInteractionStale
 }
 
-func publicDeliveryKind(delivery agent.InputDelivery) agentrun.DeliveryKind {
+func publicDeliveryKind(delivery agentevent.InputDelivery) agentrun.DeliveryKind {
 	switch delivery {
-	case agent.DeliverySteer:
+	case agentevent.DeliverySteer:
 		return agentrun.DeliverySteer
-	case agent.DeliveryFollowUp:
+	case agentevent.DeliveryFollowUp:
 		return agentrun.DeliveryFollowUp
-	case agent.DeliveryNextTurn:
+	case agentevent.DeliveryNextTurn:
 		return agentrun.DeliveryNextTurn
 	default:
 		return ""
@@ -183,23 +188,23 @@ func publicDeliveryKind(delivery agent.InputDelivery) agentrun.DeliveryKind {
 
 func publicOperationStatus(status agent.ResultStatus) agentrun.OperationStatus {
 	switch status {
-	case agent.ResultCompleted:
+	case agentschema.ResultCompleted:
 		return agentrun.OperationSucceeded
-	case agent.ResultAborted:
+	case agentschema.ResultAborted:
 		return agentrun.OperationAborted
 	default:
 		return agentrun.OperationFailed
 	}
 }
 
-func (backend *publicBackend) closeSessions(ctx context.Context, selector agent.SessionSelector) error {
+func (backend *publicBackend) closeSessions(ctx context.Context, selector agentsession.Selector) error {
 	if backend == nil || backend.agent == nil {
 		return ErrRuntimeProjectionUnavailable
 	}
 	return backend.agent.CloseSessions(ctx, selector)
 }
 
-func (backend *publicBackend) deleteSessions(ctx context.Context, selector agent.SessionSelector) error {
+func (backend *publicBackend) deleteSessions(ctx context.Context, selector agentsession.Selector) error {
 	if backend == nil || backend.agent == nil {
 		return ErrRuntimeProjectionUnavailable
 	}

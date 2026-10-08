@@ -15,7 +15,10 @@ import (
 	productsession "denova/internal/agents/session"
 	"denova/internal/interactive"
 	"denova/internal/project"
-	agent "github.com/alfredxw/denova/agent"
+
+	"github.com/alfredxw/denova/agent"
+	agentevent "github.com/alfredxw/denova/agent/lifecycle/event"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 	agentsession "github.com/alfredxw/denova/agent/session"
 )
 
@@ -96,7 +99,7 @@ func TestProductRecoveryDoesNotRetainSettledExecutionBodies(t *testing.T) {
 					i := batch*runsPerBatch + n
 					runID, commandID := fmt.Sprint("run-", i), fmt.Sprint("command-", i)
 					records = append(records,
-						makeRecord("session.input", map[string]any{"receipt": agent.CommandReceipt{RunID: runID, CommandID: commandID, Cursor: agent.Cursor(i + 1)}, "kind": "run", "hash": "retained-original-hash", "input": map[string]any{"text": body}}),
+						makeRecord("session.input", map[string]any{"receipt": agentevent.CommandReceipt{RunID: runID, CommandID: commandID, Cursor: agentevent.Cursor(i + 1)}, "kind": "run", "hash": "retained-original-hash", "input": map[string]any{"text": body}}),
 						makeRecord("turn.started", map[string]any{"run_id": runID, "command_id": commandID, "at": "2026-09-20T00:00:00Z"}),
 						makeRecord("session.input_update", map[string]any{"command_id": commandID, "run_id": runID, "status": "consumed"}),
 						makeRecord("turn.tool", map[string]any{"run_id": runID, "call_id": runID + "-tool", "name": "read", "arguments": map[string]any{}, "started": true, "result": map[string]any{"status": "success", "model_content": body, "display_content": body}}),
@@ -108,7 +111,7 @@ func TestProductRecoveryDoesNotRetainSettledExecutionBodies(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			queued := makeRecord("session.input", map[string]any{"receipt": agent.CommandReceipt{CommandID: "pending", Cursor: completedRuns + 1}, "kind": "queue", "hash": "pending-hash", "input": map[string]any{"text": "Keep this unfinished input"}})
+			queued := makeRecord("session.input", map[string]any{"receipt": agentevent.CommandReceipt{CommandID: "pending", Cursor: completedRuns + 1}, "kind": "queue", "hash": "pending-hash", "input": map[string]any{"text": "Keep this unfinished input"}})
 			if _, err := log.Append(ctx, revision, queued); err != nil {
 				t.Fatal(err)
 			}
@@ -139,7 +142,7 @@ func TestProductRecoveryDoesNotRetainSettledExecutionBodies(t *testing.T) {
 				}
 				for _, id := range []string{"command-0", fmt.Sprint("command-", completedRuns-1)} {
 					snapshot, found, err := sess.CommandSnapshot(ctx, id)
-					if err != nil || !found || snapshot.Output != body || snapshot.Result == nil || snapshot.Result.Status != agent.ResultCompleted {
+					if err != nil || !found || snapshot.Output != body || snapshot.Result == nil || snapshot.Result.Status != agentschema.ResultCompleted {
 						t.Fatalf("old result %s: %+v %v %v", id, snapshot, found, err)
 					}
 				}

@@ -21,6 +21,7 @@ import (
 	"denova/internal/app"
 	"denova/internal/buildinfo"
 	"denova/internal/observability"
+	"denova/internal/update"
 )
 
 func main() {
@@ -32,6 +33,14 @@ func main() {
 	)
 	if hasVersionArg(os.Args[1:]) {
 		fmt.Println(buildinfo.Version)
+		return
+	}
+	recovering, err := update.PrepareStartup()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Update recovery failed: %v\n", err)
+		os.Exit(1)
+	}
+	if recovering {
 		return
 	}
 	cfg := config.Load()
@@ -136,6 +145,11 @@ func main() {
 		}
 	}
 
+	runBackground("update-readiness", func() {
+		if err := update.ConfirmReady(ctx, url, buildinfo.Version); err != nil {
+			slog.ErrorContext(ctx, "update_readiness_failed", "error", err)
+		}
+	})
 	srv.Run()
 }
 

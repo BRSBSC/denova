@@ -20,7 +20,8 @@ import (
 	"denova/internal/interactive"
 	"denova/internal/project"
 
-	agent "github.com/alfredxw/denova/agent"
+	"github.com/alfredxw/denova/agent"
+	agentschema "github.com/alfredxw/denova/agent/schema"
 	agentsession "github.com/alfredxw/denova/agent/session"
 	sessionfile "github.com/alfredxw/denova/agent/session/file"
 )
@@ -77,7 +78,7 @@ func (store *Store) OpenReader(ctx context.Context, key agentsession.Key) (agent
 		return nil, err
 	}
 	if !child {
-		return nil, agent.ErrCapabilityUnsupported
+		return nil, agentschema.ErrCapabilityUnsupported
 	}
 	_, layout, err := store.resolve(root, false)
 	if err != nil {

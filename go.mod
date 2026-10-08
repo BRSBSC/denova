@@ -28,6 +28,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/ncruces/zenity v0.10.14
 	github.com/pelletier/go-toml/v2 v2.4.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/sergi/go-diff v1.4.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/image v0.45.0

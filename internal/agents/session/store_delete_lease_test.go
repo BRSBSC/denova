@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	agent "github.com/alfredxw/denova/agent"
-
 	"denova/internal/agents/conversationjournal"
 	"denova/internal/localfs"
+
+	agentschema "github.com/alfredxw/denova/agent/schema"
 )
 
 func TestStoreDeleteDistinguishesJournalFailureFromCleanupFailure(t *testing.T) {
@@ -150,7 +150,7 @@ func TestDeletedSessionHandleCannotAppendIntoRecreatedJournal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := stale.Append(agent.UserMessage("old journal")); err != nil {
+	if err := stale.Append(agentschema.UserMessage("old journal")); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := firstStore.GetOrCreate("keep"); err != nil {
@@ -168,11 +168,11 @@ func TestDeletedSessionHandleCannotAppendIntoRecreatedJournal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := recreated.Append(agent.UserMessage("new journal")); err != nil {
+	if err := recreated.Append(agentschema.UserMessage("new journal")); err != nil {
 		t.Fatal(err)
 	}
 
-	appendErr := stale.Append(agent.UserMessage("must not cross incarnation"))
+	appendErr := stale.Append(agentschema.UserMessage("must not cross incarnation"))
 	if appendErr == nil || !strings.Contains(appendErr.Error(), "incarnation") {
 		t.Fatalf("stale append error = %v", appendErr)
 	}

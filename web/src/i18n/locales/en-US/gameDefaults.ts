@@ -1,0 +1,28 @@
+const gameDefaults = {
+  'gameDefaults.title': 'New-story defaults for this book',
+  'gameDefaults.packageTitle': 'Recommended resource choices',
+  'gameDefaults.adopt': 'Use as new-story defaults for this book',
+  'gameDefaults.help': 'Prefill future stories only. Existing stories and global preferences stay unchanged. Package updates never reapply these choices.',
+  'gameDefaults.prefilled': 'Prefilled from this book’s defaults. Changes here affect this story only.',
+  'gameDefaults.newStoryHelp': 'Save these resource choices as the defaults for future stories in this book.',
+  'gameDefaults.saveSelection': 'Save resource choices as book defaults',
+  'gameDefaults.clear': 'Clear book defaults',
+  'gameDefaults.configured': 'Existing book setting',
+  'gameDefaults.replacing': 'Will replace: {{name}}',
+  'gameDefaults.keeping': 'Keep: {{name}}. Select this item to replace it.',
+  'gameDefaults.replaceExisting': 'Replaces this existing book default',
+  'gameDefaults.none': 'None',
+  'gameDefaults.unavailable': 'Resource unavailable or not selected for import. Include it or deselect this default.',
+  'gameDefaults.loadFailed': 'Could not load book defaults or resources. Please retry.',
+  'gameDefaults.saveFailed': 'Could not save defaults. Please retry.',
+  'gameDefaults.saved': 'New-story defaults updated for this book',
+  'gameDefaults.fields.default_background': 'Default background',
+  'gameDefaults.fields.narrative_style_id': 'Narrative style',
+  'gameDefaults.fields.actor_state_id': 'State template',
+  'gameDefaults.fields.rule_system_id': 'Rule preset',
+  'gameDefaults.fields.event_package_ids': 'Event packages',
+  'gameDefaults.fields.image_preset_id': 'Image preset',
+  'gameDefaults.fields.planning_template_id': 'Planning template',
+} as const
+
+export default gameDefaults

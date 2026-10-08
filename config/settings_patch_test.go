@@ -86,6 +86,9 @@ func TestValidateWorkspaceSettingsPatchUsesExplicitScopeBoundary(t *testing.T) {
 	if err := ValidateWorkspaceSettingsPatch(json.RawMessage(`{"theme":"light"}`)); !errors.Is(err, ErrInvalidSettingsPatch) {
 		t.Fatalf("user-only setting should be rejected, got %v", err)
 	}
+	if err := ValidateWorkspaceSettingsPatch(json.RawMessage(`{"interactive_stage_character_layout":"sides"}`)); !errors.Is(err, ErrInvalidSettingsPatch) {
+		t.Fatalf("personal character layout should be rejected in workspace settings, got %v", err)
+	}
 	if err := ValidateWorkspaceSettingsPatch(json.RawMessage(`{"agent_quick_prompts":{"writing":[]}}`)); !errors.Is(err, ErrInvalidSettingsPatch) {
 		t.Fatalf("personal quick prompts should be rejected in workspace settings, got %v", err)
 	}

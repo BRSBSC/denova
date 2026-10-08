@@ -88,3 +88,14 @@ func (h *Handlers) HandleUpdateUpload(ctx context.Context, c *app.RequestContext
 	}
 	writeJSON(c, consts.StatusOK, result)
 }
+
+func (h *Handlers) HandleUpdateStatus(ctx context.Context, c *app.RequestContext) {
+	result, err := h.app.UpdateStatus()
+	if err != nil {
+		slog.ErrorContext(ctx, "update_status_failed", "error", err)
+		writeErrorKey(c, consts.StatusInternalServerError, "api.update.checkFailed", "detail", err.Error())
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	writeJSON(c, consts.StatusOK, result)
+}

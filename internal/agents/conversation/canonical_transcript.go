@@ -4,17 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	agent "github.com/alfredxw/denova/agent"
+	agentschema "github.com/alfredxw/denova/agent/schema"
+	agentcanonical "github.com/alfredxw/denova/agent/session/canonical"
 )
 
-func (c *SessionConversation) CanonicalHistoryHead(ctx context.Context) (agent.CanonicalHistoryHead, error) {
+func (c *SessionConversation) CanonicalHistoryHead(ctx context.Context) (agentcanonical.CanonicalHistoryHead, error) {
 	return c.session.CanonicalHistoryHead(ctx)
 }
 
 // CanonicalMessages returns the complete model-visible lane. The Product
 // Session journal is the sole durable source. Agent reads this full projection
 // when rebuilding its active window or explicitly removing compaction.
-func (c *SessionConversation) CanonicalMessages(ctx context.Context) ([]*agent.Message, error) {
+func (c *SessionConversation) CanonicalMessages(ctx context.Context) ([]*agentschema.Message, error) {
 	if c == nil || c.session == nil {
 		return nil, fmt.Errorf("session canonical transcript is unavailable")
 	}

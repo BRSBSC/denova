@@ -26,6 +26,7 @@ export interface AgentMessageMetadata {
   streaming_target_content?: string
   turn_id?: string
   navigation_turn_id?: string
+  execution_details_deferred?: boolean
   turn_versions?: { turn_id: string; ts: string; current?: boolean }[]
   turn_version_index?: number
   user_references?: UserMessageReference[]

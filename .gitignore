@@ -25,12 +25,20 @@ docs/*
 docs/tests/*
 !docs/tests/large-change-regression-checklist.md
 !docs/automation-project-agent.md
+!docs/plugin-developer-guide.md
+!docs/game-developer-guide.md
+!docs/plugin-platform-design.md
+!docs/plugin-extensibility-audit-and-plan.md
+!docs/plugin-platform-api.md
+!docs/extension-development.md
 !docs/claude-runtime.md
 !docs/container-publishing.md
 !docs/container-publishing.en.md
 docker/.env
 !docs/ci-performance.md
 !docs/skills-library.md
+!docs/lore-index.md
+!docs/automatic-updates.md
 !docs/resource-pack-import-export-design.md
 !docs/speech.md
 !docs/agent-runtime-session-design-audit.md
@@ -42,4 +50,11 @@ docker/.env
 prd
 .playwright-cli/
 tmp/
+.tmp/
 /npm/
+
+# Local AVG engine and its integration checks are not distributed.
+/internal/extensions/avgengine/
+/internal/app/avgengine_local_test.go
+/web/tests/e2e/avgengine.local.spec.ts
+/web/tests/support/avgengine-local.ts
