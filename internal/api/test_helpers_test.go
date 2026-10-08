@@ -51,7 +51,8 @@ func performJSONRequest(t *testing.T, server *Server, method, path string, body 
 		}
 		requestBody = &ut.Body{Body: bytes.NewReader(data), Len: len(data)}
 	}
-	return ut.PerformRequest(server.engine.Engine, method, path, requestBody, ut.Header{Key: "Content-Type", Value: "application/json"})
+	// Requests come from the local browser; the access gate trusts only a loopback Host.
+	return ut.PerformRequest(server.engine.Engine, method, "http://127.0.0.1:8080"+path, requestBody, ut.Header{Key: "Content-Type", Value: "application/json"})
 }
 
 func decodeResponse(t *testing.T, data []byte, target any) {

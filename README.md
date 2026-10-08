@@ -125,7 +125,7 @@ corepack enable
 
 从源码运行时，二维码和连接链接使用后端端口提供的 `web/dist` 构建产物。首次使用或更新前端后，执行 `pnpm --dir web build` 并重启后端；本机 Vite 热更新入口可继续用于开发。
 
-通过公网或域名部署时，请使用 Caddy、Nginx 等反向代理提供 HTTPS，避免明文传输登录凭据。
+通过公网或域名部署时，请使用 Caddy、Nginx 等反向代理提供 HTTPS，避免明文传输登录凭据。与 Denova 运行在同一台机器上的反向代理必须转发原始 `Host`，或以 `X-Forwarded-For` 传递客户端地址（如 Nginx 的 `proxy_set_header Host $host;` 与 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`）；两者都不转发时，Denova 无法区分代理请求与本机浏览器，会跳过登录。
 
 ## 开发
 

@@ -125,7 +125,7 @@ Enable LAN access under **Settings → Access**, set a username and password, an
 
 When running from source, QR codes and connection links use the backend port to serve the `web/dist` build. Run `pnpm --dir web build` and restart the backend before first use or after frontend changes. The local Vite entry point remains available for development with hot reload.
 
-For public or domain-based deployments, put Denova behind an HTTPS reverse proxy such as Caddy or Nginx so login credentials are not transmitted in cleartext.
+For public or domain-based deployments, put Denova behind an HTTPS reverse proxy such as Caddy or Nginx so login credentials are not transmitted in cleartext. A reverse proxy on the same machine as Denova must forward the original `Host` or pass the client address in `X-Forwarded-For` (for Nginx, `proxy_set_header Host $host;` and `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`). A proxy that forwards neither is indistinguishable from a local browser and skips the login.
 
 ## Development
 
