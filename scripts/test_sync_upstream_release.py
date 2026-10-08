@@ -102,9 +102,9 @@ class ReleaseTests(unittest.TestCase):
             command.assert_not_called()
             self.assertFalse(target.exists())
 
-    def test_finish_publishes_only_after_upload_and_never_promotes_old_tag(self):
-        for latest_id, upload_fails in [(1, False), (2, False), (1, True)]:
-            with self.subTest(latest_id=latest_id, upload_fails=upload_fails), tempfile.TemporaryDirectory() as directory:
+    def test_finish_publishes_only_after_upload_and_never_moves_latest(self):
+        for upload_fails in (False, True):
+            with self.subTest(upload_fails=upload_fails), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 release = {"id": 1, "tag_name": "v1.2.3", "assets": []}
                 (root / "release.json").write_text(json.dumps(release))
@@ -118,20 +118,21 @@ class ReleaseTests(unittest.TestCase):
                         raise RuntimeError("upload failed")
                     return ""
 
-                with patch.object(sync, "find_release", side_effect=[release, None]), patch.object(sync, "api", return_value={"id": latest_id}), patch.object(sync, "run", side_effect=command):
+                # The mirrored release is upstream's newest one: latest still
+                # belongs to this fork's source releases.
+                with patch.object(sync, "find_release", side_effect=[release, None]), patch.object(sync, "api", return_value={"id": 1}), patch.object(sync, "run", side_effect=command):
                     args = SimpleNamespace(directory=root, repository="owner/repo")
                     if upload_fails:
                         with self.assertRaisesRegex(RuntimeError, "upload failed"):
                             sync.finish(args)
-                        self.assertFalse(any(call[0] == "docker" or call[:3] == ("gh", "release", "edit") for call in calls))
+                        self.assertFalse(any(call[:3] == ("gh", "release", "edit") for call in calls))
                         self.assertNotIn(sync.completion_marker(release), (root / "mirror-notes.md").read_text())
                     else:
                         sync.finish(args)
                         self.assertEqual(calls[-1][:3], ("gh", "release", "edit"))
-                        self.assertIn(f"--latest={str(latest_id == 1).lower()}", calls[-1])
-                        self.assertEqual(any(call[0] == "docker" for call in calls), latest_id == 1)
+                        self.assertIn("--latest=false", calls[-1])
                         self.assertIn(sync.completion_marker(release), (root / "mirror-notes.md").read_text())
-
+                    self.assertFalse(any(call[0] == "docker" for call in calls))
 
 if __name__ == "__main__":
     unittest.main()

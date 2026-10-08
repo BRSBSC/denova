@@ -156,10 +156,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    # Serialize latest promotion with the upstream mirroring workflow.
-    concurrency:
-      group: upstream-release-${{ github.repository }}-publish
-      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
         with:
