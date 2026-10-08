@@ -131,6 +131,7 @@ const chat = {
   'chat.queue.label': 'Queued instructions',
   'chat.queue.steer': 'Steer',
   'chat.queue.steerDescription': 'Stop the current step and handle this queued instruction now',
+  'chat.queue.steerUnavailable': 'Only instructions queued for the current task can steer it',
   'chat.queue.steering': 'Steering…',
   'chat.queue.delete': 'Delete queued instruction',
   'chat.queue.more': 'More queued instruction actions',

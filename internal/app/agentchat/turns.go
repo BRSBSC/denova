@@ -370,7 +370,7 @@ func (service *Service) SubmitCommand(ctx context.Context, binding Binding, comm
 	if err != nil {
 		return agentrun.CommandReceipt{}, err
 	}
-	if active == nil || active.task == nil || active.task.Finished() {
+	if command.Kind != agentexecution.CommandCancelQueued && (active == nil || active.task == nil || active.task.Finished()) {
 		status, err := bound.Status(ctx)
 		if err != nil {
 			return agentrun.CommandReceipt{}, err
