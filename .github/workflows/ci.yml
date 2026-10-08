@@ -39,13 +39,16 @@ jobs:
           git cat-file -e "$BASE" 2>/dev/null || git fetch --depth=1 origin "$BASE"
           git diff --check "$BASE" HEAD
           files=$(git diff --name-only "$BASE" HEAD)
+          # Read the list from a here-string, not a pipe: grep -q exits at its
+          # first match, and with pipefail a list larger than the pipe buffer
+          # then fails the writer and silently skips every suite.
           # Skill Markdown is executable product context and is not excluded.
-          if printf '%s\n' "$files" | grep -qvE '^(docs/|README(\.en)?\.md$|AGENTS\.md$|CHANGELOG\.md$|LICENSE$)'; then
+          if grep -qvE '^(docs/|README(\.en)?\.md$|AGENTS\.md$|CHANGELOG\.md$|LICENSE$)' <<<"$files"; then
             echo 'code=true' >> "$GITHUB_OUTPUT"
           else
             echo 'code=false' >> "$GITHUB_OUTPUT"
           fi
-          if printf '%s\n' "$files" | grep -qE '^(agent/)?go\.(mod|sum)$'; then
+          if grep -qE '^(agent/)?go\.(mod|sum)$' <<<"$files"; then
             echo 'manifests=true' >> "$GITHUB_OUTPUT"
           else
             echo 'manifests=false' >> "$GITHUB_OUTPUT"
