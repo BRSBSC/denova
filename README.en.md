@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  Current version: <strong>v0.5.1fix9</strong> (2026-10-08) · Beta · <a href="https://github.com/BRSBSC/denova/releases">Download the latest release</a>
+  Current version: <strong>v0.5.1fix10</strong> (2026-10-08) · Beta · <a href="https://github.com/BRSBSC/denova/releases">Download the latest release</a>
 </p>
 
 ![Denova Writing](./img/ide.png)
@@ -82,7 +82,7 @@ Lore, Creative Setups, Skills, and version management are shared between the two
 macOS / Linux users can run the installer:
 
 ```bash
-curl -fsSL https://github.com/BRSBSC/denova/releases/download/v0.5.1fix9/install.sh | sh
+curl -fsSL https://github.com/BRSBSC/denova/releases/download/v0.5.1fix10/install.sh | sh
 ```
 
 Run `denova` after installation. Windows users and anyone who prefers manual installation can download the archive for their platform from [GitHub Releases](https://github.com/BRSBSC/denova/releases); on Windows, run `denova.exe`.
