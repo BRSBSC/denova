@@ -34,10 +34,13 @@ type Status struct {
 	Phase          Phase  `json:"phase"`
 	Error          string `json:"error,omitempty"`
 	LogPath        string `json:"log_path,omitempty"`
+	// ReleasesURL is where this build's releases are published. A fork build
+	// links to its own packages, never to the upstream ones.
+	ReleasesURL string `json:"releases_url"`
 }
 
 func (s *Service) Status() (Status, error) {
-	status := Status{CurrentVersion: s.currentVersion, Phase: "idle"}
+	status := Status{CurrentVersion: s.currentVersion, ReleasesURL: "https://github.com/" + s.repository + "/releases/latest", Phase: "idle"}
 	path, err := readPendingManifestRef(updateDataDir(filepath.Dir(s.executablePath)))
 	if errors.Is(err, os.ErrNotExist) {
 		return status, nil

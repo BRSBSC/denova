@@ -18,6 +18,17 @@ if [[ -z "${VERSION}" ]]; then
   fi
 fi
 
+# A fork's release updates from the fork's own releases. GitHub Actions sets
+# GITHUB_REPOSITORY; other builds keep the default compiled into the binary.
+REPOSITORY_LDFLAG=""
+if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
+  if [[ ! "${GITHUB_REPOSITORY}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    echo "Error: invalid GITHUB_REPOSITORY: ${GITHUB_REPOSITORY}" >&2
+    exit 1
+  fi
+  REPOSITORY_LDFLAG=" -X denova/internal/buildinfo.Repository=${GITHUB_REPOSITORY}"
+fi
+
 TARGETS=(
   "darwin-arm64:darwin:arm64:denova:denova-updater:tar.gz"
   "darwin-x64:darwin:amd64:denova:denova-updater:tar.gz"
@@ -214,7 +225,7 @@ for target in "${TARGETS[@]}"; do
   echo "  -> ${key}"
   binary_version="${VERSION#v}"
   CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
-    go build -tags embedweb -trimpath -ldflags "-s -w -X denova/internal/buildinfo.Version=${binary_version}" -o "${package_dir}/${exe}" ./cmd/denova
+    go build -tags embedweb -trimpath -ldflags "-s -w -X denova/internal/buildinfo.Version=${binary_version}${REPOSITORY_LDFLAG}" -o "${package_dir}/${exe}" ./cmd/denova
   CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
     go build -trimpath -ldflags "-s -w -X denova/internal/buildinfo.Version=${binary_version}" -o "${package_dir}/${updater_exe}" ./cmd/denova-updater
 

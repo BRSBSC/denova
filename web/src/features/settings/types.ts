@@ -673,6 +673,8 @@ export interface UpdateInstallProgress {
 
 export interface UpdateStatus {
   current_version: string
+  /** Releases of the repository that built this version; a fork links to its own packages. */
+  releases_url?: string
   id?: string
   version?: string
   phase: 'idle' | 'staged' | 'waiting' | 'backing_up' | 'applying' | 'starting' | 'rolling_back' | 'succeeded' | 'failed'

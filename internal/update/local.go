@@ -23,7 +23,7 @@ var (
 	ErrPackageTooLarge = errors.New("release package exceeds the size limit")
 	ErrUpdateBusy      = errors.New("another update operation is in progress")
 	updateOperation    sync.Mutex
-	archiveNamePattern = regexp.MustCompile(`^denova-v?([0-9]+\.[0-9]+\.[0-9]+)-(darwin|linux|windows)-(x64|arm64)\.(zip|tar\.gz)$`)
+	archiveNamePattern = regexp.MustCompile(`^denova-v?([0-9]+\.[0-9]+\.[0-9]+(?:fix[0-9]*)?)-(darwin|linux|windows)-(x64|arm64)\.(zip|tar\.gz)$`)
 )
 
 // InstallLocal stages a user-selected release without contacting GitHub or

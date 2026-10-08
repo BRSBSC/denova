@@ -31,8 +31,9 @@ command="$1"
 shift
 case "$command" in
   build)
+    flags="$*"
     while [[ "$1" != -o ]]; do shift; done
-    printf '#!/bin/sh\n# binary %s/%s\nexit 0\n' "$GOOS" "$GOARCH" > "$2"
+    printf '#!/bin/sh\n# binary %s/%s\n# %s\nexit 0\n' "$GOOS" "$GOARCH" "$flags" > "$2"
     ;;
   run)
     while [[ "$1" != -target ]]; do shift; done
@@ -103,5 +104,20 @@ printf 'tested frontend\n' > "${DENOVA_RELEASE_FRONTEND_DIR}/index.html"
 bash "${TEST_ROOT}/scripts/build-github-release.sh" v0.5.1fix linux-x64 > "${TEST_ROOT}/hotfix.log"
 test -s "${assets}/denova-v0.5.1fix-linux-x64.tar.gz"
 grep -q '^# Denova v0.5.1fix$' "${assets}/RELEASE_NOTES.md"
+
+# A fork release updates from the fork's own repository. Builds outside GitHub
+# Actions keep the default compiled into the binary.
+unpack_hotfix() {
+  rm -rf "${TEST_ROOT:?}/$1"
+  mkdir "${TEST_ROOT}/$1"
+  tar -xzf "${assets}/denova-v0.5.1fix-linux-x64.tar.gz" -C "${TEST_ROOT}/$1"
+}
+GITHUB_REPOSITORY=owner/fork bash "${TEST_ROOT}/scripts/build-github-release.sh" v0.5.1fix linux-x64 > /dev/null
+unpack_hotfix fork
+grep -q -- '-X denova/internal/buildinfo.Repository=owner/fork' "${TEST_ROOT}/fork/denova/denova"
+env -u GITHUB_REPOSITORY bash "${TEST_ROOT}/scripts/build-github-release.sh" v0.5.1fix linux-x64 > /dev/null
+unpack_hotfix default
+if grep -q 'buildinfo.Repository' "${TEST_ROOT}/default/denova/denova"; then exit 1; fi
+if GITHUB_REPOSITORY='owner/fork -X main.injected=1' bash "${TEST_ROOT}/scripts/build-github-release.sh" v0.5.1fix linux-x64 > /dev/null 2>&1; then exit 1; fi
 
 printf 'Release packaging tests passed.\n'

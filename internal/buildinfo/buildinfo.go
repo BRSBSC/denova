@@ -7,4 +7,7 @@ var Version = "dev"
 // DevelopmentVersion is the public capability target of this source tree.
 const DevelopmentVersion = "0.6.0"
 
-const Repository = "alfredxw/denova"
+// Repository is the GitHub repository whose releases update this build.
+// Release builds of a fork inject their own repository, so the updater never
+// replaces a fork build with an upstream package that lacks its changes.
+var Repository = "alfredxw/denova"
