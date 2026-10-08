@@ -10,7 +10,7 @@
 4. 首次发布后，在 **Packages → denova → Package settings** 中检查可见性。希望其他人无需登录即可拉取时，将包设置为 Public；公开仓库不代表包一定公开。
 5. 查看本次 Actions 运行日志和 Summary，确认镜像发布与 Release 同步均成功。公开仓库长时间无活动可能被 GitHub 停用定时工作流，需要在 Actions 中重新启用。
 
-镜像地址：`ghcr.io/brsbsc/denova:v0.4.5`（版本示例）以及 `ghcr.io/brsbsc/denova:latest`，支持 `linux/amd64`、`linux/arm64`。发布 job 仅允许在 `BRSBSC/denova` 执行；迁移到其他 fork 时须修改工作流仓库条件与 Compose 镜像地址。
+镜像地址：`ghcr.io/brsbsc/denova:v0.4.5`（版本示例），支持 `linux/amd64`、`linux/arm64`。上游同步只发布版本标签；`ghcr.io/brsbsc/denova:latest` 只由本 fork 的源码发布移动，见下文。发布 job 仅允许在 `BRSBSC/denova` 执行；迁移到其他 fork 时须修改工作流仓库条件与 Compose 镜像地址。
 
 ## 发布与失败处理
 
@@ -19,8 +19,8 @@
 - 应用源码修复必须先进入镜像所使用的 Linux 安装包。只推送本 fork 的应用源码补丁或对原版本执行 `force` 重建，不会将补丁编译进镜像；应同步包含修复的上游 Release，或另行构建并验证包含补丁的安装包与镜像。
 - 分别构建和测试两种架构：版本号、HTTP 页面、未登录访问拒绝、登录、设置读取，以及重启后的配置与登录会话保留。测试通过后推送版本镜像。
 - fork Release 的标题保留上游版本号，tag 使用 `upstream-v版本号` 并指向本次工作流提交；镜像标签仍为 `v版本号`。这避免导入上游工作流所需的额外权限，也避免触发现有 `v*` 源码发布流程。Release 自动附带的 Source code 压缩包对应 fork 的构建配置，原始应用源码请查看说明中的上游链接。不会覆盖没有本流程来源标记的已有 Release。
-- 仅当该版本仍是上游最新正式 Release，才将已测试版本镜像设为 `latest`。最后发布 Release 并写入完成标记；失败不会写入成功标记，后续定时任务可重试。首次失败可能留下 draft Release 或已推送的版本镜像。
-- 镜像与 Release 属于不同服务，无法进行跨服务原子提交；若最终发布 Release 失败，`latest` 可能已经指向通过测试的镜像，重试会补齐 Release。
+- 同步不移动 `latest` 镜像标签，也不把同步的 Release 标为 Latest：两者属于本 fork 的源码修复版，上游构建不含这些修复。最后发布 Release 并写入完成标记；失败不会写入成功标记，后续定时任务可重试。首次失败可能留下 draft Release 或已推送的版本镜像。
+- 镜像与 Release 属于不同服务，无法进行跨服务原子提交；若最终发布 Release 失败，版本镜像可能已经推送，重试会补齐 Release。
 - 每次定时任务只处理当时最新正式 Release，不补齐所有历史版本。手动输入 `tag` 可补指定版本，勾选 `force` 可重建同一版本。修改容器或同步流程并推送 `master` 时，也会重建最新版本。
 - 同步保留上游附件原样，包括安装脚本中的上游下载地址；只新增或替换同名附件，不自动删除此前已归档的附件。完成标记按 Release ID 和附件 ID、大小、更新时间计算，上游替换附件会触发重新处理。镜像仅使用当次下载并校验的 Linux 包。
 
@@ -61,9 +61,9 @@ docker compose --env-file docker/.env -f docker/compose.yml up -d
 
 `Release` 工作流按 `v*` 标签构建当前标签源码，不使用上游安装包。先验证相同提交的完整 CI，再生成五个平台安装包；发布安装包后，以其中的 Linux 包构建并冒烟验证 `linux/amd64`、`linux/arm64` 镜像，全部通过后推送版本标签和 `latest`。镜像的 revision 标签记录实际源码提交。
 
-`v0.5.1fix9` 对应镜像为 `ghcr.io/brsbsc/denova:v0.5.1fix9`。在 `docker/.env` 中将 `DENOVA_IMAGE_TAG` 设置为 `v0.5.1fix9`，再执行上文更新命令。固定版本标签可避免后续上游同步移动 `latest` 时自动切换版本。
+`v0.5.1fix9` 对应镜像为 `ghcr.io/brsbsc/denova:v0.5.1fix9`。在 `docker/.env` 中将 `DENOVA_IMAGE_TAG` 设置为 `v0.5.1fix9`，再执行上文更新命令。`latest` 始终指向最近一次源码发布，不受上游同步影响；需要运行未修改的上游构建时，将 `DENOVA_IMAGE_TAG` 设为上游版本号（例如 `v0.5.1`）。
 
-源码镜像与上游同步共用发布并发组，避免同时移动 `latest`。上游同步仍只处理上游正式版；后续发现新上游版本时，可继续发布新镜像。源码发布的安装脚本指向本 fork 的安装包。
+上游同步仍只处理上游正式版；后续发现新上游版本时，会继续发布其版本镜像，但不改变 `latest`。源码发布的安装脚本指向本 fork 的安装包。
 
 ## 验证入口
 
