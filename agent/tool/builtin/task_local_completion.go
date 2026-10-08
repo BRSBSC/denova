@@ -221,7 +221,19 @@ func (tasks *LocalTasks) forwardTaskRun(ctx context.Context, run *agent.Run, ref
 	if err != nil {
 		return err
 	}
+	// This watcher may subscribe after its Run settled, and a status read may
+	// since have closed the idle Session object and with it the in-memory
+	// history that held RunSettled. No further event arrives for a settled or
+	// suspended Run, so forward what was replayed and stop instead of waiting.
+	// Wait checks the same subscription snapshot for the same reason.
+	settled := false
+	if task, taskErr := tasks.taskFromSessionSnapshot(context.Background(), session, ref, observation.Snapshot); taskErr == nil {
+		settled = isTaskTerminal(task.Status) || task.Status == string(agentschema.ResultSuspended)
+	}
 	for observation.Events != nil || observation.Errors != nil {
+		if settled && len(observation.Events) == 0 {
+			return nil
+		}
 		select {
 		case event, ok := <-observation.Events:
 			if !ok {
