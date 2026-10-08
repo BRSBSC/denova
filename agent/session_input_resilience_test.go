@@ -89,3 +89,75 @@ func TestSessionFollowUpReturnsDurableRunReceipt(t *testing.T) {
 		t.Fatalf("repeat=%#v err=%v calls=%d", again, err, len(model.calls()))
 	}
 }
+
+func TestQueuedControlsRemainScopedAfterTheirRunIsAborted(t *testing.T) {
+	ctx := t.Context()
+	model := &gatedLifecycleModel{started: make(chan struct{}), release: make(chan struct{})}
+	owner, err := New(ctx, Definition{Name: "queue-controls", Model: model})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = owner.Close(context.Background()) })
+	key := NamedSession("old-queue")
+	sess, err := owner.Session(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := sess.Run(ctx, Input{Text: "task A", IdempotencyKey: "start-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-model.started
+	queued, err := sess.Queue(ctx, Input{Text: "old instruction", IdempotencyKey: "queued-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.SuspendTree(ctx, key, SuspendRequest{RunID: run.ID(), IdempotencyKey: "pause-a"}); err != nil {
+		t.Fatal(err)
+	}
+	sess, err = owner.Session(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued, found, err := sess.Queued(ctx, "queued-a")
+	if err != nil || !found {
+		t.Fatalf("queued input after pause: found=%v error=%v", found, err)
+	}
+	steer := QueueControlRequest{IdempotencyKey: "steer-a"}
+	receipt, err := queued.Interrupt(ctx, steer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := owner.AbortTree(ctx, key, AbortRequest{IdempotencyKey: "abort-a"}); err != nil {
+		t.Fatal(err)
+	}
+	sess, err = owner.Session(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued, found, err = sess.Queued(ctx, "queued-a")
+	if err != nil || !found {
+		t.Fatalf("queued input after abort: found=%v error=%v", found, err)
+	}
+	if retried, err := queued.Interrupt(ctx, steer); err != nil || retried != receipt {
+		t.Fatalf("accepted steer retry: receipt=%#v error=%v", retried, err)
+	}
+	for _, phase := range []string{"idle", "running"} {
+		if phase == "running" {
+			if _, err := sess.Run(ctx, Input{Text: "task B", IdempotencyKey: "start-b"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err := queued.Interrupt(ctx, QueueControlRequest{IdempotencyKey: "stale-steer-" + phase}); !errors.Is(err, ErrRunSettled) {
+			t.Fatalf("stale steer while %s: error=%v, want settled run", phase, err)
+		}
+	}
+	control := QueueControlRequest{IdempotencyKey: "cancel-a"}
+	if cancelled, err := queued.Cancel(ctx, control); err != nil || cancelled.RunID != run.ID() {
+		t.Fatalf("cancel old input: receipt=%#v error=%v", cancelled, err)
+	}
+	snapshot, err := sess.Snapshot(ctx)
+	if err != nil || snapshot.ActiveRunID == run.ID() || snapshot.ActiveRunID == "" || len(snapshot.QueuedRuns) != 0 {
+		t.Fatalf("task B after old input cancellation: snapshot=%#v error=%v", snapshot, err)
+	}
+}

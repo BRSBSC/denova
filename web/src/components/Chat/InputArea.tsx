@@ -56,6 +56,7 @@ interface InputAreaProps {
   /** An idle empty composer can continue the exact durable interruption. */
   resumeAvailable?: boolean
   queuedCommands?: AgentRuntimeQueuedCommand[]
+  activeOperationID?: string
   queueActionPendingCommandID?: string
   onQueuedCommandSteer?: (item: AgentRuntimeQueuedCommand) => boolean | void | Promise<boolean | void>
   onQueuedCommandDelete?: (item: AgentRuntimeQueuedCommand) => boolean | void | Promise<boolean | void>
@@ -121,6 +122,7 @@ export function InputArea({
   generationActive,
   resumeAvailable = false,
   queuedCommands = [],
+  activeOperationID = '',
   queueActionPendingCommandID = '',
   onQueuedCommandSteer,
   onQueuedCommandDelete,
@@ -592,7 +594,9 @@ export function InputArea({
         <AgentQueuedCommandList
           items={queuedCommands}
           pendingCommandID={queueActionPendingCommandID}
-          disabled={activeControlsDisabled || abortPending || commandSubmitting}
+          disabled={disabled || abortPending || commandSubmitting}
+          activeOperationID={activeOperationID}
+          steerDisabled={activeControlsDisabled}
           onSteer={onQueuedCommandSteer}
           onDelete={onQueuedCommandDelete}
           onEdit={onQueuedCommandEdit}

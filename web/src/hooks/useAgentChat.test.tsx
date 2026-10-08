@@ -79,6 +79,7 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/features/settings/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({ effective: {} }),
+  fetchProjectSettings: vi.fn().mockResolvedValue({ effective: {} }),
 }))
 
 describe('useAgentChat', () => {
@@ -1667,6 +1668,87 @@ describe('useAgentChat', () => {
     expect(vi.mocked(recoverChatAgentRuntime).mock.calls).toEqual([[attachAction, 'session-test'], [abortAction, 'session-test']])
     expect(submitChatCommand).not.toHaveBeenCalled()
     expect(chatMock.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it.each(['idle', 'running'] as const)('cancels an old queued input while the session is %s without replacing its current operation', async (phase) => {
+    const queued = { command_id: 'old-queued', operation_id: 'old-run', delivery: 'follow_up' as const, message: 'Recover this draft' }
+    const projection = { active: phase === 'running', phase, active_operation_id: phase === 'running' ? 'new-run' : '', cursor: 20, queue: [queued] }
+    vi.mocked(getActiveChatTask).mockResolvedValue(projection)
+    vi.mocked(submitQueuedChatCommand).mockResolvedValue({ command_id: 'cancel-old', operation_id: 'old-run', cursor: 21 })
+    const { result } = renderHook(() => useAgentChat())
+    await act(async () => result.current.resumeActiveChat())
+    await act(async () => { expect(await result.current.editQueuedCommand(queued)).toBe(queued.message) })
+    expect(submitQueuedChatCommand).toHaveBeenCalledWith('cancel_queued', expect.any(String), 'old-run', queued.command_id, 'session-test', 'returned_to_editor')
+    expect(result.current.runtimeProjection).toEqual({ ...projection, cursor: 21, queue: [] })
+    expect(submitChatCommand).not.toHaveBeenCalled()
+  })
+
+  it.each(['agent_runtime.rehydrate_required', 'agent_runtime.recovery_changed', 'agent_runtime.stream_attached'])('refreshes %s during stream recovery without waiting for focus', async (code) => {
+    const action = { kind: 'start_turn' as const, command_id: 'stale-start', operation_id: 'old-run' }
+    vi.mocked(getActiveChatTask)
+      .mockResolvedValueOnce({ active: true, phase: 'running', task_id: 'old-task', active_operation_id: 'old-run' })
+      .mockResolvedValueOnce({ active: false, phase: 'running', runtime_recoverable: true, recovery_paused: true, active_operation_id: 'old-run', recovery_actions: [action] })
+      .mockResolvedValue({ active: false, phase: 'idle', cursor: 12, queue: [] })
+    vi.mocked(recoverChatAgentRuntime).mockRejectedValue(Object.assign(new Error('Recovery projection changed'), { code, status: 409 }))
+    chatMock.status = 'streaming'
+    const { result, rerender } = renderHook(() => useAgentChat())
+    await waitFor(() => expect(getActiveChatTask).toHaveBeenCalledTimes(1))
+    act(() => { chatMock.status = 'error'; chatMock.error = new Error('Stream requires rehydration'); rerender() })
+    await waitFor(() => expect(getActiveChatTask).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(result.current.isStreaming).toBe(false))
+    expect(result.current.runtimeProjection?.phase).toBe('idle')
+    expect(getMessagesPage).toHaveBeenCalled()
+    expect(recoverChatAgentRuntime).toHaveBeenCalledTimes(1)
+    expect(chatMock.sendMessage).not.toHaveBeenCalled()
+    expect(chatMock.resumeStream).not.toHaveBeenCalled()
+  })
+
+  it('attaches the new task after a stale recovery action without resending input', async () => {
+    const action = { kind: 'start_turn' as const, command_id: 'stale-start', operation_id: 'old-run' }
+    vi.mocked(getActiveChatTask)
+      .mockResolvedValueOnce({ active: false, phase: 'running', runtime_recoverable: true, active_operation_id: 'old-run', recovery_actions: [action] })
+      .mockResolvedValue({ active: true, phase: 'running', task_id: 'new-task', active_operation_id: 'new-run' })
+    vi.mocked(recoverChatAgentRuntime).mockRejectedValue(Object.assign(new Error('Projection changed'), { code: 'agent_runtime.recovery_changed', status: 409 }))
+    const { result } = renderHook(() => useAgentChat())
+    const transport = (chatMock.options as { transport: AgentChatTransport }).transport
+    const setTarget = vi.spyOn(transport, 'setActiveStreamTarget')
+    await act(async () => result.current.resumeActiveChat())
+    await waitFor(() => expect(chatMock.resumeStream).toHaveBeenCalledTimes(1))
+    expect(setTarget).toHaveBeenCalledWith('new-task', undefined, { session_id: 'session-test' })
+    expect(result.current.runtimeProjection?.active_operation_id).toBe('new-run')
+    expect(chatMock.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('waits for an explicit retry when a conflicting recovery projection does not advance', async () => {
+    const action = { kind: 'start_turn' as const, command_id: 'stale-start', operation_id: 'old-run' }
+    vi.mocked(getActiveChatTask).mockResolvedValue({ active: false, phase: 'running', runtime_recoverable: true, active_operation_id: 'old-run', recovery_actions: [action] })
+    vi.mocked(recoverChatAgentRuntime).mockRejectedValue(Object.assign(new Error('Projection changed'), { code: 'agent_runtime.recovery_changed', status: 409 }))
+    const { result } = renderHook(() => useAgentChat())
+    await act(async () => result.current.resumeActiveChat())
+    expect(getActiveChatTask).toHaveBeenCalledTimes(2)
+    expect(recoverChatAgentRuntime).toHaveBeenCalledTimes(1)
+    expect(chatMock.resumeStream).not.toHaveBeenCalled()
+    await act(async () => result.current.resumeActiveChat())
+    expect(getActiveChatTask).toHaveBeenCalledTimes(4)
+    expect(recoverChatAgentRuntime).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['session', 'project'])('does not restore a cancelled draft into a newly selected %s', async (binding) => {
+    const queued = { command_id: 'old-queued', operation_id: 'old-run', delivery: 'follow_up' as const, message: 'Old session draft' }
+    vi.mocked(getActiveChatTask).mockResolvedValue({ active: false, phase: 'idle', queue: [queued] })
+    const cancellation = deferred<{ command_id: string; operation_id: string; cursor: number }>()
+    vi.mocked(submitQueuedChatCommand).mockReturnValue(cancellation.promise)
+    let projectId = 'project-a'
+    const { result, rerender } = renderHook(() => useAgentChat({ projectId }))
+    await act(async () => result.current.resumeActiveChat())
+    let edit!: Promise<string | null>
+    act(() => { edit = result.current.editQueuedCommand(queued) })
+    act(() => {
+      if (binding === 'session') writingAgentChatClient.fixedSessionId = 'other-session'
+      else projectId = 'project-b'
+      rerender()
+    })
+    await act(async () => { cancellation.resolve({ command_id: 'cancel', operation_id: 'old-run', cursor: 12 }); expect(await edit).toBeNull() })
   })
 
   it('observes a suspended Run without executing it and continues the exact Run explicitly', async () => {

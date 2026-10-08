@@ -189,25 +189,26 @@ export function useWritingAgentRuntimeRecovery({
           const shouldObserve = Boolean(projection.active || projection.task_id?.trim() || projection.runtime_recoverable)
           if (shouldObserve) wasStreamingRef.current = true
 
-          let failedProjection = ''
           let recovered: Awaited<ReturnType<typeof recoverWritingProjection>>
           while (true) {
             const projectionFingerprint = writingRecoveryProjectionFingerprint(projection)
-            if (!attachStream && projectionFingerprint === failedProjection) {
-              attachedRecoveryRetryNeededRef.current = false
-              setRecoveryPending(false)
-              return
-            }
             try {
               recovered = await recoverWritingProjection(projection, (action) => client.recoverChatAgentRuntime(action, sessionID))
               break
             } catch (error) {
-              if (attachStream || !isRecoveryProjectionRefreshError(error)) throw error
-              failedProjection = projectionFingerprint
+              if (!isRecoveryProjectionRefreshError(error)) throw error
               projection = await client.getActiveChatTask(sessionID)
               if (activeSessionIdRef.current !== sessionID) return
               runtimeProjectionRef.current = projection
               setRuntimeProjection(projection)
+              // A stale recovery action requires a new projection, regardless
+              // of whether this inspection also owns display attachment.
+              if (writingRecoveryProjectionFingerprint(projection) === projectionFingerprint) {
+                if (attachStream) throw error
+                attachedRecoveryRetryNeededRef.current = false
+                setRecoveryPending(false)
+                return
+              }
             }
           }
           runtimeProjectionRef.current = recovered.projection

@@ -12,6 +12,13 @@ Denova records only major user-visible features, important compatibility or data
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- 修复任务中断后恢复冲突导致 Agent 界面持续卡在重连状态的问题。
+- Fix recovery conflicts leaving the Agent interface stuck reconnecting after a task is interrupted.
+- 旧任务遗留的排队指令可在空闲或新任务运行时删除，写作指令可退回编辑，不影响新任务。
+- Allow queued instructions from earlier tasks to be deleted while idle or running a new task, and returned to the writing editor without affecting the new task.
+
 ## [v0.5.1fix8] - 2026-10-07
 
 ### Brief / 简要说明

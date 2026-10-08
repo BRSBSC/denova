@@ -103,6 +103,12 @@ func (queued *QueuedInput) control(ctx context.Context, request QueueControlRequ
 		session.mu.Unlock()
 		return CommandReceipt{}, ErrInputCancelled
 	}
+	// An earlier Run's input cannot steer a later Run. Check after replaying
+	// accepted receipts so retries keep their original result after settlement.
+	if status == inputPending && item.targetRunID != "" && (session.active == nil || session.active.id != item.targetRunID) {
+		session.mu.Unlock()
+		return CommandReceipt{}, ErrRunSettled
+	}
 	control := persistedControlReceipt{Receipt: CommandReceipt{CommandID: id, RunID: item.targetRunID, Cursor: session.cursor + 1}, Hash: hash}
 	delivery := item.delivery
 	if status == inputPending {
