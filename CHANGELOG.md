@@ -12,6 +12,11 @@ Denova records only major user-visible features, important compatibility or data
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- 修复手动压缩 AgentChat 上下文时阻塞其他会话发送、配置和恢复请求的问题，并避免应用关闭等待压缩模型响应。
+- Fix manual AgentChat context compaction blocking message, configuration and recovery requests in other conversations and app shutdown waiting for the compaction provider.
+
 ## [v0.5.1fix11] - 2026-10-08
 
 ### Brief / 简要说明

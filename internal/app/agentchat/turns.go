@@ -362,6 +362,9 @@ func (service *Service) SubmitCommand(ctx context.Context, binding Binding, comm
 		return agentrun.CommandReceipt{}, err
 	}
 	active := service.activeRun(binding)
+	if active != nil && active.kind == compactionRun && !active.task.Finished() {
+		return agentrun.CommandReceipt{}, agentruntime.ErrOperationActive
+	}
 	taskID := ""
 	var emit func(agentrun.Event)
 	if active != nil && active.task != nil && !active.task.Finished() {
