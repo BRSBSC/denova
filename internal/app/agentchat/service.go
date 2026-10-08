@@ -93,7 +93,17 @@ func (runtime *projectRuntime) close() {
 	})
 }
 
+// runKind keeps internal maintenance out of durable command and chat-stream
+// projections; both kinds own the same scoped Task occupancy.
+type runKind uint8
+
+const (
+	turnRun runKind = iota
+	compactionRun
+)
+
 type run struct {
+	kind            runKind
 	binding         Binding
 	commandID       string
 	task            *apptask.Task
