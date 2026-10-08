@@ -55,8 +55,9 @@ for (const product of ['writing', 'general'] as const) {
       await page.screenshot({ path: testInfo.outputPath(`${product}-${theme}-compacting.png`), animations: 'disabled' })
       if (product === 'writing') {
         await page.setViewportSize({ width: 390, height: 844 })
-        const agentTab = page.getByRole('tab', { name: 'Agent', exact: true })
-        if (await agentTab.count()) await agentTab.click()
+        // Click waits for the narrow layout to render its tabs. A count() check
+        // can run first, skip the click and leave the Agent panel hidden.
+        await page.getByRole('tab', { name: 'Agent', exact: true }).click()
         await expect(page.getByText('正在压缩会话上下文，完成后可继续发送消息。', { exact: true })).toBeVisible()
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       }
