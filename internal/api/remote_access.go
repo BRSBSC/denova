@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"denova/config"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -22,6 +23,7 @@ import (
 type remoteAccessGate struct {
 	config       func() config.RemoteAccessConfig
 	sessions     *browserSessions
+	logins       *loginThrottle
 	cookieName   string
 	port         int
 	listeningLAN bool
@@ -30,7 +32,7 @@ type remoteAccessGate struct {
 func newRemoteAccessGate(readConfig func() config.RemoteAccessConfig, port string) *remoteAccessGate {
 	access := readConfig()
 	number, _ := strconv.Atoi(port)
-	return &remoteAccessGate{config: readConfig, sessions: newBrowserSessions(access.DataDir), cookieName: "denova_session_" + port, port: number, listeningLAN: access.AllowLANAccess}
+	return &remoteAccessGate{config: readConfig, sessions: newBrowserSessions(access.DataDir), logins: newLoginThrottle(), cookieName: "denova_session_" + port, port: number, listeningLAN: access.AllowLANAccess}
 }
 
 func (g *remoteAccessGate) middleware(ctx context.Context, c *app.RequestContext) {
@@ -182,18 +184,28 @@ func (g *remoteAccessGate) login(ctx context.Context, c *app.RequestContext) {
 		abortWithLocalizedError(c, consts.StatusBadRequest, "api.common.invalidBody")
 		return
 	}
+	client := requestClientIP(c)
+	// Checked before the credentials, so a waiting client costs no password hashing.
+	if wait := g.logins.retryAfter(client, time.Now()); wait > 0 {
+		slog.InfoContext(ctx, "remote_login_throttled", "client_ip", client)
+		c.Response.Header.Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		abortWithLocalizedError(c, consts.StatusTooManyRequests, "api.access.tooManyAttempts")
+		return
+	}
 	if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(input.Username)), []byte(access.Username)) != 1 || !config.CheckRemoteAccessPassword(access.PasswordHash, input.Password) {
-		slog.InfoContext(ctx, "remote_login_rejected", "client_ip", requestClientIP(c))
+		g.logins.failed(client, time.Now())
+		slog.InfoContext(ctx, "remote_login_rejected", "client_ip", client)
 		abortWithLocalizedError(c, consts.StatusUnauthorized, "api.access.invalidCredentials")
 		return
 	}
+	g.logins.succeeded(client)
 	token, err := g.sessions.issue(access)
 	if err != nil {
 		g.storeFailure(ctx, c, err)
 		return
 	}
 	g.setCookie(c, token, int(browserSessionLifetime.Seconds()))
-	slog.InfoContext(ctx, "remote_login_succeeded", "client_ip", requestClientIP(c))
+	slog.InfoContext(ctx, "remote_login_succeeded", "client_ip", client)
 	c.JSON(consts.StatusOK, map[string]any{"local": isLocalRequest(c), "authenticated": true})
 }
 

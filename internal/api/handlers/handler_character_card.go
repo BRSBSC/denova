@@ -13,6 +13,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 
+	novaApp "denova/internal/app"
 	"denova/internal/app/resourceexchange"
 	appsettings "denova/internal/app/settings"
 	"denova/internal/book/character"
@@ -147,7 +148,7 @@ func (h *Handlers) writeCharacterCardImportResult(ctx context.Context, c *app.Re
 			"error", err,
 		)
 		status := consts.StatusBadRequest
-		if strings.Contains(err.Error(), "已存在") {
+		if errors.Is(err, novaApp.ErrBookDirectoryExists) || errors.Is(err, lore.ErrNameExists) || errors.Is(err, lore.ErrIDExists) {
 			status = consts.StatusConflict
 		}
 		writeErrorKey(c, status, "api.characterCard.importFailed", "detail", err.Error())

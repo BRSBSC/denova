@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 
+	novaApp "denova/internal/app"
 	appsettings "denova/internal/app/settings"
 	"denova/internal/book"
 )
@@ -144,7 +146,7 @@ func (h *Handlers) HandleNovelImport(ctx context.Context, c *app.RequestContext)
 	created, err := h.app.CreateBook(ctx, layered.Paths.DenovaDir, title, author, description)
 	if err != nil {
 		status := consts.StatusInternalServerError
-		if strings.Contains(err.Error(), "已存在") {
+		if errors.Is(err, novaApp.ErrBookDirectoryExists) {
 			status = consts.StatusConflict
 		}
 		writeErrorKey(c, status, "api.novelImport.importFailed", "detail", err.Error())

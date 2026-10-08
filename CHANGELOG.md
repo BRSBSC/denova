@@ -17,6 +17,9 @@ Denova records only major user-visible features, important compatibility or data
 - 修复远程访问登录可被绕过的问题：经同机反向代理或隧道访问时，伪造的 `X-Forwarded-For` 不再被当作本机请求；免登录的本机访问现在还要求请求的 `Host` 是 `localhost` 或回环地址，阻止 DNS 重绑定。通过自定义主机名访问本机的用户需改用 `localhost`，或开启局域网访问后登录。
 - Fix a remote access login bypass: a forged `X-Forwarded-For` sent through a same-host reverse proxy or tunnel is no longer treated as a local request, and password-free local access now also requires a `localhost` or loopback `Host`, which blocks DNS rebinding. Users who open the local instance through a custom host name must use `localhost` or enable LAN access and sign in.
 
+- 远程访问登录增加失败限速：同一地址连续失败 5 次后，每次再尝试需等待 1 分钟；等待结束后正确密码仍可登录，其他设备不受影响。
+- Remote access sign-in now slows repeated failures: after 5 failures in a row from one address, each further attempt waits 1 minute. The right password works again after the wait, and other devices are unaffected.
+
 ### Added / 新增
 
 - 资料库新增文档式资料索引，支持自定义与自动分组、逐项双向关联和实时预览；按组直接向写作与游戏 Agent 注入名称、简介或全文，并可按组名或全文关键词查询。

@@ -136,6 +136,7 @@ var catalogZH = map[string]string{
 	"api.access.originRejected":     "此请求的来源不受信任，请从 Denova 页面重试。",
 	"api.access.pairingInvalid":     "连接链接已失效或已使用，请生成新链接或使用账号密码登录。",
 	"api.access.storeFailed":        "无法保存或读取登录状态，请检查数据目录权限及服务日志。",
+	"api.access.tooManyAttempts":    "登录失败次数过多，请稍后再试。",
 
 	"api.update.uploadRequired": "请选择 GitHub Release 安装包。",
 	"api.update.invalidPackage": "安装包无效或不完整。请上传未经解压、重命名的 Denova 正式发布压缩包。",
@@ -370,6 +371,7 @@ var catalogEN = map[string]string{
 	"api.access.originRejected":     "This request origin is not allowed. Retry from the Denova page.",
 	"api.access.pairingInvalid":     "This connection link has expired or was already used. Generate another link or sign in with your password.",
 	"api.access.storeFailed":        "Could not read or save the login session. Check data directory permissions and server logs.",
+	"api.access.tooManyAttempts":    "Too many sign-in attempts. Wait a moment and try again.",
 
 	"api.update.uploadRequired": "Select a GitHub Release archive.",
 	"api.update.invalidPackage": "The package is invalid or incomplete. Upload an unmodified Denova stable release archive without extracting or renaming it.",

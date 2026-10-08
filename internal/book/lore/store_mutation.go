@@ -14,6 +14,13 @@ import (
 	"time"
 )
 
+// ErrNameExists and ErrIDExists identify a conflict with an existing item, so
+// callers can report it without reading the user-facing message.
+var (
+	ErrNameExists = errors.New("资料名称已存在")
+	ErrIDExists   = errors.New("资料 ID 已存在")
+)
+
 func NewStore(workspace string) *Store {
 	return &Store{workspace: workspace, mutationMu: sharedLoreMutationLock(workspace)}
 }
@@ -150,10 +157,10 @@ func (s *Store) Create(input ItemInput) (Item, error) {
 		return Item{}, err
 	}
 	if loreItemNameIndex(collection.Items, item.Name, "") >= 0 {
-		return Item{}, fmt.Errorf("资料名称已存在: %s", item.Name)
+		return Item{}, fmt.Errorf("%w: %s", ErrNameExists, item.Name)
 	}
 	if s.hasItem(collection.Items, item.ID) {
-		return Item{}, fmt.Errorf("资料 ID 已存在: %s", item.ID)
+		return Item{}, fmt.Errorf("%w: %s", ErrIDExists, item.ID)
 	}
 	collection.Items = append(collection.Items, item)
 	if err := s.save(collection); err != nil {
@@ -215,7 +222,7 @@ func (s *Store) Update(id string, input ItemInput) (Item, error) {
 			return Item{}, err
 		}
 		if loreItemNameIndex(collection.Items, updated.Name, id) >= 0 {
-			return Item{}, fmt.Errorf("资料名称已存在: %s", updated.Name)
+			return Item{}, fmt.Errorf("%w: %s", ErrNameExists, updated.Name)
 		}
 		collection.Items[i] = updated
 		if err := s.save(collection); err != nil {
@@ -297,7 +304,7 @@ func (s *Store) ApplyOperations(message string, ops []Operation) (ApplyResult, e
 				return ApplyResult{}, err
 			}
 			if loreItemNameIndex(next, item.Name, "") >= 0 {
-				return ApplyResult{}, fmt.Errorf("资料名称已存在: %s", item.Name)
+				return ApplyResult{}, fmt.Errorf("%w: %s", ErrNameExists, item.Name)
 			}
 			if item.ID == "" {
 				item.ID, err = NewItemID(next, item.Name)
@@ -306,7 +313,7 @@ func (s *Store) ApplyOperations(message string, ops []Operation) (ApplyResult, e
 				}
 			}
 			if loreItemIndex(next, item.ID) >= 0 {
-				return ApplyResult{}, fmt.Errorf("资料 ID 已存在: %s", item.ID)
+				return ApplyResult{}, fmt.Errorf("%w: %s", ErrIDExists, item.ID)
 			}
 			next = append(next, item)
 			result.Created = append(result.Created, resolveItem(item, collection.Assets))
@@ -362,7 +369,7 @@ func (s *Store) ApplyOperations(message string, ops []Operation) (ApplyResult, e
 				return ApplyResult{}, err
 			}
 			if loreItemNameIndex(next, updated.Name, id) >= 0 {
-				return ApplyResult{}, fmt.Errorf("资料名称已存在: %s", updated.Name)
+				return ApplyResult{}, fmt.Errorf("%w: %s", ErrNameExists, updated.Name)
 			}
 			next[idx] = updated
 			result.Updated = append(result.Updated, resolveItem(updated, collection.Assets))

@@ -3,6 +3,7 @@ package lore
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -133,5 +134,19 @@ func TestCreateAndReclassifyAfterDefaultCategoryRemoval(t *testing.T) {
 	}
 	if _, err := store.Create(ItemInput{Name: "Stale type", Type: "world"}); err == nil {
 		t.Fatal("accepted deleted category")
+	}
+}
+
+func TestCreateReportsExistingNamesAndIDsAsTypedConflicts(t *testing.T) {
+	store := NewStore(t.TempDir())
+	created, err := store.Create(ItemInput{Name: "Lighthouse", Type: "location"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Create(ItemInput{Name: "Lighthouse", Type: "location"}); !errors.Is(err, ErrNameExists) {
+		t.Fatalf("duplicate name error = %v", err)
+	}
+	if _, err := store.Create(ItemInput{ID: created.ID, Name: "Harbor", Type: "location"}); !errors.Is(err, ErrIDExists) {
+		t.Fatalf("duplicate ID error = %v", err)
 	}
 }

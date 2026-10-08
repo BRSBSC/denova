@@ -289,6 +289,10 @@ type BookCreationResult struct {
 	Meta      book.BookMeta
 }
 
+// ErrBookDirectoryExists means the Book's directory is already taken. Callers
+// report it as a conflict without reading the user-facing message.
+var ErrBookDirectoryExists = errors.New("目录已存在")
+
 // CreateBook creates and selects a new Book Project below parentDir.
 func (a *App) CreateBook(ctx context.Context, parentDir, title, author, description string) (BookCreationResult, error) {
 	return a.workspaceService().CreateBook(ctx, parentDir, title, author, description)
@@ -315,14 +319,14 @@ func (s *workspaceService) CreateBook(ctx context.Context, parentDir, title, aut
 	title = directoryName
 	dir := filepath.Join(absParent, directoryName)
 	if _, err := os.Stat(dir); err == nil {
-		return BookCreationResult{}, fmt.Errorf("目录已存在: %s", dir)
+		return BookCreationResult{}, fmt.Errorf("%w: %s", ErrBookDirectoryExists, dir)
 	}
 	if novaDir != "" {
 		if absNovaDir, err := filepath.Abs(novaDir); err == nil && absParent == filepath.Join(absNovaDir, projectdomain.ContentDirectoryName) {
 			legacyDir := filepath.Join(absNovaDir, title)
 			legacyType, detectErr := projectdomain.DetectType(legacyDir)
 			if legacyDir != dir && detectErr == nil && legacyType == projectdomain.TypeBook {
-				return BookCreationResult{}, fmt.Errorf("目录已存在: %s", legacyDir)
+				return BookCreationResult{}, fmt.Errorf("%w: %s", ErrBookDirectoryExists, legacyDir)
 			}
 		}
 	}

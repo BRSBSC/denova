@@ -13,6 +13,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 
+	novaApp "denova/internal/app"
 	bookapp "denova/internal/app/book"
 	imageapp "denova/internal/app/image"
 	appsettings "denova/internal/app/settings"
@@ -58,7 +59,7 @@ func (h *Handlers) HandleCreateBook(ctx context.Context, c *app.RequestContext) 
 	created, err := h.app.CreateBook(ctx, layered.Paths.DenovaDir, req.Title, req.Author, req.Description)
 	if err != nil {
 		status := consts.StatusInternalServerError
-		if strings.Contains(err.Error(), "已存在") {
+		if errors.Is(err, novaApp.ErrBookDirectoryExists) {
 			status = consts.StatusConflict
 		}
 		writeError(c, status, err.Error())

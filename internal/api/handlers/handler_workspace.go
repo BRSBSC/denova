@@ -124,16 +124,5 @@ func fileReadStatus(err error) int {
 	if os.IsNotExist(err) {
 		return consts.StatusNotFound
 	}
-	if isForbiddenFileError(err) {
-		return consts.StatusForbidden
-	}
 	return consts.StatusBadRequest
-}
-
-func isForbiddenFileError(err error) bool {
-	msg := err.Error()
-	return msg == "路径不能为空" ||
-		msg == "不允许使用绝对路径" ||
-		msg == "路径不在 workspace 范围内" ||
-		msg == "不允许操作隐藏文件或隐藏目录"
 }
