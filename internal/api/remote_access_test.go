@@ -189,6 +189,39 @@ func TestRemoteAccessLocalTrustRequiresLoopbackClientAndHost(t *testing.T) {
 	}
 }
 
+func TestRemoteAccessLoginSlowsRepeatedFailures(t *testing.T) {
+	gate, h, _ := testRemoteAccess(t)
+	// A wrong username fails before the password hash is computed, keeping the test fast.
+	wrong, right := `{"username":"intruder","password":"guess"}`, `{"username":"reader","password":"secret"}`
+	for attempt := 1; attempt <= loginFailureLimit; attempt++ {
+		if res := remoteRequest(h, "POST", "/api/auth/login", wrong, ""); res.Code != 401 {
+			t.Fatalf("failure %d: %d", attempt, res.Code)
+		}
+	}
+	// The right password is not even evaluated while the client has to wait.
+	locked := remoteRequest(h, "POST", "/api/auth/login", right, "", ut.Header{Key: "X-Denova-Locale", Value: "en-US"})
+	if locked.Code != 429 || locked.Header().Get("Retry-After") == "" || !strings.Contains(locked.Body.String(), "Too many sign-in attempts") {
+		t.Fatalf("locked out client: %d %v %s", locked.Code, locked.Header(), locked.Body.String())
+	}
+	other := ut.PerformRequest(h.Engine, "POST", "http://127.0.0.1:8080/api/auth/login", &ut.Body{Body: strings.NewReader(right), Len: len(right)},
+		ut.Header{Key: "X-Forwarded-For", Value: "192.168.1.9"}, ut.Header{Key: "Content-Type", Value: "application/json"})
+	if other.Code != 200 {
+		t.Fatalf("another client was locked out too: %d %s", other.Code, other.Body.String())
+	}
+	// The wait is a delay, not an account lock: afterwards the right password works and clears the count.
+	gate.logins.mu.Lock()
+	waited := gate.logins.failures["192.168.1.8"]
+	waited.last = time.Now().Add(-loginLockout)
+	gate.logins.failures["192.168.1.8"] = waited
+	gate.logins.mu.Unlock()
+	if res := remoteRequest(h, "POST", "/api/auth/login", right, ""); res.Code != 200 {
+		t.Fatalf("sign-in after the wait: %d %s", res.Code, res.Body.String())
+	}
+	if res := remoteRequest(h, "POST", "/api/auth/login", wrong, ""); res.Code != 401 {
+		t.Fatalf("first failure after a successful sign-in: %d", res.Code)
+	}
+}
+
 func TestRemoteAccessCorruptStoreFailsClosed(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "remote-access-sessions.json")
