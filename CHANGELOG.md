@@ -4,11 +4,28 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix13）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix14）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix13) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix14) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
+
+## [v0.5.1fix14] - 2026-10-09
+
+### Brief / 简要说明
+
+#### 中文
+
+- 设置里的「默认语言模型」不再提供无效的「默认（尚未配置）」选项：没有可沿用的默认模型时，只能从已添加的模型中选择。
+
+#### English
+
+- The "Default language model" setting no longer offers a "Default (Not configured)" option that selects nothing: when there is no default model to fall back to, only the models you added can be chosen.
+
+### Fixed / 修复
+
+- 修复设置里的「默认语言模型」在没有可沿用的默认模型时仍显示「默认（尚未配置）」选项的问题：选中它等于没有默认模型。现在该选项只在确实存在可沿用的默认模型时出现，未选择时显示「尚未配置」。
+- Fix the "Default language model" setting still showing a "Default (Not configured)" option when there is no default model to fall back to: choosing it left no default model. The option now appears only when such a default exists, and the field reads "Not configured" until a model is chosen.
 
 ## [v0.5.1fix13] - 2026-10-09
 
