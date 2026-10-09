@@ -29,7 +29,77 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "missing --no-config")
 		os.Exit(2)
 	}
+	if probes := os.Getenv("DENOVA_TEST_SHELL_HELPER"); probes != "" {
+		log, err := os.OpenFile(probes, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err == nil {
+			_, err = log.WriteString("probe\n")
+			err = errors.Join(err, log.Close())
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		fmt.Fprintln(os.Stdout, "fake shell 1.0")
+		os.Exit(0)
+	}
 	os.Exit(m.Run())
+}
+
+// newFakeShell places this test binary where a Bash executable is expected.
+// Each time it is started it records one line in the returned file.
+func newFakeShell(t *testing.T) (executable, probes string) {
+	t.Helper()
+	directory := t.TempDir()
+	executable = filepath.Join(directory, "bash")
+	if runtime.GOOS == "windows" {
+		executable += ".exe"
+	}
+	// A copy, not a link: Windows refuses to remove a link to a running binary.
+	binary, err := os.ReadFile(os.Args[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(executable, binary, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	probes = filepath.Join(directory, "probes")
+	t.Setenv("DENOVA_TEST_SHELL_HELPER", probes)
+	return executable, probes
+}
+
+func mustProbeFakeShell(t *testing.T, executable string) {
+	t.Helper()
+	runner, err := NewLocalCommandRunner(CommandRunnerOptions{
+		Workspace: mustOpenTestWorkspace(t, t.TempDir()), Shell: ShellBash, Executable: executable,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runner.version != "fake shell 1.0" {
+		t.Fatalf("shell version = %q", runner.version)
+	}
+}
+
+func TestCommandRunnerProbesAnUnchangedShellOnce(t *testing.T) {
+	executable, probes := newFakeShell(t)
+	mustProbeFakeShell(t, executable)
+	mustProbeFakeShell(t, executable)
+	if recorded, err := os.ReadFile(probes); err != nil || string(recorded) != "probe\n" {
+		t.Fatalf("shell probes = %q, %v", recorded, err)
+	}
+}
+
+func TestCommandRunnerProbesAReplacedShellAgain(t *testing.T) {
+	executable, probes := newFakeShell(t)
+	mustProbeFakeShell(t, executable)
+	replaced := time.Now().Add(time.Hour)
+	if err := os.Chtimes(executable, replaced, replaced); err != nil {
+		t.Fatal(err)
+	}
+	mustProbeFakeShell(t, executable)
+	if recorded, err := os.ReadFile(probes); err != nil || string(recorded) != "probe\nprobe\n" {
+		t.Fatalf("shell probes = %q, %v", recorded, err)
+	}
 }
 
 func TestLineNumbersUsesCompactPrefixAndPreservesIndentation(t *testing.T) {

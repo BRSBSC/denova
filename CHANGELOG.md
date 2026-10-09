@@ -12,6 +12,17 @@ Denova records only major user-visible features, important compatibility or data
 
 ## [Unreleased]
 
+### Fixed / 修复
+
+- 修复子 Agent 任务在很短时间内结束时，结果可能一直送不到父 Agent 的问题。
+- Fix a sub-agent task's result sometimes never reaching the parent Agent when the task finished very quickly.
+
+- 修复停止 Codex 对话时，若工具调用恰好同时结束，可能没有真正中断 Codex 的问题。
+- Fix stopping a Codex conversation sometimes not interrupting Codex when a tool call ended at the same moment.
+
+- 每轮对话不再重新启动一次 Shell 来查询版本，Windows 上每轮响应可快约 0.4 秒。
+- Each turn no longer starts the shell again to ask its version, saving about 0.4 seconds per turn on Windows.
+
 ## [v0.5.1fix12] - 2026-10-09
 
 ### Brief / 简要说明

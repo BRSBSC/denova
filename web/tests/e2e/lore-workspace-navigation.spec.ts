@@ -106,6 +106,11 @@ for (const theme of ['dark', 'light']) {
 
     await page.setViewportSize({ width: 1920, height: 1080 })
     await sidebar.getByRole('button', { name: '游戏', exact: true }).click()
+    // Leaving Writing keeps its page mounted but hidden, and the switch lands a
+    // moment after the click. Wait for it: a page-wide locator resolved while
+    // Writing still shows binds to its button, which then hides, and the click
+    // keeps retrying that hidden button instead of finding the library's.
+    await expect(workspace).toBeHidden()
     await sidebar.getByRole('button', { name: '资料库', exact: true }).click()
     await page.getByRole('button', { name: '资料索引', exact: true }).click()
     await expect(page.getByTestId('lore-index-editor').getByRole('textbox', { name: '阅读指引', exact: true })).toContainText('Read the harbor lore first.')

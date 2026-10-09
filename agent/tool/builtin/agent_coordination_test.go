@@ -261,6 +261,41 @@ func TestResumedChildStillDeliversCompletion(t *testing.T) {
 		}
 	}
 }
+
+// A completion watcher may subscribe after its Run settled and after a status
+// read closed the idle Session object, which discards the in-memory history
+// that held RunSettled. Forwarding must not wait for an event that is gone.
+func TestForwardTaskRunReturnsWhenTheRunSettledBeforeSubscription(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	child := newTaskAgent(t, agentsession.Memory(), &taskModel{responses: []*agentschema.Message{
+		agentschema.AssistantMessage("quick result", nil),
+	}})
+	defer child.Close(context.Background())
+	executor := newTaskExecutor(t, child)
+	started, err := executor.Start(ctx, TaskRequest{Agent: "researcher", Prompt: "inspect", IdempotencyKey: "start"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executor.Wait(ctx, []TaskRef{started.Ref}); err != nil {
+		t.Fatal(err)
+	}
+	// Reading a settled task closes its idle Session object.
+	if task, err := executor.taskSnapshot(ctx, started.Ref); err != nil || !isTaskTerminal(task.Status) {
+		t.Fatalf("task=%+v err=%v", task, err)
+	}
+	forwarded := make(chan error, 1)
+	go func() { forwarded <- executor.forwardTaskRun(ctx, nil, started.Ref) }()
+	select {
+	case err := <-forwarded:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("forwarding waited for a Run that had already settled")
+	}
+}
+
 func TestAwaitAllRemovesReadyTargetsAndAttentionShortCircuits(t *testing.T) {
 	for _, attention := range []bool{false, true} {
 		executor := &stagedWaitExecutor{attention: attention}
