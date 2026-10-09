@@ -5,6 +5,7 @@ import (
 	"denova/internal/agents/run"
 	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -550,5 +551,52 @@ func TestTaskDisplayCheckpointMergesDeltasStampedWithSegmentOffsets(t *testing.T
 	// The merged event still starts where its first delta started.
 	if thinking["content"] != "一段思考" || thinking[agentrun.DisplaySegmentOffsetKey] != 0 {
 		t.Fatalf("merged checkpoint thinking = %#v", thinking)
+	}
+}
+
+// A streamed delta must cost its own length. Re-encoding the merged text on
+// every delta is quadratic: a long thinking block then reaches the client
+// minutes after the model produced it.
+func TestTaskDisplayCheckpointMergeCostsOnlyTheDelta(t *testing.T) {
+	task, err := NewDeferred(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer task.RejectStart(errors.New("test complete"))
+	task.Emit(agentrun.Event{Type: "agent_cycle_started", Data: map[string]any{"operation_id": "operation-1", "cycle": 1}})
+	task.Emit(agentrun.Event{Type: "tool_call", Data: map[string]any{"id": "call-1", "name": "edit", "run_id": "run-1"}})
+	const deltas = 4000
+	// Escaped characters make the encoded size differ from the raw length.
+	const delta = "思考 <&> \"quoted\"\n"
+	for range deltas {
+		task.Emit(agentrun.Event{Type: "tool_args_delta", Data: map[string]any{"id": "call-1", "delta": delta, "run_id": "run-1"}})
+	}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for range deltas {
+		task.Emit(agentrun.Event{Type: "thinking", Data: map[string]any{"content": delta, "run_id": "run-1"}})
+	}
+	runtime.ReadMemStats(&after)
+
+	task.mu.Lock()
+	defer task.mu.Unlock()
+	if len(task.checkpointEvents) != 3 {
+		t.Fatalf("checkpoint events = %d, want the anchor, one tool call and one thinking block", len(task.checkpointEvents))
+	}
+	total := 0
+	for index, event := range task.checkpointEvents {
+		if want := taskEventSize(Event{Event: event}); task.checkpointBytes[index] != want {
+			t.Fatalf("checkpoint event %d (%s) charged %d bytes, encodes to %d", index, event.Type, task.checkpointBytes[index], want)
+		}
+		total += task.checkpointBytes[index]
+	}
+	if task.checkpointSize != total {
+		t.Fatalf("checkpoint size = %d, want %d", task.checkpointSize, total)
+	}
+	// Copying the merged text once per delta would allocate this much; encoding
+	// it per delta as well, several times more.
+	copiedPerDelta := uint64(deltas * deltas / 2 * len(delta))
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > copiedPerDelta/4 {
+		t.Fatalf("merging %d thinking deltas allocated %d bytes, want under %d: each delta pays for the whole merged text", deltas, allocated, copiedPerDelta/4)
 	}
 }

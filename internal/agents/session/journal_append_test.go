@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -678,5 +679,54 @@ func TestHistoryPageIncludesStreamedDisplayContentStillBelowTheBatchBoundary(t *
 	}
 	if len(page.Entries) != 1 || page.Entries[0].Content != "prefix buffered tail" {
 		t.Fatalf("history page = %#v, want the unflushed streamed tail included", page.Entries)
+	}
+}
+
+// A streamed delta must cost its own length. Copying the whole card for every
+// delta is quadratic: a long thinking block then falls minutes behind the model.
+func TestAppendDisplayEventContentCostsOnlyTheDelta(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := store.GetOrCreate("display-stream-cost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sess.AppendDisplayEvent(DisplayEvent{ID: "thinking-stream", Role: "thinking", Content: "prefix "}); err != nil {
+		t.Fatal(err)
+	}
+	const deltas = 8000
+	const delta = "一段思考 delta "
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for range deltas {
+		if err := sess.AppendDisplayEventContent("thinking-stream", "thinking", delta); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runtime.ReadMemStats(&after)
+	if err := sess.FlushDisplayEventContent("thinking-stream", "thinking"); err != nil {
+		t.Fatal(err)
+	}
+
+	want := "prefix " + strings.Repeat(delta, deltas)
+	reloadedStore, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := reloadedStore.Get(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, history := range map[string][]HistoryEntry{"live": sess.History(), "reloaded": reloaded.History()} {
+		if len(history) != 1 || history[0].Content != want {
+			t.Fatalf("%s history lost streamed content: %d entries", name, len(history))
+		}
+	}
+	copiedPerDelta := uint64(deltas * deltas / 2 * len(delta))
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > copiedPerDelta/4 {
+		t.Fatalf("appending %d deltas allocated %d bytes, want under %d: each delta pays for the whole card", deltas, allocated, copiedPerDelta/4)
 	}
 }

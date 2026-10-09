@@ -61,7 +61,7 @@ docker compose --env-file docker/.env -f docker/compose.yml up -d
 
 `Release` 工作流按 `v*` 标签构建当前标签源码，不使用上游安装包。先验证相同提交的完整 CI，再生成五个平台安装包；发布安装包后，以其中的 Linux 包构建并冒烟验证 `linux/amd64`、`linux/arm64` 镜像，全部通过后推送版本标签和 `latest`。镜像的 revision 标签记录实际源码提交。
 
-`v0.5.1fix12` 对应镜像为 `ghcr.io/brsbsc/denova:v0.5.1fix12`。在 `docker/.env` 中将 `DENOVA_IMAGE_TAG` 设置为 `v0.5.1fix12`，再执行上文更新命令。`latest` 始终指向最近一次源码发布，不受上游同步影响；需要运行未修改的上游构建时，将 `DENOVA_IMAGE_TAG` 设为上游版本号（例如 `v0.5.1`）。
+`v0.5.1fix13` 对应镜像为 `ghcr.io/brsbsc/denova:v0.5.1fix13`。在 `docker/.env` 中将 `DENOVA_IMAGE_TAG` 设置为 `v0.5.1fix13`，再执行上文更新命令。`latest` 始终指向最近一次源码发布，不受上游同步影响；需要运行未修改的上游构建时，将 `DENOVA_IMAGE_TAG` 设为上游版本号（例如 `v0.5.1`）。
 
 上游同步仍只处理上游正式版；后续发现新上游版本时，会继续发布其版本镜像，但不改变 `latest`。源码发布的安装脚本指向本 fork 的安装包。
 

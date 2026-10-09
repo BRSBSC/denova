@@ -78,6 +78,7 @@ func (t *Task) ReleaseDisplayReplay() int {
 	t.checkpointEvents = nil
 	t.checkpointBytes = nil
 	t.checkpointSize = 0
+	t.checkpointTail.Reset()
 	t.checkpointCursor = t.nextCursor
 	t.checkpointComplete = false
 	return released
@@ -164,9 +165,16 @@ func (t *Task) mergeDisplayCheckpointTextLocked(event agentrun.Event, field stri
 	if !ok {
 		return false
 	}
-	current[field] = content + delta
+	// The open text grows in checkpointTail: appending to the immutable string
+	// instead would copy the whole merged text for every delta.
+	if t.checkpointTail.String() != content {
+		t.checkpointTail.Reset()
+		t.checkpointTail.WriteString(content)
+	}
+	t.checkpointTail.WriteString(delta)
+	current[field] = t.checkpointTail.String()
 	previous.Data = current
-	t.replaceDisplayCheckpointEventLocked(index, previous)
+	t.growDisplayCheckpointEventLocked(index, previous, delta)
 	return true
 }
 
@@ -192,10 +200,14 @@ func (t *Task) mergeDisplayCheckpointToolArgsLocked(event agentrun.Event) bool {
 		if !ok || taskDisplayToolKey(callData) != key {
 			continue
 		}
-		args, _ := callData["args"].(string)
+		args, hasArgs := callData["args"].(string)
 		callData["args"] = args + delta
 		candidate.Data = callData
-		t.replaceDisplayCheckpointEventLocked(index, candidate)
+		if hasArgs {
+			t.growDisplayCheckpointEventLocked(index, candidate, delta)
+		} else {
+			t.replaceDisplayCheckpointEventLocked(index, candidate)
+		}
 		return true
 	}
 	return false
@@ -207,6 +219,21 @@ func (t *Task) replaceDisplayCheckpointEventLocked(index int, event agentrun.Eve
 	t.checkpointEvents[index] = event
 	t.checkpointBytes[index] = newSize
 	t.checkpointSize += newSize - oldSize
+}
+
+// growDisplayCheckpointEventLocked stores an event whose only change is delta
+// appended to one of its string fields. JSON encodes a string character by
+// character, so the event grows by exactly the delta's encoded length.
+// Encoding the whole merged text on every delta instead is quadratic: a long
+// thinking block then reaches the client minutes after the model produced it.
+func (t *Task) growDisplayCheckpointEventLocked(index int, event agentrun.Event, delta string) {
+	growth := len(delta)
+	if encoded, err := json.Marshal(delta); err == nil {
+		growth = len(encoded) - len(`""`)
+	}
+	t.checkpointEvents[index] = event
+	t.checkpointBytes[index] += growth
+	t.checkpointSize += growth
 }
 
 func (t *Task) boundDisplayCheckpointLocked() {

@@ -80,6 +80,8 @@ type Task struct {
 	checkpointEvents   []agentrun.Event
 	checkpointBytes    []int
 	checkpointSize     int
+	// checkpointTail backs the text of the checkpoint event deltas merge into.
+	checkpointTail     strings.Builder
 	checkpointCursor   uint64
 	checkpointComplete bool
 	// gameTurnPersistenceRequired is semantic Task state, not a projection
