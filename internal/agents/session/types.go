@@ -1,6 +1,7 @@
 package session
 
 import (
+	"strings"
 	"sync"
 	"time"
 
@@ -140,6 +141,8 @@ type historyRecord struct {
 	createdAt                    time.Time
 	displayArgsPersistedBytes    int
 	displayContentPersistedBytes int
+	// displayContentTail backs display.Content while a stream appends to it.
+	displayContentTail *strings.Builder
 }
 
 type messageRecord struct {

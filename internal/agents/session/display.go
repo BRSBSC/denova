@@ -368,6 +368,18 @@ func (s *Session) UpdateDisplayToolIllustration(id, name string, illustration *C
 	})
 }
 
+// appendDisplayContent grows the card's content by one streamed delta. The
+// content lives in a builder so a delta costs its own length: appending to the
+// immutable string instead would copy the whole card for every delta.
+func (record *historyRecord) appendDisplayContent(delta string) {
+	if record.displayContentTail == nil || record.displayContentTail.String() != record.display.Content {
+		record.displayContentTail = &strings.Builder{}
+		record.displayContentTail.WriteString(record.display.Content)
+	}
+	record.displayContentTail.WriteString(delta)
+	record.display.Content = record.displayContentTail.String()
+}
+
 // AppendDisplayEventContent appends streamed display-only content to a card.
 func (s *Session) AppendDisplayEventContent(id, role, delta string) error {
 	id = strings.TrimSpace(id)
@@ -383,7 +395,7 @@ func (s *Session) AppendDisplayEventContent(id, role, delta string) error {
 		if record.kind != historyTypeDisplay || record.display == nil || record.display.ID != id || record.display.Role != role {
 			continue
 		}
-		record.display.Content += delta
+		record.appendDisplayContent(delta)
 		appliedLocally = true
 		shouldFlush = len(record.display.Content)-record.displayContentPersistedBytes >= displayStreamPersistBatchBytes
 		advanceUpdatedAt(s, time.Now().UTC())
@@ -401,7 +413,7 @@ func (s *Session) AppendDisplayEventContent(id, role, delta string) error {
 			}
 			if record.display.ID == id && record.display.Role == role {
 				if !appliedLocally {
-					record.display.Content += delta
+					record.appendDisplayContent(delta)
 				}
 				pending := record.display.Content[record.displayContentPersistedBytes:]
 				now := time.Now().UTC()
