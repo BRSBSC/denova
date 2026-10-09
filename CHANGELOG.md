@@ -4,15 +4,30 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix12）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix13）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix12) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix13) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
-## [Unreleased]
+## [v0.5.1fix13] - 2026-10-09
+
+### Brief / 简要说明
+
+#### 中文
+
+- 修复长思考过程的显示越来越落后于模型的问题：模型早已输出完毕，界面仍在缓慢显示思考内容，后续工具调用也被推迟数分钟。
+- 修复子 Agent 任务很快结束时结果可能送不到父 Agent、停止 Codex 对话时可能没有真正中断的问题。
+
+#### English
+
+- Fix the display of a long thinking process falling further and further behind the model: the interface kept slowly showing thinking long after the model had finished, delaying the following tool calls by minutes.
+- Fix a quickly finished sub-agent task's result sometimes never reaching the parent Agent, and stopping a Codex conversation sometimes not interrupting Codex.
 
 ### Fixed / 修复
+
+- 修复长思考过程（数万 token）的显示越来越落后于模型的问题：处理每一小段思考内容的开销随已输出长度增长，导致思考内容在模型输出完毕后仍需数分钟才显示完，其后的工具调用也随之推迟。
+- Fix the display of a long thinking process (tens of thousands of tokens) falling further and further behind the model: handling each piece of thinking cost more as the block grew, so the thinking took minutes to finish appearing after the model was done, and the tool calls after it waited as well.
 
 - 修复子 Agent 任务在很短时间内结束时，结果可能一直送不到父 Agent 的问题。
 - Fix a sub-agent task's result sometimes never reaching the parent Agent when the task finished very quickly.
