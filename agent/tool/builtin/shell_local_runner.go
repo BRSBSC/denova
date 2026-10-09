@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -475,7 +476,36 @@ func compatibleShellExecutable(shell ShellKind, executable string) bool {
 	}
 }
 
+// shellVersions remembers the version each shell reported. A runner is built
+// every time an Agent is assembled, which is at least once per turn, and
+// asking the shell starts a process. The file's size and modification time are
+// part of the key, so a replaced shell is asked again.
+var shellVersions sync.Map
+
+type shellVersionKey struct {
+	shell      ShellKind
+	executable string
+	size       int64
+	modified   time.Time
+}
+
 func detectShellVersion(shell ShellKind, executable string) string {
+	info, err := os.Stat(executable)
+	if err != nil {
+		return probeShellVersion(shell, executable)
+	}
+	key := shellVersionKey{shell, executable, info.Size(), info.ModTime()}
+	if version, ok := shellVersions.Load(key); ok {
+		return version.(string)
+	}
+	version := probeShellVersion(shell, executable)
+	if version != "" {
+		shellVersions.Store(key, version)
+	}
+	return version
+}
+
+func probeShellVersion(shell ShellKind, executable string) string {
 	var command *exec.Cmd
 	if shell == ShellPwsh {
 		command = exec.Command(executable, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "$PSVersionTable.PSVersion.ToString()")

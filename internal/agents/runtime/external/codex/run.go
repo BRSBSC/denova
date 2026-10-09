@@ -277,6 +277,30 @@ func (c *Client) runTurn(ctx context.Context, sub *subscription, threadID, turnI
 	if controls != nil {
 		steering = controls.Changed
 	}
+	releaseDrain := func() {}
+	defer func() { releaseDrain() }()
+	// interruptIfCancelled sends the interrupt once, as soon as the turn is
+	// cancelled. Every branch that cancellation can race with calls it first:
+	// a tool stopped by the same cancellation finishes at once, and select
+	// picks among ready branches at random. Handling that tool first would
+	// reply before the interrupt, or fail on the cancelled transport and end
+	// the turn without interrupting the provider at all.
+	interruptIfCancelled := func() error {
+		if cancelled == nil || ctx.Err() == nil {
+			return nil
+		}
+		cancelled = nil
+		steering = nil
+		runErr = ctx.Err()
+		var drainContext context.Context
+		drainContext, releaseDrain = context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+		transport = drainContext
+		drainDeadline = transport.Done()
+		if err := c.call(transport, "turn/interrupt", map[string]string{"threadId": threadID, "turnId": turnID}, nil); err != nil {
+			return errors.Join(runErr, err)
+		}
+		return nil
+	}
 	for {
 		if terminal && inFlight == 0 {
 			return external.Result{Text: output.text(), Settled: true}, runErr
@@ -286,21 +310,20 @@ func (c *Client) runTurn(ctx context.Context, sub *subscription, threadID, turnI
 		}
 		select {
 		case <-steering:
+			if err := interruptIfCancelled(); err != nil {
+				return external.Result{}, err
+			}
+			if steering == nil {
+				continue
+			}
 			if err := controls.Deliver(ctx, host, func(ctx context.Context, input external.Input) error {
 				return c.steer(ctx, threadID, turnID, input)
 			}); err != nil {
 				return external.Result{}, fmt.Errorf("steer native turn: %w", err)
 			}
 		case <-cancelled:
-			cancelled = nil
-			steering = nil
-			runErr = ctx.Err()
-			drainContext, releaseDrain := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
-			defer releaseDrain()
-			transport = drainContext
-			drainDeadline = transport.Done()
-			if err := c.call(transport, "turn/interrupt", map[string]string{"threadId": threadID, "turnId": turnID}, nil); err != nil {
-				return external.Result{}, errors.Join(runErr, err)
+			if err := interruptIfCancelled(); err != nil {
+				return external.Result{}, err
 			}
 		case <-drainDeadline:
 			return external.Result{}, errors.Join(runErr, errors.New("App Server interrupt did not settle"))
@@ -309,6 +332,9 @@ func (c *Client) runTurn(ctx context.Context, sub *subscription, threadID, turnI
 		case <-sub.done:
 			return external.Result{}, sub.err
 		case completion := <-finishedTools:
+			if err := interruptIfCancelled(); err != nil {
+				return external.Result{}, err
+			}
 			inFlight--
 			if completion.err != nil {
 				if ctx.Err() == nil {
@@ -337,6 +363,9 @@ func (c *Client) runTurn(ctx context.Context, sub *subscription, threadID, turnI
 			}
 			execution.requests = nil
 		case msg := <-sub.events:
+			if err := interruptIfCancelled(); err != nil {
+				return external.Result{}, err
+			}
 			var event struct {
 				ThreadID     string    `json:"threadId"`
 				TurnID       string    `json:"turnId"`

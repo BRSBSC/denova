@@ -4,13 +4,41 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix11）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix12）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix11) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix12) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
 ## [Unreleased]
+
+### Fixed / 修复
+
+- 修复子 Agent 任务在很短时间内结束时，结果可能一直送不到父 Agent 的问题。
+- Fix a sub-agent task's result sometimes never reaching the parent Agent when the task finished very quickly.
+
+- 修复停止 Codex 对话时，若工具调用恰好同时结束，可能没有真正中断 Codex 的问题。
+- Fix stopping a Codex conversation sometimes not interrupting Codex when a tool call ended at the same moment.
+
+- 每轮对话不再重新启动一次 Shell 来查询版本，Windows 上每轮响应可快约 0.4 秒。
+- Each turn no longer starts the shell again to ask its version, saving about 0.4 seconds per turn on Windows.
+
+## [v0.5.1fix12] - 2026-10-09
+
+### Brief / 简要说明
+
+#### 中文
+
+- 修复手动压缩某个 AgentChat 会话的上下文时，其他会话的发送、配置和恢复请求被阻塞的问题。
+
+#### English
+
+- Fix manual context compaction in one AgentChat conversation blocking message, configuration and recovery requests in other conversations.
+
+### Fixed / 修复
+
+- 修复手动压缩 AgentChat 上下文时阻塞其他会话发送、配置和恢复请求的问题，并避免应用关闭等待压缩模型响应。
+- Fix manual AgentChat context compaction blocking message, configuration and recovery requests in other conversations and app shutdown waiting for the compaction provider.
 
 ## [v0.5.1fix11] - 2026-10-08
 

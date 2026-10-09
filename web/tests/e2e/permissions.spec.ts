@@ -32,6 +32,9 @@ for (const scenario of [
     await expect(page.getByRole('button', { name: `Agent 安全模式: ${scenario.label}` }).filter({ visible: true })).toBeVisible()
     await submitAgentChatMessage(page, composer, `Read the external E2E file. E2E_EXTERNAL_READ_${scenario.marker}`)
     const approval = page.getByRole('region', { name: '需要你的确认' }).filter({ visible: true })
+    // A new approval card is scrolled into place over several frames. A pointer
+    // click aims at where the button was and can land beside it while it is
+    // still moving, so the buttons are activated from the keyboard instead.
     const displayedExternalPath = modelStatus.external_secret_path.replaceAll('\\', '/')
 
     switch (scenario.mode) {
@@ -43,7 +46,7 @@ for (const scenario of [
           const [answer] = await Promise.all([
             page.waitForResponse(response => response.request().method() === 'POST'
               && response.url().includes('/agent-chat/session/asks/') && response.url().endsWith('/answer')),
-            pendingApproval.getByRole('button', { name: '仅允许本次' }).click(),
+            pendingApproval.getByRole('button', { name: '仅允许本次' }).press('Enter'),
           ])
           const failureDetails = answer.status() === 200 ? '' : await answer.text()
           expect(answer.status(), `Approval ${index + 1}: ${failureDetails}`).toBe(200)
@@ -54,7 +57,7 @@ for (const scenario of [
       }
       case 'write':
         await expect(approval).toContainText(displayedExternalPath)
-        await approval.getByRole('button', { name: '拒绝' }).click()
+        await approval.getByRole('button', { name: '拒绝' }).press('Enter')
         break
       case 'full_access':
         break
