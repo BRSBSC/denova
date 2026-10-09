@@ -66,8 +66,9 @@ export function ModelProfilesEditor({
   const profileKeys = useMemo(() => stableKeys(profileKeysRef, profiles.length, 'model-profile'), [profiles.length])
   const profileOptions = modelProfileOptions(profiles, effectiveProfiles)
   const selectedDefaultProfileID = defaultProfileID || effectiveDefaultProfileID || DEFAULT_MODEL_PROFILE_ID
-  const effectiveDefaultLabel = profileOptions.find((profile) => profile.id === effectiveDefaultProfileID)?.label
-    || t('settings.model.noDefaultProfile')
+  // Only offer "inherit" when a lower layer actually provides a default model;
+  // otherwise the option would resolve to nothing at runtime.
+  const inheritedDefaultLabel = profileOptions.find((profile) => profile.id === effectiveDefaultProfileID)?.label
 
   useEffect(() => {
     const request = new AbortController()
@@ -149,11 +150,15 @@ export function ModelProfilesEditor({
       </div>
       <div className="flex flex-col gap-2">
         <ModelProfileField label={t('settings.model.defaultProfile')}>
-          <Select value={defaultProfileID || INHERIT_VALUE} onValueChange={(value) => onDefaultProfileChange(value === INHERIT_VALUE ? '' : value)}>
-            <SelectTrigger size="sm" className="w-full"><SelectValue /></SelectTrigger>
+          <Select
+            value={defaultProfileID || (inheritedDefaultLabel ? INHERIT_VALUE : '')}
+            disabled={!inheritedDefaultLabel && profileOptions.length === 0}
+            onValueChange={(value) => onDefaultProfileChange(value === INHERIT_VALUE ? '' : value)}
+          >
+            <SelectTrigger size="sm" className="w-full"><SelectValue placeholder={t('settings.model.noDefaultProfile')} /></SelectTrigger>
             <SelectContent className="nova-panel border text-[var(--nova-text)]">
               <SelectGroup>
-                <SelectItem value={INHERIT_VALUE}>{t('common.defaultValue', { value: effectiveDefaultLabel })}</SelectItem>
+                {inheritedDefaultLabel && <SelectItem value={INHERIT_VALUE}>{t('common.defaultValue', { value: inheritedDefaultLabel })}</SelectItem>}
                 {profileOptions.map((profile) => <SelectItem key={profile.id} value={profile.id}>{profile.label}</SelectItem>)}
               </SelectGroup>
             </SelectContent>
