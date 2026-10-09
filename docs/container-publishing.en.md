@@ -61,7 +61,7 @@ To roll back, select an earlier `DENOVA_IMAGE_TAG` and recreate the container. B
 
 The `Release` workflow builds source from each `v*` tag rather than using upstream bundles. It verifies full CI for the same commit, then packages all five platforms. After publishing the archives, it builds and smoke-tests `linux/amd64` and `linux/arm64` images from those Linux packages, then pushes the version tag and `latest`. The image revision label records the actual source commit.
 
-The `v0.5.1fix13` image is `ghcr.io/brsbsc/denova:v0.5.1fix13`. Set `DENOVA_IMAGE_TAG=v0.5.1fix13` in `docker/.env` and run the update commands above. `latest` always references the most recent source release and is unaffected by mirroring. To run an unmodified upstream build, set `DENOVA_IMAGE_TAG` to the upstream version (for example `v0.5.1`).
+The `v0.5.1fix14` image is `ghcr.io/brsbsc/denova:v0.5.1fix14`. Set `DENOVA_IMAGE_TAG=v0.5.1fix14` in `docker/.env` and run the update commands above. `latest` always references the most recent source release and is unaffected by mirroring. To run an unmodified upstream build, set `DENOVA_IMAGE_TAG` to the upstream version (for example `v0.5.1`).
 
 Mirroring continues to process upstream stable releases and publishes the version image of a newer upstream version later, without changing `latest`. Installers attached to source releases install packages from this fork.
 

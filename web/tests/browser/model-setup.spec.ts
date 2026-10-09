@@ -22,7 +22,8 @@ for (const theme of ['dark', 'light']) {
         await sidebar.getByRole('button', { name: destination, exact: true }).click()
         await sidebar.getByRole('button', { name: '设置', exact: true }).click()
         await expect(page.getByText('尚未配置语言模型。', { exact: false })).toBeVisible()
-        await expect(page.getByText('默认（尚未配置）', { exact: true })).toBeVisible()
+        await expect(page.getByText('尚未配置', { exact: true })).toBeVisible()
+        await expect(page.getByText('默认（尚未配置）', { exact: true })).toHaveCount(0)
         await expect(page.getByText('deepseek-v4-pro', { exact: true })).toHaveCount(0)
       }
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
