@@ -4,11 +4,28 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix16）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix17）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix16) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix17) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
+
+## [v0.5.1fix17] - 2026-10-11
+
+### Brief / 简要说明
+
+#### 中文
+
+- 修复通过局域网 HTTP 地址访问时，写作 Agent 面板无法显示、提示「前端渲染异常」的问题。
+
+#### English
+
+- Fix the writing Agent panel failing to render with a "frontend render error" when Denova is opened through a plain-HTTP LAN address.
+
+### Fixed / 修复
+
+- 修复通过 `http://局域网地址` 访问时界面报 `crypto.randomUUID is not a function` 的问题：浏览器只在 HTTPS 或本机地址下提供该接口。v0.5.1fix16 的写作 Agent 面板因此无法显示，导出、资料索引、插件面板和游戏播放器也存在同样的隐患。
+- Fix `crypto.randomUUID is not a function` when Denova is opened as `http://<LAN address>`: browsers provide that API only over HTTPS or on the local machine. It broke the writing Agent panel in v0.5.1fix16, and export, the Lore index, plugin panels and the game player had the same latent failure.
 
 ## [v0.5.1fix16] - 2026-10-11
 

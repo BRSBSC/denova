@@ -1,5 +1,6 @@
 import { expect, test } from '../support/fixtures'
 import { createAndOpenBook } from '../support/api'
+import { openWritingAgent } from '../support/agent-chat'
 
 test('generates usable LAN credentials in one save and preserves existing credentials across writing and game', async ({ page, request }, testInfo) => {
   test.setTimeout(60_000)
@@ -75,4 +76,13 @@ test('generates usable LAN credentials in one save and preserves existing creden
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await page.screenshot({ path: testInfo.outputPath(`lan-access-${scenario.width}-${scenario.theme}.png`), animations: 'disabled' })
   }
+})
+
+test('renders the writing Agent over plain-HTTP LAN access, where crypto.randomUUID is unavailable', async ({ page, request }) => {
+  // Browsers expose crypto.randomUUID only in secure contexts, and http://<LAN address> is not one.
+  await page.addInitScript(() => { delete (Crypto.prototype as { randomUUID?: unknown }).randomUUID })
+  await createAndOpenBook(request, 'LAN Plain HTTP Book')
+  await page.goto('/')
+  expect(await page.evaluate(() => typeof crypto.randomUUID)).toBe('function')
+  await openWritingAgent(page)
 })
