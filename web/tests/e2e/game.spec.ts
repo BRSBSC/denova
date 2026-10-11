@@ -85,6 +85,17 @@ for (const viewportWidth of [1280, 390]) {
     const toggle = page.locator('.nova-story-stage-composer [aria-controls][aria-expanded]')
     await expect(toggle).toBeEnabled()
     const timeline = page.locator('.nova-story-stage-content .nova-chat-canvas')
+    // The list accepts input before its rows are measured; that measurement then re-pins the
+    // bottom. A reader can only scroll into history once it is on screen and at rest.
+    await expect(timeline.locator('[data-nova-chat-item="message"]')).toBeVisible()
+    await timeline.evaluate(async (element) => {
+      for (let still = 0, last = ''; still < 10; still++) {
+        await new Promise(requestAnimationFrame)
+        const geometry = `${element.scrollTop}:${element.scrollHeight}`
+        if (geometry !== last) still = 0
+        last = geometry
+      }
+    })
     await timeline.hover()
     await page.mouse.wheel(0, -600)
     await expect.poll(() => timeline.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeGreaterThan(400)
