@@ -414,6 +414,8 @@ test('chooses game types and stops disabled games while preserving their saves',
   const updated = await request.post('/api/platform/manage/packages/install', { data: { candidateId: candidate.candidateId, grants: candidate.manifest.permissions.required } })
   expect(updated.ok(), await updated.text()).toBe(true)
   await navigate(page, '扩展')
+  // Route presentation is deferred; leaving before the Resource Center is shown skips its catalog refresh.
+  await expect(page.getByTestId('resource-market')).toBeVisible()
   await navigate(page, '游戏')
   await page.getByRole('button', { name: '选择故事线', exact: true }).filter({ visible: true }).click()
   await page.getByRole('button', { name: 'Storage storyline', exact: true }).click()
