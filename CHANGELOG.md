@@ -4,18 +4,52 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix15）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix16）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix15) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix16) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
-## [Unreleased]
+## [v0.5.1fix16] - 2026-10-11
+
+### Brief / 简要说明
+
+#### 中文
+
+- 同步上游更新：市场与扩展合并为统一的资源中心，设置页改为分组导航，`/new` 取代 `/clear`。
+- 修复长时间工具调用时浏览器内存持续增长，以及显示连接重连时的状态与报错问题。
+
+#### English
+
+- Sync with upstream: the Marketplace and Extensions merge into one resource center, Settings gains grouped navigation, and `/new` replaces `/clear`.
+- Fix browser memory growing during long tool loops, and status and error reporting when the display connection reconnects.
+
+### Added / 新增
+
+- 资源发现、已安装扩展和导入来源合并为统一的资源中心；导入支持直接选择本机扩展目录。
+- Resource discovery, installed extensions and import sources merge into one resource center. Imports can read a local extension directory directly.
+
+- 设置新增「市场」一节，可将资源索引改为自定义的 HTTPS 地址；已安装的资源包不受影响。
+- Settings adds a Market section to point the resource index at a custom HTTPS URL. Installed packages are unaffected.
+
+- 游戏舞台新增行高调节；新建故事默认沿用本书上一个故事的叙事风格。
+- The game stage adds a line-height control. New stories default to the narrative style of the book's last story.
 
 ### Changed / 变更
 
 - 写作和通用对话用 `/new` 新建独立会话，替代 `/clear`；原会话的历史、目标和待办完整保留。
 - Writing and General conversations use `/new` to start an independent session instead of `/clear`, preserving the original history, Goal and Todo.
+
+- 设置页改为分组导航，切换分区时保留尚未保存的修改。
+- Settings uses grouped navigation and keeps unsaved edits when switching sections.
+
+### Fixed / 修复
+
+- 修复 Agent 连续执行大量工具调用时，浏览器每收到一段新内容都复制已完成结果、内存持续增长的问题。
+- Fix the browser copying completed results on every new chunk during long Agent tool loops, which made memory grow continuously.
+
+- 修复显示连接重连时把进行中的任务显示为新提交，以及任务在连接建立前已结束时弹出错误的问题。
+- Fix a reconnecting display connection showing a running task as newly submitted, and an error appearing when the task finished before the connection was established.
 
 ## [v0.5.1fix15] - 2026-10-11
 
