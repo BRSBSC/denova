@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useChat as useAIChat } from '@ai-sdk/react'
+import { useAgentStream } from './use-agent-stream'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
 import { buildContextCompactionMessage, createContextCompactionMessageId } from '@/components/Chat/context-compaction-message'
 import { createAgentCommandID } from '@/lib/api'
 import type { AgentQueuedCommandAction, AgentRuntimeQueuedCommand, ContextAnalysis, IDEContext, SessionSummary, TextSelection } from '@/lib/api'
-import { withErrorLogID } from '@/lib/api-client'
+import { APIError, withErrorLogID } from '@/lib/api-client'
 import { fetchProjectSettings, fetchSettings } from '@/features/settings/api'
 import { formatApprovedPlanExecutionMessage } from '@/lib/plan-mode'
 import { agentCommandErrorMessage, agentCommandRetryKey, isKnownAgentCommandOutcome, mergeProjectedAgentQueue, rememberAgentCommandID } from '@/lib/agent-command'
 import { localizeAgentRuntimeError, localizeAgentRuntimeReason } from '@/lib/agent-runtime-error'
-import { AgentChatTransport, AgentUIMessageNormalizer, buildAgentChatRequestBody, type AgentUIMessage } from '@/lib/agent-ui'
+import { AgentChatTransport, AgentUIMessageNormalizer, buildAgentChatRequestBody, type AgentChatRequestMetadata, type AgentUIMessage } from '@/lib/agent-ui'
 import { agentViewContent, type AgentPartRef } from '@/lib/agent-message-view'
 import { STREAMING_RENDER_INTERVAL_MS } from '@/lib/streaming/raf-update-batcher'
 import { isProjectChangeForProject, type WorkspaceChangeEvent } from '@/features/changes/types'
@@ -70,6 +70,8 @@ export interface ChatSendOptions {
   }
   loreReferenceLabels?: Record<string, string>
   onSubmissionStart?: () => void
+  /** The server has durably accepted the command, before the model finishes its turn. */
+  onSubmissionAccepted?: () => void
   onSubmissionError?: () => void
 }
 
@@ -107,7 +109,7 @@ export function useAgentChat(options: ChatOptions = {}) {
     stop: stopAIStream,
     status,
     error,
-  } = useAIChat<AgentUIMessage>({
+  } = useAgentStream({
     transport,
     throttle: STREAMING_RENDER_INTERVAL_MS,
     onData: (part) => {
@@ -159,6 +161,9 @@ export function useAgentChat(options: ChatOptions = {}) {
       void parentCallbacksRef.current.onWorkspaceChange?.(event)
     },
     onError: (error) => {
+      // The task may settle before attachment; runtime recovery reloads the
+      // authoritative projection and history for this expected typed conflict.
+      if (error instanceof APIError && error.code === 'agent_runtime.rehydrate_required') return
       if (terminalDiagnosticReceived.current) { terminalDiagnosticReceived.current = false; return }
       toast.error(withErrorLogID(error.message || t('chat.activity.unknownError'), error))
     },
@@ -168,23 +173,6 @@ export function useAgentChat(options: ChatOptions = {}) {
       void refreshSessionsRef.current()
     },
   })
-  const prepareStreamResumeBoundary = useCallback(() => {
-    setUIMessages((current) => {
-      const tail = current.at(-1)
-      if (tail?.role !== 'assistant') return current
-      // AI SDK reconnects by mutating the last assistant message. Keep the
-      // canonical tail intact so a SubAgent message cannot lend its metadata
-      // to the root Task replay (or vice versa).
-      return [
-        ...current,
-        {
-          id: `agent-stream-resume-boundary:${tail.id}`,
-          role: 'system',
-          parts: [],
-        },
-      ]
-    })
-  }, [setUIMessages])
   const messages = useMemo(() => {
     const normalized = messageNormalizerRef.current!.normalize(uiMessages).flatMap<AgentUIMessage>((message) => {
       const visibleParts = message.parts.filter((part) => part.type !== 'data-agent-error')
@@ -295,7 +283,6 @@ export function useAgentChat(options: ChatOptions = {}) {
     onDisplayRehydrated: notifyDisplayRehydrated,
     onDisplayTerminalRestored: restoreDisplayTerminal,
     onSettled: () => setAbortPending(false),
-    prepareStreamResumeBoundary,
     runtimeRecoverySignal,
     resumeStream,
     transport,
@@ -426,11 +413,6 @@ export function useAgentChat(options: ChatOptions = {}) {
         setPendingCompactionID(compactionID)
         try {
           const result = await client.executeCommand(command)
-          if (command === 'clear') {
-            await loadHistory(targetSessionID)
-            await loadSessions()
-            return true
-          }
           if (command === 'compact') await loadHistory(targetSessionID)
           appendDataMessage(setUIMessages, 'data-agent-system', { content: result })
           return true
@@ -548,6 +530,7 @@ export function useAgentChat(options: ChatOptions = {}) {
           setStyleScenes((current) => current.filter((item) => !prepared.composerStyleScenes.includes(item)))
           setTextSelections((current) => current.filter((item) => !prepared.composerTextSelections.includes(item)))
           sendOptions.onSubmissionStart?.()
+          sendOptions.onSubmissionAccepted?.()
           return true
         } catch (error) {
           if (isKnownAgentCommandOutcome(error)) retryCommandIDsRef.current.delete(retryKey)
@@ -574,7 +557,7 @@ export function useAgentChat(options: ChatOptions = {}) {
             },
             parts: [{ type: 'text', text: sendOptions.displayMessage || resumeDisplayMessage || canonicalInput }],
           },
-          { body },
+          { body, metadata: { onSubmissionAccepted: sendOptions.onSubmissionAccepted } satisfies AgentChatRequestMetadata },
         )
         setReferences((current) => current.filter((item) => !prepared.composerReferences.includes(item)))
         setLoreReferences((current) => current.filter((item) => !prepared.composerLoreReferences.includes(item)))

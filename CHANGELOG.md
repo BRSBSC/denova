@@ -10,6 +10,13 @@ Denova records only major user-visible features, important compatibility or data
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
+## [Unreleased]
+
+### Changed / 变更
+
+- 写作和通用对话用 `/new` 新建独立会话，替代 `/clear`；原会话的历史、目标和待办完整保留。
+- Writing and General conversations use `/new` to start an independent session instead of `/clear`, preserving the original history, Goal and Todo.
+
 ## [v0.5.1fix15] - 2026-10-11
 
 ### Brief / 简要说明

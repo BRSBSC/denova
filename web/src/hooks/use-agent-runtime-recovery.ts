@@ -26,7 +26,6 @@ interface WritingAgentRuntimeRecoveryOptions {
   onDisplayRehydrated: () => void
   onDisplayTerminalRestored: (request: WritingDisplayRehydrateRequest) => void
   onSettled: () => void
-  prepareStreamResumeBoundary: () => void
   runtimeRecoverySignal: number
   resumeStream: () => Promise<void>
   transport: AgentChatTransport
@@ -47,7 +46,6 @@ export function useWritingAgentRuntimeRecovery({
   onDisplayRehydrated,
   onDisplayTerminalRestored,
   onSettled,
-  prepareStreamResumeBoundary,
   runtimeRecoverySignal,
   resumeStream,
   transport,
@@ -124,9 +122,9 @@ export function useWritingAgentRuntimeRecovery({
       // A resume after a server cursor is a different attachment from a plain
       // attach of the same Task: it must wait for that one and then connect.
       const key = `${sessionID}:${taskID}:${resumeCursor}`
-      // resumeStream owns one AI SDK response until it settles. Repeated
+      // resumeStream owns one display response until it settles. Repeated
       // inspections may arrive before React reports streaming; share that
-      // attachment instead of racing two readers on the same Chat instance.
+      // attachment instead of racing two readers on the same connection.
       while (attachmentInFlightRef.current) {
         if (attachmentInFlightRef.current.key === key) return attachmentInFlightRef.current.promise
         await attachmentInFlightRef.current.promise
@@ -138,16 +136,15 @@ export function useWritingAgentRuntimeRecovery({
         const projectionAtStart = writingRecoveryProjectionFingerprint(runtimeProjectionRef.current)
         try {
           // Every explicit reconnect replaces provisional text/reasoning/tool args
-          // with authoritative history first. AI SDK reconnect streams append new
+          // with authoritative history first. Reconnect streams append new
           // parts; without this reset, partial `hel` followed by replayed `hello`
           // renders as `helhello` and tool arguments can be duplicated as well.
           await loadHistoryAuthoritative(sessionID)
           if (activeSessionIdRef.current !== sessionID) return false
           if (displayOmissionActiveRef.current) onDisplayRehydrated()
-          prepareStreamResumeBoundary()
           beforeResume?.()
           await Promise.resolve(resumeStream())
-          // AI SDK resolves resumeStream on an HTTP/reconnect failure and reports
+          // The display connection resolves resumeStream on an HTTP/reconnect failure and reports
           // the failure through ChatStatus. Preserve the durable projection and
           // wait for an explicit retry opportunity instead of spinning here.
           if (transportStatusRef.current !== 'error') return true
@@ -171,7 +168,7 @@ export function useWritingAgentRuntimeRecovery({
         if (attachmentInFlightRef.current === tracked) attachmentInFlightRef.current = null
       }
     },
-    [loadHistoryAuthoritative, markRecoveryRetry, onDisplayRehydrated, prepareStreamResumeBoundary, resumeStream],
+    [loadHistoryAuthoritative, markRecoveryRetry, onDisplayRehydrated, resumeStream],
   )
 
   const inspectAndAttach = useCallback(
