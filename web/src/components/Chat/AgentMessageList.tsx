@@ -189,6 +189,7 @@ function MessageListContent({ projectId, attachmentScope, messages, projection, 
   const initialPositionKey = scrollResetKey || 'default'
   const hasInitialContent = views.length > 0 || isStreaming || Boolean(activityContent)
   const [positionedKey, setPositionedKey] = useState('')
+  const [tailRendered, setTailRendered] = useState(false)
   const initialPositionReady = initialPosition === 'start' || !visible || !hasInitialContent || positionedKey === initialPositionKey
   const resolveMessageScroller = useCallback(
     () => containerRef.current?.querySelector<HTMLElement>('.nova-chat-canvas') || null,
@@ -307,10 +308,14 @@ function MessageListContent({ projectId, attachmentScope, messages, projection, 
   }, [listItems])
   const handleItemsRendered = useCallback((items: ListItem<AgentChatListItem>[]) => {
     renderedItemsRef.current = items
+    // Virtuoso first reports the tail as a zero-size measurement probe, then no
+    // rows at all until its own initial scroll has landed.
+    const tail = items[items.length - 1]
+    if (tail && tail.size > 0 && tail.index - firstItemIndex >= listItems.length - 1) setTailRendered(true)
     notifyVisibleTurnAnchor(items)
     // A scroll event can precede mounting the rows at the new viewport position.
     if (earlierRequest.current) captureHistoryAnchor(resolveMessageScroller())
-  }, [captureHistoryAnchor, notifyVisibleTurnAnchor, resolveMessageScroller])
+  }, [captureHistoryAnchor, firstItemIndex, listItems.length, notifyVisibleTurnAnchor, resolveMessageScroller])
 
   useLayoutEffect(() => {
     const anchor = historyScrollAnchor.current
@@ -384,12 +389,19 @@ function MessageListContent({ projectId, attachmentScope, messages, projection, 
     )
   }, [activeSubAgentSessionKey, onProcessExpandedChange, anchorLatestInteractiveCardBottom, canMutateMessage, contentClassName, executionTimings, firstItemIndex, generatingInteractiveImageTurnId, highlightDialogue, isStreaming, listItems, messageStyle, onApprovePlan, onContinuePlan, onCreateBranch, onEditAssistantReply, onEditMessage, onExitPlanMode, onReadAloud, onGenerateInteractiveImage, onInsertIllustration, onOpenSubAgentSession, onRegenerateMessage, onResolveAsk, onSwitchMessageVersion, projectId, scrollLock.streamingRowRef, scrollLock.syncStreamingTailLayout, subAgentPresentation, tailFollowActive])
 
+  const awaitingTail = listItems.length > 0 && !tailRendered
   useLayoutEffect(() => {
     if (initialPosition !== 'end' || !visible || !hasInitialContent || positionedKey === initialPositionKey) return
     const scroller = resolveMessageScroller()
     if (!scroller || scroller.clientHeight <= 0) {
       setPositionedKey(initialPositionKey)
       return
+    }
+    if (awaitingTail) {
+      // Revealing before the tail row exists shows a blank list whose estimated
+      // geometry swallows early scroll input. The timeout only bounds the overlay.
+      const fallback = window.setTimeout(() => setPositionedKey(initialPositionKey), 3000)
+      return () => window.clearTimeout(fallback)
     }
     let secondFrame = 0
     const placeAtBottom = () => {
@@ -407,7 +419,7 @@ function MessageListContent({ projectId, attachmentScope, messages, projection, 
       window.cancelAnimationFrame(firstFrame)
       if (secondFrame) window.cancelAnimationFrame(secondFrame)
     }
-  }, [hasInitialContent, initialPosition, initialPositionKey, positionedKey, resolveMessageScroller, scrollLock.virtuosoRef, visible])
+  }, [awaitingTail, hasInitialContent, initialPosition, initialPositionKey, positionedKey, resolveMessageScroller, scrollLock.virtuosoRef, visible])
 
   const resolveInspectedMessage = useCallback((message: InspectableToolMessage) => {
     const view = views.find(view => view.partId === message.id && view.metadata.run_id === message.run_id && view.metadata.subagent_session_id === message.subagent_session_id)
