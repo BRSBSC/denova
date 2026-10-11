@@ -2,7 +2,7 @@ package platform
 
 import "slices"
 
-var supportedPermissions = []string{"agents.run", "tools.invoke", "tools.write", "gameData", "pluginData", "library.read", "library.write", "assets.read", "assets.write", "images.generate", "stories.read", "stories.write", "settings.write"}
+var supportedPermissions = []string{"agents.run", "tools.invoke", "tools.write", "gameData", "pluginData", "library.read", "library.write", "assets.read", "assets.write", "images.generate", "stories.read", "stories.write", "settings.write", "project.content.read", "project.content.write"}
 
 // CapabilityState describes independent admission conditions. Discovery does not
 // grant authority; every operation checks its own permission and bound scope.
@@ -41,6 +41,7 @@ func (r *Runtime) capabilities(caller *activation) Capabilities {
 			state.Implemented = r.manager.agents != nil
 			state.Applicable = project
 			state.Configured = result.Models["builtin/assistant"]
+
 			for _, definition := range caller.release.Manifest.privateAgents() {
 				if r.manager.agents == nil {
 					break
@@ -56,16 +57,18 @@ func (r *Runtime) capabilities(caller *activation) Capabilities {
 			}
 			if permission == "images.generate" {
 				state.Configured = false
-				for _, slot := range caller.release.Manifest.ModelSlots {
-					if slot.Kind != "image" {
-						continue
-					}
-					key := caller.release.Manifest.ID + "/" + slot.ID
-					if caller.release.Ref.Package.Kind == Game {
-						key = "local:" + slot.ID
-					}
-					state.Configured = state.Configured || result.Models[key]
+				if state.Implemented && project {
+					models, err := r.manager.resources.host.ImageModels(r.ctx, caller.context.Scope.ProjectID)
+					state.Configured = err == nil && len(models) > 0
 				}
+			}
+
+		case "project.content.read", "project.content.write":
+			state.Applicable = project && len(caller.release.Manifest.ProjectContent) > 0
+			if r.manager.resources != nil {
+				_, state.Implemented = r.manager.resources.host.(ProjectContentHost)
+			} else {
+				state.Implemented = false
 			}
 		case "stories.read", "stories.write":
 			state.Implemented = r.manager.stories != nil

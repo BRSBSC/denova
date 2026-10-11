@@ -1,3 +1,4 @@
+import { PluginPageWorkspace } from '@/features/platform/PluginPageWorkspace'
 import { lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BookCreationProvider } from './book-creation'
 import { PluginWorkspaceProvider } from '@/features/platform/PluginWorkspace'
@@ -160,6 +161,8 @@ export function ModeRouter(props: ModeRouterProps) {
     onStop,
     onSuspend,
     onResumeTask,
+    recoveryFailed,
+    onRetryRecovery,
     onSteerQueuedCommand,
     onDeleteQueuedCommand,
     onEditQueuedCommand,
@@ -230,6 +233,10 @@ export function ModeRouter(props: ModeRouterProps) {
   const trajectoryNavigationNonceRef = useRef(0)
   const loreLibraryFlushHandlerRef = useRef<EditorFlushHandler | null>(null)
   const agentChatFlushHandlerRef = useRef<EditorFlushHandler | null>(null)
+  const pluginPageFlushHandlerRef = useRef<EditorFlushHandler | null>(null)
+  const handlePluginPageFlushHandlerChange = useCallback((handler: EditorFlushHandler | null) => {
+    pluginPageFlushHandlerRef.current = handler
+  }, [])
   // The router is the lifecycle owner: the settings lane survives AgentPanel close/unmount.
   const composerSettings = usePersistedUserSettings({ workspace, defaults: WRITING_COMPOSER_SETTING_DEFAULTS })
   const flushComposerSettings = composerSettings.flushPending
@@ -267,6 +274,7 @@ export function ModeRouter(props: ModeRouterProps) {
     flushComposerSettingsBestEffort()
     if (!(await flushLoreLibraryDraft())) return false
     if (!(await flushAgentChatDrafts())) return false
+    if (pluginPageFlushHandlerRef.current && !(await pluginPageFlushHandlerRef.current())) return false
     return onBeforeWorkspaceSwitch()
   }, [flushAgentChatDrafts, flushComposerSettingsBestEffort, flushLoreLibraryDraft, onBeforeWorkspaceSwitch])
 
@@ -279,6 +287,7 @@ export function ModeRouter(props: ModeRouterProps) {
     flushComposerSettingsBestEffort()
     if (!(await flushLoreLibraryDraft())) return false
     if (!(await flushAgentChatDrafts())) return false
+    if (pluginPageFlushHandlerRef.current && !(await pluginPageFlushHandlerRef.current())) return false
     return onQuickSwitchBook(path)
   }, [flushAgentChatDrafts, flushComposerSettingsBestEffort, flushLoreLibraryDraft, onQuickSwitchBook])
 
@@ -611,6 +620,8 @@ export function ModeRouter(props: ModeRouterProps) {
     onStop,
     onSuspend,
     onResumeTask,
+    recoveryFailed,
+    onRetryRecovery,
     onSteerQueuedCommand,
     onDeleteQueuedCommand,
     onEditQueuedCommand,
@@ -785,6 +796,12 @@ export function ModeRouter(props: ModeRouterProps) {
         </WorkbenchRouteLayer>
       )}
 
+      {routeHost.isMounted('plugin') && <WorkbenchRouteLayer visible={presentedMainRoute === 'plugin'} loadingLabel={t('router.loading')}>
+        <PluginPageWorkspace projectId={projectId} route={mode} visible={presentedMainRoute === 'plugin'}
+          loreReferenceLabels={loreReferenceLabels} loreSuggestions={loreSuggestions}
+          onFlushHandlerChange={handlePluginPageFlushHandlerChange}
+          onChooseProject={() => onSetMode('books')} />
+      </WorkbenchRouteLayer>}
       <SharedWorkbenchRoutes
         route={presentedMainRoute}
         isMounted={routeHost.isMounted}

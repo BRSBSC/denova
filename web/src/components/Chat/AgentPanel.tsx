@@ -1,4 +1,6 @@
+import type { AgentPage } from './AgentPageContext'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { motion } from 'motion/react'
 import { createPortal } from 'react-dom'
@@ -81,6 +83,7 @@ export const WRITING_COMPOSER_SETTING_DEFAULTS = {
 export type WritingComposerSettingsController = PersistedUserSettingsController<typeof WRITING_COMPOSER_SETTING_DEFAULTS>
 
 export interface AgentPanelProps {
+  page?: AgentPage
   /** Stable identity for every project-owned API and cache key. */
   projectId: string
   workspace: string
@@ -155,6 +158,7 @@ export interface AgentPanelProps {
     message: string,
     options?: {
       writingSkill?: string
+      pageContext?: ChatSendOptions['pageContext']
       ideContext?: IDEContext
       imagePresetId?: string
       tellerId?: string
@@ -163,6 +167,8 @@ export interface AgentPanelProps {
   onStop: () => void
   onSuspend?: () => void
   onResumeTask?: () => void
+  recoveryFailed?: boolean
+  onRetryRecovery?: () => void
   onSteerQueuedCommand?: (item: AgentRuntimeQueuedCommand) => boolean | Promise<boolean>
   onDeleteQueuedCommand?: (item: AgentRuntimeQueuedCommand) => boolean | Promise<boolean>
   onEditQueuedCommand?: (item: AgentRuntimeQueuedCommand) => string | null | Promise<string | null>
@@ -195,6 +201,7 @@ export interface AgentPanelProps {
  * `chrome` selects which frame it renders with.
  */
 function AgentPanelComponent({
+  page,
   projectId,
   workspace,
   agentKind = 'writing',
@@ -249,6 +256,8 @@ function AgentPanelComponent({
   onStop,
   onSuspend,
   onResumeTask,
+  recoveryFailed = false,
+  onRetryRecovery,
   onSteerQueuedCommand,
   onDeleteQueuedCommand,
   onEditQueuedCommand,
@@ -295,7 +304,7 @@ function AgentPanelComponent({
   const [inputAreaHeight, setInputAreaHeight] = useState(0)
   const pendingWritingInitRef = useRef<string | null>(null)
   const recoveryPaused = Boolean(runtimeProjection?.recovery_paused)
-  const runtimeRecovering = Boolean(runtimeProjection?.runtime_recoverable && runtimeProjection.phase !== 'suspended' && !runtimeProjection.stream_attached)
+  const runtimeRecovering = !recoveryFailed && Boolean(runtimeProjection?.runtime_recoverable && runtimeProjection.phase !== 'suspended' && !runtimeProjection.stream_attached)
   const recoveryAbortAvailable = Boolean(runtimeProjection?.recovery_actions?.some((action) => action.kind === 'abort'))
   const activeControlsDisabled =
     isStreaming && (!runtimeProjection?.active_operation_id?.trim() || Boolean(runtimeProjection?.runtime_recoverable && !runtimeProjection.stream_attached))
@@ -340,7 +349,7 @@ function AgentPanelComponent({
 
   useEffect(() => {
     // Cached configuration and workbench conversations must not consume Writing's entry action.
-    if (generalAgent || chrome === 'workbench' || (configuredQuickPromptScope && configuredQuickPromptScope !== 'writing')) return
+    if (page || generalAgent || chrome === 'workbench' || (configuredQuickPromptScope && configuredQuickPromptScope !== 'writing')) return
     if (!active) return
     const handleWritingInitRequest = (event: Event) => {
       const detail = (event as CustomEvent<{ prompt?: string; autoSend?: boolean }>).detail
@@ -366,7 +375,7 @@ function AgentPanelComponent({
     }
     window.addEventListener(WRITING_AGENT_INIT_EVENT, handleWritingInitRequest)
     return () => window.removeEventListener(WRITING_AGENT_INIT_EVENT, handleWritingInitRequest)
-  }, [active, chrome, configuredQuickPromptScope, generalAgent, ideContext, ideTellerId, imagePresetId, isStreaming, onSend, persistedSettings.loading, t, writingSkill])
+  }, [active, chrome, configuredQuickPromptScope, generalAgent, ideContext, ideTellerId, imagePresetId, isStreaming, onSend, page, persistedSettings.loading, t, writingSkill])
 
   useEffect(() => {
     if (generalAgent) return
@@ -398,9 +407,10 @@ function AgentPanelComponent({
         await onAnalyzeContext(
           message,
           generalAgent
-            ? undefined
+            ? { pageContext: page?.context }
             : {
-                writingSkill,
+                writingSkill: page ? undefined : writingSkill,
+                pageContext: page?.context,
                 ideContext,
                 imagePresetId,
                 tellerId: ideTellerId,
@@ -517,7 +527,8 @@ function AgentPanelComponent({
     }
     const accepted = await onSend(effectiveMessage, {
       attachments: inputOptions?.attachments,
-      ...(generalAgent ? {} : { writingSkill, ideContext, imagePresetId, tellerId: ideTellerId }),
+      ...(generalAgent || page ? {} : { writingSkill, ideContext, imagePresetId, tellerId: ideTellerId }),
+      pageContext: page?.context,
       reviewFeedback: feedback,
       reviewFeedbackDisplay: feedbackSelection.length
         ? {
@@ -571,7 +582,7 @@ function AgentPanelComponent({
     }))
   }, [onEditQueuedCommand])
 
-  const quickPromptScope = configuredQuickPromptScope ?? (generalAgent ? undefined : 'writing')
+  const quickPromptScope = configuredQuickPromptScope ?? (generalAgent || page ? undefined : 'writing')
   const fillQuickPrompt = useCallback((prompt: string) => {
     setInputPrefill((current) => ({
       prompt,
@@ -611,7 +622,7 @@ function AgentPanelComponent({
     isStreaming,
     visible: active,
     isExecutionActive,
-    activityContent: runtimeRecovering ? t('chat.activity.recovering') : recoveryPaused ? t('chat.activity.recoveryPaused') : activityContent,
+    activityContent: recoveryFailed ? '' : runtimeRecovering ? t('chat.activity.recovering') : recoveryPaused ? t('chat.activity.recoveryPaused') : activityContent,
     scrollResetKey: `${workspace || 'none'}:${activeSessionId || 'current'}`,
     bottomPaddingClassName: 'pb-36',
     bottomPaddingPx: messageListBottomPadding,
@@ -632,6 +643,10 @@ function AgentPanelComponent({
     onResolveAsk: resolveAsk,
     activeRunId: runtimeProjection?.active_operation_id,
     afterContent: <>
+      {recoveryFailed && <div role="alert" className="rounded-lg border border-[var(--nova-danger-border)] bg-[var(--nova-danger-bg)] px-3 py-2 text-xs text-[var(--nova-danger)]">
+        <p>{t('chat.activity.recoveryFailed')}</p>
+        <Button variant="outline" size="sm" className="mt-2" onClick={onRetryRecovery}>{t('chat.activity.retryRecovery')}</Button>
+      </div>}
       <AgentTaskControls suspended={runtimeProjection?.phase === 'suspended'} pending={commandSubmitting || abortPending} onResume={onResumeTask} onAbort={onStop} />
       {lastRuntimeFailure ? (
       <div
@@ -641,16 +656,17 @@ function AgentPanelComponent({
         {t('chat.activity.requestFailed', { error: lastRuntimeFailure })}
       </div>
     ) : null}</>,
-    afterContentKey: `${runtimeProjection?.phase || 'idle'}:${commandSubmitting}:${lastRuntimeFailure || ''}`,
+    afterContentKey: `${recoveryFailed}:${runtimeProjection?.phase || 'idle'}:${commandSubmitting}:${lastRuntimeFailure || ''}`,
   }
   const inputAreaProps = {
+    page,
     onSend: sendWithWritingSkill,
     attachmentsEnabled: true,
     // Preserve resumable output only when the selected engine supports pause.
     onStop: runtimeRecovering || recoveryPaused || !supportsRuntimeOperation(agentSelectionConfig.snapshot, 'pause')
       ? onStop : onSuspend || onStop,
     disabled: sessionTransitionPending,
-    sendBlocked: persistedSettings.loading || sessionTransitionPending,
+    sendBlocked: persistedSettings.loading || sessionTransitionPending || recoveryFailed,
     generationActive: isStreaming,
     resumeAvailable: !isStreaming && Boolean(runtimeProjection?.pending_interruption_id?.trim()),
     queuedCommands: runtimeProjection?.queue || [],
@@ -676,11 +692,11 @@ function AgentPanelComponent({
     referencedFiles: references,
     onReferenceRemove,
     fileSuggestions,
-    loreReferences: generalAgent ? [] : loreReferences,
+    loreReferences: generalAgent && !page ? [] : loreReferences,
     loreReferenceLabels,
     onLoreReferenceAdd,
     onLoreReferenceRemove,
-    loreSuggestions: generalAgent ? [] : loreSuggestions,
+    loreSuggestions: generalAgent && !page ? [] : loreSuggestions,
     styleScenes: generalAgent ? [] : styleScenes,
     onStyleSceneAdd,
     onStyleSceneRemove,
@@ -700,7 +716,7 @@ function AgentPanelComponent({
     composerSettingsControl: (
       <>
         {quickPrompts.menuItem}
-        {!generalAgent ? (
+        {!generalAgent && !page ? (
           <>
             <ImageGenerationSettingsMenu projectId={projectId} disabled={!workspace || persistedSettings.loading || isStreaming}>
               <WritingImagePresetMenu

@@ -1,4 +1,5 @@
 export default {
+  'platform.pages.backToPage': 'Back to {{title}}',
   'platform.plugins.runtimeStopped': 'This plugin has stopped. Close the panel and reopen it.',
   'platform.plugins.exitNotReady': 'The plugin could not confirm saving and stopping. Resolve its message or force close.',
   "platform.errors.RUNTIME_RESTART_REQUIRED": "The plugin release, settings or model bindings changed. Close all of this plugin’s panels in the project, then reopen it.",
@@ -55,6 +56,8 @@ export default {
   'platform.permission.library.write': 'Save selected project library entries',
   'platform.permission.assets.write': 'Save work assets and authored content',
   'platform.permission.settings.write': 'Save this extension’s user preferences',
+  'platform.permission.project.content.read': 'Read declared Project content directories',
+  'platform.permission.project.content.write': 'Save declared Project content directories',
   'platform.permission.assets.read': 'Read project and generated image assets',
   'platform.permission.images.generate': 'Generate images using the selected model',
   'platform.permission.stories.read': 'Read the linked story',
@@ -357,6 +360,7 @@ export default {
     'The operation failed. See the local log for details.',
   'platform.errors.RUNTIME_UNAVAILABLE':
     'The runtime is unavailable. Stop and reopen it.',
+  'platform.errors.TOOL_NAME_CONFLICT': 'A tool name conflicts with an installed plugin. Change the tool ID and try again.',
   'platform.errors.PERMISSION_DENIED':
     'This operation is outside the granted permissions.',
   'platform.errors.NOT_CONFIGURED':
@@ -378,4 +382,22 @@ export default {
     'The event cursor expired. Refresh the current result.',
   'platform.errors.LIMIT_EXCEEDED':
     'The package or request exceeds a supported size limit.',
+  "platform.pages.manage": "Manage plugin in Resource Center",
+  "platform.pages.unavailable": "This plugin page is unavailable. Check its installation in Resource Center.",
+  "platform.pages.agent": "Creative assistant",
+  "platform.pages.showAgent": "Show creative assistant",
+  "platform.pages.hideAgent": "Hide creative assistant",
+  "platform.pages.assistantTab": "Assistant",
+  "platform.pages.context": "Context",
+  "platform.pages.contextHint": "The current page, selection, story context and chosen references are included with your message.",
+  "platform.pages.referenceCount": "{{count}} selected references",
+  "platform.pages.agentHint": "Describe the story or changes to the current page. The selection and references are included.",
+  "platform.pages.composerHint": "Describe this page, or tell me what to change…",
+  "platform.pages.prompt": "Message the creative Agent",
+  "platform.pages.send": "Send",
+  "platform.pages.working": "Creating…",
+  "platform.pages.waiting": "Waiting for your answer",
+  "platform.pages.older": "Earlier messages",
+  "platform.pages.answer": "Enter your answer",
+  "platform.pages.runIncomplete": "This run has stopped. Saved content remains available.",
 }
