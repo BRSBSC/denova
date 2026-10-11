@@ -82,7 +82,8 @@ func migratePageConversation(path string) error {
 		}
 		defer os.Remove(temp.Name())
 		_, copyErr := io.Copy(temp, source)
-		if err := errors.Join(copyErr, temp.Sync(), temp.Close()); err != nil {
+		// Windows cannot remove the retired journal below while this handle is open.
+		if err := errors.Join(copyErr, source.Close(), temp.Sync(), temp.Close()); err != nil {
 			return err
 		}
 		if err := os.Rename(temp.Name(), backup); err != nil {
