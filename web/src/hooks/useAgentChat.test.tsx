@@ -37,8 +37,8 @@ const toastMock = vi.hoisted(() => ({
   info: vi.fn(),
 }))
 
-vi.mock('@ai-sdk/react', () => ({
-  useChat: (options: Record<string, any>) => {
+vi.mock('./use-agent-stream', () => ({
+  useAgentStream: (options: Record<string, any>) => {
     chatMock.options = options
     return {
       messages: chatMock.messages,
@@ -110,7 +110,7 @@ describe('useAgentChat', () => {
     toastMock.info.mockReset()
   })
 
-  it('uses the AI SDK as the single throttled message state', () => {
+  it('uses the incremental display stream with the existing render cadence', () => {
     renderHook(() => useAgentChat())
 
     expect(chatMock.options).toMatchObject({
@@ -814,6 +814,14 @@ describe('useAgentChat', () => {
     expect(toastMock.error).toHaveBeenCalledWith(expect.stringContaining('019ffb1f-0171-7436-828c-1d8f45095fe4'))
   })
 
+  it('leaves a stale display attachment to runtime recovery without showing an error toast', () => {
+    renderHook(() => useAgentChat())
+    act(() => chatMock.options?.onError?.(new APIError('Refresh the active projection', {
+      status: 409, code: 'agent_runtime.rehydrate_required',
+    })))
+    expect(toastMock.error).not.toHaveBeenCalled()
+  })
+
   it('targets the operation already projected to the user instead of resolving a newer operation at click time', async () => {
     chatMock.status = 'streaming'
     vi.mocked(getActiveChatTask)
@@ -1223,19 +1231,6 @@ describe('useAgentChat', () => {
     expect(getMessagesPage).toHaveBeenCalledTimes(1)
     expect(vi.mocked(getMessagesPage).mock.invocationCallOrder[0]).toBeLessThan(chatMock.resumeStream.mock.invocationCallOrder[0])
     expect(chatMock.setMessages).toHaveBeenCalledWith(canonicalMessages)
-    const prepareResumeBoundary = chatMock.setMessages.mock.calls.at(-1)?.[0] as (messages: typeof canonicalMessages) => Array<{
-      id?: string
-      role?: string
-      parts?: unknown[]
-    }>
-    expect(prepareResumeBoundary(canonicalMessages)).toEqual([
-      ...canonicalMessages,
-      {
-        id: 'agent-stream-resume-boundary:canonical-assistant',
-        role: 'system',
-        parts: [],
-      },
-    ])
     expect(result.current.isStreaming).toBe(true)
   })
 
@@ -1348,13 +1343,12 @@ describe('useAgentChat', () => {
     }>>((messages, [update]) => (
       typeof update === 'function' ? update(messages) : update
     ), [])
-    expect(restored.at(-2)?.parts?.[0]).toMatchObject({
+    expect(restored.at(-1)?.parts?.[0]).toMatchObject({
       type: 'data-agent-system',
       data: {
         content: '较早的实时轨迹已超出展示预算；已恢复规范历史，并继续观察同一次 Agent 运行。',
       },
     })
-    expect(restored.at(-1)).toMatchObject({ role: 'system', parts: [] })
 
     chatMock.setMessages.mockClear()
     vi.mocked(getMessagesPage).mockClear()
