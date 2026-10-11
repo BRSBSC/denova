@@ -4,11 +4,28 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix14）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix15）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix14) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix15) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
+
+## [v0.5.1fix15] - 2026-10-11
+
+### Brief / 简要说明
+
+#### 中文
+
+- 修复长会话在压缩上下文后，会话记录急剧膨胀并最终耗尽内存、导致 Denova 被系统终止的问题。
+
+#### English
+
+- Fix long conversations whose session record grew rapidly after context compaction until Denova ran out of memory and was terminated by the system.
+
+### Fixed / 修复
+
+- 修复会话压缩上下文后，Agent 每执行一步都把整段保留消息重复写入会话记录的问题：数小时的工具调用可让单个会话记录增长到数 GB，加载历史时占用同等规模的内存。现在记录不再重复保存消息，加载历史与恢复会话时逐条读取。已经膨胀的会话仍可打开，但体积不会缩小、加载较慢，建议新建会话继续。
+- Fix the Agent rewriting the whole retained message window into the session record on every step once a conversation had been compacted: hours of tool calls could grow a single session record to several GB, and loading history used a comparable amount of memory. Records no longer repeat messages, and history loading and session recovery read one record at a time. Conversations that already grew remain readable but keep their size and load slowly; continue in a new conversation.
 
 ## [v0.5.1fix14] - 2026-10-09
 
