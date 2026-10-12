@@ -4,13 +4,25 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix17）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix18）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix17) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix18) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
-## [Unreleased]
+## [v0.5.1fix18] - 2026-10-12
+
+### Brief / 简要说明
+
+#### 中文
+
+- 同步上游更新：语言模型连接新增 Gemini 原生协议，插件可添加绑定 Project 的创作页面与宿主 Agent。
+- 修复打开对话时消息列表先显示空白、向上滚动被拉回底部的问题，并缩短 Agent 恢复时的等待。
+
+#### English
+
+- Sync with upstream: language model connections add the native Gemini protocol, and plugins can add Project-bound creation pages with a host Agent.
+- Fix the message list showing blank on opening a conversation and pulling a scroll-up back to the bottom, and shorten Agent recovery delays.
 
 ### Added / 新增
 
@@ -24,6 +36,9 @@ Denova records only major user-visible features, important compatibility or data
 
 - 减少 Agent 恢复时重复扫描历史子任务、写作、通用会话、游戏分支及 Native 子会话日志的等待；连接恢复支持自动退避重试和失败后的手动重试，保留已接受的运行。
 - Reduced Agent recovery delays from repeated scans of historical subtasks, Writing/General conversations, Game branches, and Native child-session journals. Connection recovery now retries with backoff and offers a manual retry while preserving accepted runs.
+
+- 修复打开对话时消息列表在内容渲染完成前就显示出来的问题：列表会先出现一段空白，此时向上滚动会在内容就绪后被拉回底部。现在列表等最后一条消息渲染完成后再显示。
+- Fix the message list being revealed before its content was rendered when a conversation opens: it showed a blank area first, and scrolling up at that moment was pulled back to the bottom once the content was ready. The list now stays hidden until its last message is rendered.
 
 ## [v0.5.1fix17] - 2026-10-11
 
