@@ -40,7 +40,7 @@ func ErrorResponse(err error) (int, *Error) {
 		status = http.StatusNotFound
 	case "PERMISSION_DENIED":
 		status = http.StatusForbidden
-	case "NOT_CONFIGURED", "UNSUPPORTED", "API_INCOMPATIBLE", "DEPENDENCY_UNAVAILABLE", "SESSION_BUSY", "DOCUMENT_CONFLICT", "IDEMPOTENCY_CONFLICT", "SAVE_INCOMPATIBLE", "CURSOR_EXPIRED", "RUNTIME_RESTART_REQUIRED":
+	case "NOT_CONFIGURED", "UNSUPPORTED", "API_INCOMPATIBLE", "DEPENDENCY_UNAVAILABLE", "TOOL_NAME_CONFLICT", "SESSION_BUSY", "DOCUMENT_CONFLICT", "IDEMPOTENCY_CONFLICT", "SAVE_INCOMPATIBLE", "CURSOR_EXPIRED", "RUNTIME_RESTART_REQUIRED":
 		status = http.StatusConflict
 	case "LIMIT_EXCEEDED":
 		status = http.StatusRequestEntityTooLarge
@@ -173,7 +173,7 @@ func (r *Runtime) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		r.serveCreateStory(w, request, caller)
 	case route == "/story" || strings.HasPrefix(route, "/story/"):
 		r.serveStory(w, request, caller, route)
-	case strings.HasPrefix(route, "/library/") || strings.HasPrefix(route, "/assets/") || strings.HasPrefix(route, "/images/"):
+	case strings.HasPrefix(route, "/project-content/") || strings.HasPrefix(route, "/library/") || strings.HasPrefix(route, "/assets/") || strings.HasPrefix(route, "/images/"):
 		if r.manager.resources == nil {
 			writeError(w, failure("NOT_CONFIGURED", "Resource service is unavailable"))
 			return

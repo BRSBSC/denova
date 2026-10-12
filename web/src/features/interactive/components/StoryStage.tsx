@@ -247,7 +247,6 @@ export function StoryStage({ active = true, projectId, workspace, styleSceneSugg
   } = useMemo(() => buildStoryStageCommandMenu(skillCommandQuery, skillCommands, {
     compactDescription: t('chat.command.compact.desc'),
     compactHint: t('chat.command.compact.hint'),
-    skillHint: t('chat.command.skill.hint'),
   }), [skillCommandQuery, skillCommands, t])
 
   useEffect(() => {

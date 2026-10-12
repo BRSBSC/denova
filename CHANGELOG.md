@@ -16,13 +16,26 @@ Denova records only major user-visible features, important compatibility or data
 
 #### 中文
 
-- 修复打开对话时消息列表先显示空白，以及此时向上滚动会被拉回底部的问题。
+- 同步上游更新：语言模型连接新增 Gemini 原生协议，插件可添加绑定 Project 的创作页面与宿主 Agent。
+- 修复打开对话时消息列表先显示空白、向上滚动被拉回底部的问题，并缩短 Agent 恢复时的等待。
 
 #### English
 
-- Fix the message list showing blank on opening a conversation, and scrolling up at that moment being pulled back to the bottom.
+- Sync with upstream: language model connections add the native Gemini protocol, and plugins can add Project-bound creation pages with a host Agent.
+- Fix the message list showing blank on opening a conversation and pulling a scroll-up back to the bottom, and shorten Agent recovery delays.
+
+### Added / 新增
+
+- 语言模型连接新增 Gemini 原生协议，支持工具调用、图片输入与会话恢复。
+- Language model connections add the native Gemini protocol with tool calls, image inputs and session recovery.
+
+- 插件可添加绑定当前 Project 的一级创作页面与宿主 Agent，支持 Project 作品目录、图像编辑、选区及多图参考；独立资源索引中的漫画示例复用 Agent、工具与 Skill，支持统一参考的整话生成、进度、中断续作和批量采用，作品保存于 comic/ 并保留图片历史。
+- Plugins can add Project-bound creation pages with a host Agent, Project content directories, image edits, regions and multiple references. The comic example in the separate resource index uses the existing Agent, tools and a Skill for episode generation with shared references, progress, continuation and bulk adoption, saving artwork under comic/ with image history.
 
 ### Fixed / 修复
+
+- 减少 Agent 恢复时重复扫描历史子任务、写作、通用会话、游戏分支及 Native 子会话日志的等待；连接恢复支持自动退避重试和失败后的手动重试，保留已接受的运行。
+- Reduced Agent recovery delays from repeated scans of historical subtasks, Writing/General conversations, Game branches, and Native child-session journals. Connection recovery now retries with backoff and offers a manual retry while preserving accepted runs.
 
 - 修复打开对话时消息列表在内容渲染完成前就显示出来的问题：列表会先出现一段空白，此时向上滚动会在内容就绪后被拉回底部。现在列表等最后一条消息渲染完成后再显示。
 - Fix the message list being revealed before its content was rendered when a conversation opens: it showed a blank area first, and scrolling up at that moment was pulled back to the bottom once the content was ready. The list now stays hidden until its last message is rendered.

@@ -1,3 +1,4 @@
+import type { AgentPageContext } from '@/lib/api-client/types'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAgentStream } from './use-agent-stream'
 import { useTranslation } from 'react-i18next'
@@ -46,6 +47,7 @@ interface ChatOptions {
 }
 
 export interface ChatSendOptions {
+  pageContext?: AgentPageContext
   attachments?: File[]
   writingSkill?: string
   ideContext?: IDEContext
@@ -276,7 +278,7 @@ export function useAgentChat(options: ChatOptions = {}) {
     [t],
   )
 
-  const { abortRecovery, resumeTask: continueTask, projectStreamCycle, recoveryPending, resumeActiveChat, runtimeProjection, setRuntimeProjection } = useWritingAgentRuntimeRecovery({
+  const { abortRecovery, resumeTask: continueTask, projectStreamCycle, recoveryPending, recoveryFailed, resumeActiveChat, runtimeProjection, setRuntimeProjection } = useWritingAgentRuntimeRecovery({
     activeSessionId,
     displayRehydrateRequest,
     loadHistoryAuthoritative,
@@ -467,6 +469,7 @@ export function useAgentChat(options: ChatOptions = {}) {
           content: s.content,
         })),
         ide_context: normalizeIDEContext(sendOptions.ideContext),
+        page_context: sendOptions.pageContext,
         plan_mode: prepared.planMode,
         writing_skill: sendOptions.writingSkill,
         image_preset_id: sendOptions.imagePresetId,
@@ -721,6 +724,7 @@ export function useAgentChat(options: ChatOptions = {}) {
         sendOptions.ideContext,
         sendOptions.imagePresetId,
         sendOptions.tellerId,
+        sendOptions.pageContext,
       )
     },
     [client, isStreaming, prepareAgentRequest, t],
@@ -875,6 +879,7 @@ export function useAgentChat(options: ChatOptions = {}) {
     commandSubmitting,
     queueActionPendingCommandID,
     activityContent,
+    recoveryFailed,
     references,
     loreReferences,
     styleScenes,
