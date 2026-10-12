@@ -198,8 +198,8 @@ func validateManifest(kind Kind, files map[string][]byte) (Manifest, error) {
 	permissions := map[string]bool{}
 	slots := map[string]bool{}
 	for _, slot := range m.ModelSlots {
-		if kind == Plugin && slot.Kind != "image" {
-			return m, failure("INVALID_ARGUMENT", "Plugin model slots support images; text uses builtin/assistant")
+		if kind == Plugin && slot.Kind == "text" {
+			return m, failure("INVALID_ARGUMENT", "Plugin pages use the host Project Agent model")
 		}
 		if err := validateID(slot.ID); err != nil {
 			return m, err
@@ -252,21 +252,27 @@ func validateManifest(kind Kind, files map[string][]byte) (Manifest, error) {
 	tools := map[string]bool{}
 	sets := map[string]bool{}
 	agents := map[string]bool{}
-	addID := func(id string) error {
-		if err := validateID(id); err != nil {
-			return err
-		}
+	claimID := func(id string) error {
 		if ids[id] {
 			return failure("INVALID_ARGUMENT", "Duplicate contribution %s", id)
 		}
 		ids[id] = true
 		return nil
 	}
+	addID := func(id string) error {
+		if err := validateID(id); err != nil {
+			return err
+		}
+		return claimID(id)
+	}
 	for _, tool := range c.Tools {
 		if err := validContexts(tool.AgentContexts, false); err != nil {
 			return m, err
 		}
-		if err := addID(tool.ID); err != nil {
+		if err := validateToolID(kind, tool.ID); err != nil {
+			return m, err
+		}
+		if err := claimID(tool.ID); err != nil {
 			return m, err
 		}
 		tools[tool.ID] = true
@@ -356,6 +362,19 @@ func validateManifest(kind Kind, files map[string][]byte) (Manifest, error) {
 			if err := localizeFormSchema(schema, localeKeys, "", toolInputFormSchema); err != nil {
 				return m, err
 			}
+		}
+	}
+	for _, root := range m.ProjectContent {
+		if kind != Plugin || portablepath.Validate(root) != nil || strings.Contains(root, "/") || strings.HasPrefix(root, ".") {
+			return m, failure("INVALID_ARGUMENT", "Project content roots must be portable top-level plugin directories")
+		}
+	}
+	for _, page := range c.Pages {
+		if page.Agent == nil {
+			continue
+		}
+		if strings.TrimSpace(page.Agent.Instructions) == "" || len(page.Agent.Instructions) > 16<<10 {
+			return m, failure("INVALID_ARGUMENT", "Page %s requires instructions up to 16 KiB", page.ID)
 		}
 	}
 	for _, entry := range m.privateAgents() {

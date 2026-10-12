@@ -1,6 +1,6 @@
 # Denova 插件与游戏平台 HTTP API
 
-状态：API v1，v0.6.0 工作区实现，尚未发布。更新：2026-10-01。当前实现以 [OpenAPI 生成代码](../internal/platform/openapi.go) 和隔离运行实例的 GET /api/platform/v1/openapi.json 为准。
+状态：API v1，v0.6.0 工作区实现，尚未发布。更新：2026-10-10。当前实现以 [OpenAPI 生成代码](../internal/platform/openapi.go) 和隔离运行实例的 GET /api/platform/v1/openapi.json 为准。
 
 [插件开发手册](plugin-developer-guide.md) · [游戏开发手册](game-developer-guide.md) · [系统设计](plugin-platform-design.md)。
 
@@ -47,6 +47,8 @@ apiMajor 必须为 1，清单还须提供严格语义版本 minHostVersion；本
 
 SDK 与类型在 `internal/platform/assets/sdk/client.mjs`、`client.d.mts`，通用插件骨架在 `internal/platform/assets/starters/plugin`。贡献声明、表单及正式入口见[插件开发手册](plugin-developer-guide.md)。
 
+一级插件页面可发送 `{ type: 'denova:open-tab', tab: 'lore' }`（SDK：`client.openTab('lore')`）。仅当前可见页面的已验证 frame/origin 可请求；宿主绑定当前 Project，打开原生设定工作区并保留原页面和 Agent。它是宿主导航能力，不是资料数据 API，不授予插件额外权限。其他 tab 值、游戏或普通浮动插件面板不支持此请求。
+
 ## 资料库与图像资源
 
 这些接口使用凭证绑定的 Project；请求不能传入另一个 Project。未绑定 Project 返回 `NOT_CONFIGURED`。
@@ -67,18 +69,35 @@ SDK 与类型在 `internal/platform/assets/sdk/client.mjs`、`client.d.mts`，�
 
 资料字段为 `id、type、name、tags、briefDescription、updatedAt、enabled、keywords?、content?、image?`。列表省略正文，`limit` 为 1–100，`offset` 非负；query 不区分大小写，在名称、类型、简介、标签和关键词中匹配。`nextOffset` 缺失表示没有下一页。详细读取正文最多 1 MiB，超限返回 `LIMIT_EXCEEDED`，不截断；扩展应按用户选择加载正文，再遵循自身模型上下文预算。
 
-`image` 是 `{ "kind": "project", "path": "assets/lore/example.png" }`。`project` 表示已绑定 Project 的 `assets/` 目录，`generated` 表示当前扩展、当前范围生成的图片，`shared` 表示当前扩展采用到 Project 的媒体。路径必须是规范 `/` 相对路径，不允许绝对路径、链接、大小写冲突或目录逃逸。SVG 和其他活动内容不提供。
+`image` 是 `{ "kind": "project", "path": "assets/lore/example.png" }`。`project` 表示已绑定 Project 的 `assets/` 目录，`generated` 表示当前扩展图像资源范围内生成的图片，`shared` 表示当前扩展采用到 Project 的媒体。已安装插件的 Project/Session 调用共享同一 Project、同一插件的图像资源；游戏、Story 工具及预览保留各自范围。路径必须是规范 `/` 相对路径，不允许绝对路径、链接、大小写冲突或目录逃逸。SVG 和其他活动内容不提供。
 
-浏览器读取图片需要 bearer header，不能将 token 拼入 URL。可使用 `fetch` 获取 Blob，再用 `URL.createObjectURL(blob)` 显示；切换页面或替换图片时调用 `URL.revokeObjectURL`。**只保存资产引用，不保存运行端口、baseUrl、blob URL 或宿主路径。** 相同 `generated` 引用在其他实例或其他包的凭证下不可见。
+浏览器读取图片需要 bearer header，不能将 token 拼入 URL。可使用 `fetch` 获取 Blob，再用 `URL.createObjectURL(blob)` 显示；切换页面或替换图片时调用 `URL.revokeObjectURL`。**只保存资产引用，不保存运行端口、baseUrl、blob URL 或宿主路径。** 相同 `generated` 引用在不同 Project、其他包、其他游戏实例或预览的凭证下不可见。
+
+## Project 作品文件与一级页面
+
+可信管理端 `GET /api/platform/manage/plugin-pages` 返回启用安装的 `{ id, pluginId, releaseId, title, agent }[]`。`POST /api/platform/manage/plugin-actions/open` 使用 `kind: "page"` 与对应 `actionId`，仍检查 Project 启用、模型与权限。页面助手使用既有 Project 创作会话 API、流式协议和前端，插件不调用 `/agents/sessions` 创建页面 Agent。标准创作请求可携带 `page_context: { plugin_id, page_id, data }`（data 为至多 32 KiB 的 JSON）；宿主从已安装清单解析至多 16 KiB 的 `agent.instructions`，并按 Project 启用状态校验。图像与业务工具继续通过原插件权限和 `agentContexts` 桥接。会话只按 Project / Session 绑定，页面仅保存自己的会话选择偏好。模型和会话凭证由宿主使用，iframe 不保存它们。
+
+宿主页面采用全高可调宽度的创作 Agent 面板，保留收起前的会话和输入状态。插件自行设计作品标题、业务菜单和图像模型选择；宿主不提供插件页模型设置或生命周期菜单。插件的启停、权限与 schema 声明的自定义配置统一在资源中心管理。共享创作 Agent 的会话及对话模型选择仍由宿主组件管理。
+
+清单 `projectContent` 声明顶层目录，例如 `comic`；以下接口只接受该目录中的可移植相对路径，不能访问其他目录或 Project。
+
+| 方法与路径 | 权限 | 输入或结果 |
+| --- | --- | --- |
+| GET /project-content/file?path=comic/comic.json | project.content.read | `{ content, revision }`；不存在返回 NOT_FOUND，文本最多 512 KiB |
+| PUT /project-content/file | project.content.write | `{ path, content, expectedRevision }` → `{ revision }`；首次写入使用 `missing`，后续使用准确修订 |
+| POST /project-content/assets?path=comic/assets/ref.png | project.content.write | 原始 raster 字节 → `{ asset, mimeType, sizeBytes }`，最多 32 MiB |
+| POST /project-content/adopt | project.content.write + assets.read | `{ path, asset }`，采用授权图片为新的不可变作品文件 |
+
+读取作品图片使用 `GET /assets/content?kind=project&path=comic/...`，同时需要 `assets.read` 和 `project.content.read`。作品路径不包含绝对路径、端口或 blob URL；保存使用既有 Project 文件修改与版本服务。其他插件声明相同目录并被授权时可以访问；此声明是目录权限边界，不是插件私有数据空间。
 
 ## 图像生成
 
-需要 `images.generate`，展示结果另需 `assets.read`。清单声明 `kind: "image"` 的 modelSlot，用户为其选择图像模型。消费者只指定本包 slot ID；API 不接受模型凭证、provider URL 或任意 profile ID。
+需要 `images.generate`，展示结果另需 `assets.read`。`GET /images/models` 返回当前凭证 Project 中已配置可用的图像模型 `{ id, name, imageInput }[]`，不包含凭据、端点、headers 或工作流。`imageInput` 表示宿主协议支持参考图/编辑，不保证供应商模型实际效果。插件自行展示选择器并保存业务选择；生成请求指定列表中的 `modelId`，宿主在提交时校验，失效选择不会自动回退。游戏等声明槽位的调用方仍可使用 `modelSlot`；两者必须且只能提供一个。进行中的请求固定使用已提交模型，切换下一次选择不需要重启实例。
 
 ```json
 {
   "commandId": "scene-12-background",
-  "modelSlot": "illustrator",
+  "modelId": "illustrator",
   "prompt": "An empty railway platform at sunset, no lettering.",
   "aspectRatio": "16:9"
 }
@@ -86,7 +105,8 @@ SDK 与类型在 `internal/platform/assets/sdk/client.mjs`、`client.d.mts`，�
 
 | 方法与路径 | 作用 |
 | --- | --- |
-| POST /images/generations | 提交以上请求；可选 `size、aspectRatio、quality`，每次生成一张图片 |
+| GET /images/models | 返回当前 Project 可用图像模型的安全投影 |
+| POST /images/generations | 提交以上请求；可选 `size、aspectRatio、quality`，每次生成一张图片，结果包含实际 `modelId` |
 | GET /images/generations/{commandId} | 查询运行状态或恢复持久结果 |
 | POST /images/generations/{commandId}/cancel | 请求取消该操作；继续查询直至终态 |
 
@@ -105,11 +125,15 @@ SDK 与类型在 `internal/platform/assets/sdk/client.mjs`、`client.d.mts`，�
 }
 ```
 
+请求还可携带 `source: AssetRef`、`references: AssetRef[]`（最多 12 个）、`selection: { x, y, width, height }`、`mask: AssetRef`。原图排第一，参考图保持声明顺序，坐标从原图左上角归一化到 0–1；选区或 mask 要求 source。宿主读取授权 raster 字节，图像输入总计最多 32 MiB，拒绝任意网络 URL；参与去重的输入包含准确图片字节。
+
+OpenAI、Gemini、Ark、xAI 适配器支持图像输入与自然语言编辑；具体模型还须具备相应能力。OpenAI 将选区转换为透明 PNG mask，其他协议接收选区坐标与编辑指令；选区不保证范围外像素完全不变。显式 mask 仅支持 OpenAI。未声明图像输入绑定的 ComfyUI profile 拒绝图像编辑；xAI 每次至多 5 张输入图。所有编辑结果都是新图片，不替换原文件。
+
 状态为 `running、completed、failed、cancelled、interrupted`，失败可能附带标准 `error`。调用共享图像服务直接执行 provider 请求，不额外创建 Agent 会话，也不改写资料条目的图片绑定。扩展自行决定将生成结果关联到什么业务对象。
 
-请求执行前持久化去重记录。同一范围内重用相同 commandId 和输入只返回原操作；输入或选定模型不同返回 `IDEMPOTENCY_CONFLICT`。HTTP 断开不会取消已受理操作，停止运行实例会取消并等待资源操作结束。进程中断后无法确认完成的请求返回 `interrupted`，不自动重发可能已经付费的 provider 请求；用户明确重试时使用新的 commandId。
+请求执行前持久化去重记录。同一图像资源范围内重用相同 commandId 和输入只返回原操作；已安装插件的 Project/Session 调用以 Project ID 与插件 ID 确定该范围，因此 commandId 必须在同一 Project、同一插件的不同会话之间保持唯一。输入或选定模型不同返回 `IDEMPOTENCY_CONFLICT`。HTTP 断开不会取消已受理操作；执行仍归属发起请求的运行实例与消费者，关闭观察页面不会取消其他会话发起的任务，停止所属运行实例会取消并等待资源操作结束。进程中断后无法确认完成的请求返回 `interrupted`，不自动重发可能已经付费的 provider 请求；用户明确重试时使用新的 commandId。
 
-直接图像请求记录与生成文件保存在 scope 的 `data-resources/` 或等价相邻资源目录，由平台管理，并随所在实例或 Project 范围备份。它们不替代 Agent 或 Story 的 canonical journal。托管 Story 扩展采纳图片后，应将资产引用写入对应 Story record，保持演出与正文版本关联。
+已安装插件的 Project/Session 图像请求记录与生成文件保存在 Project Store 的 `extensions/<pluginId>/images/`，页面与宿主 Agent 工具可查询、采用同一份结果，并随 Project 备份。游戏、Story 工具及预览继续保存在各自 scope 的 `data-resources/` 或等价相邻资源目录。这些记录不替代 Agent 或 Story 的 canonical journal。托管 Story 扩展采纳图片后，应将资产引用写入对应 Story record，保持演出与正文版本关联。
 
 ## 复用现有 Story 引擎
 
@@ -209,6 +233,8 @@ commandId 按会话去重，收据写入同一 canonical JSONL 后才允许运�
 SSE 首帧 snapshot 含当前 RunResult 与 cursor，其后发送 delta、state、interaction、result。Last-Event-ID 仅在当前进程保留窗口内有效；窗口最多 256 项，过期或重启返回 CURSOR_EXPIRED，调用方应不带旧游标重新获取 snapshot。连接断开不会取消任务。
 
 ## 工具
+
+工具的 `toolId` 是清单声明的稳定 ID（`[a-z][a-z0-9_-]*`）。模型名称为 `plugin_<toolId>`，游戏私有工具为 `game_<toolId>`，总长不超过 64 个字符，不做 hash、字符转换或截断。插件安装、更新、批量导入发现跨插件重名时返回 HTTP 409 / `TOOL_NAME_CONFLICT`；diagnostic 包含名称和双方插件 ID。禁用插件及保留发行仍占用名称，同一插件可在更新中复用。
 
 需要 tools.invoke。POST /tools/{providerId}/{toolId}/invoke：
 

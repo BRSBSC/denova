@@ -10,6 +10,21 @@ Denova records only major user-visible features, important compatibility or data
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
+## [Unreleased]
+
+### Added / 新增
+
+- 语言模型连接新增 Gemini 原生协议，支持工具调用、图片输入与会话恢复。
+- Language model connections add the native Gemini protocol with tool calls, image inputs and session recovery.
+
+- 插件可添加绑定当前 Project 的一级创作页面与宿主 Agent，支持 Project 作品目录、图像编辑、选区及多图参考；独立资源索引中的漫画示例复用 Agent、工具与 Skill，支持统一参考的整话生成、进度、中断续作和批量采用，作品保存于 comic/ 并保留图片历史。
+- Plugins can add Project-bound creation pages with a host Agent, Project content directories, image edits, regions and multiple references. The comic example in the separate resource index uses the existing Agent, tools and a Skill for episode generation with shared references, progress, continuation and bulk adoption, saving artwork under comic/ with image history.
+
+### Fixed / 修复
+
+- 减少 Agent 恢复时重复扫描历史子任务、写作、通用会话、游戏分支及 Native 子会话日志的等待；连接恢复支持自动退避重试和失败后的手动重试，保留已接受的运行。
+- Reduced Agent recovery delays from repeated scans of historical subtasks, Writing/General conversations, Game branches, and Native child-session journals. Connection recovery now retries with backoff and offers a manual retry while preserving accepted runs.
+
 ## [v0.5.1fix17] - 2026-10-11
 
 ### Brief / 简要说明

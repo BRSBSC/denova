@@ -1,7 +1,7 @@
 import type { ChatTransport, UIMessage } from 'ai'
 import { DefaultChatTransport } from 'ai'
-import { fetchAPI, responseAPIError } from './api-client/client'
-import type { ToolPresentation, UserMessageReference } from './api-client/types'
+import { fetchAPI, responseAPIError, parseUIMessageStream } from './api-client/client'
+import type { AgentPageContext, ToolPresentation, UserMessageReference } from './api-client/types'
 import type { ChatAttachmentDescriptor, ChatAttachmentUpload } from './chat-attachments'
 
 export type AgentDisplayRole = 'user' | 'assistant' | 'thinking' | 'tool_call' | 'tool_result' | 'ask' | 'rule_roll' | 'context_compaction' | 'token_usage' | 'execution_summary' | 'proposed_plan' | 'system' | 'error'
@@ -70,6 +70,7 @@ export interface AgentChatRequestMetadata {
 }
 
 interface AgentChatRequestBody {
+  page_context?: AgentPageContext
   command_id?: string
   resume_interruption_id?: string
   references?: string[]
@@ -147,8 +148,21 @@ export class AgentChatTransport implements ChatTransport<AgentUIMessage> {
     return stream
   }
 
-  reconnectToStream(options: Parameters<ChatTransport<AgentUIMessage>['reconnectToStream']>[0]) {
-    return this.transport.reconnectToStream(options)
+  async reconnectToStream(options: Parameters<ChatTransport<AgentUIMessage>['reconnectToStream']>[0], signal?: AbortSignal) {
+    const controller = new AbortController()
+    // Bound only the HTTP attachment. A model may keep the stream open for
+    // any duration; stopping/switching the conversation still aborts its reader.
+    const timer = setTimeout(() => controller.abort(new DOMException('Stream attachment timed out', 'TimeoutError')), 15_000)
+    try {
+      const response = await fetchAPI(this.activeStreamURL(), {
+        method: 'GET', headers: options.headers,
+        signal: AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]),
+      })
+      if (response.status === 204) return null
+      if (!response.ok) throw await responseAPIError(response)
+      if (!response.body) throw new Error('Agent display stream response has no body')
+      return parseUIMessageStream(response.body)
+    } finally { clearTimeout(timer) }
   }
 
   /** Select the exact backend task and optional server-issued display cursor. */
@@ -208,6 +222,7 @@ export function buildAgentChatRequestBody(body: AgentChatRequestBody): AgentChat
     style_scenes: body.style_scenes || [],
     selections: body.selections || [],
     ide_context: body.ide_context,
+    page_context: body.page_context,
     plan_mode: body.plan_mode || false,
     writing_skill: body.writing_skill || undefined,
     image_preset_id: body.image_preset_id || undefined,
