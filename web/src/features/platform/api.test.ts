@@ -36,6 +36,16 @@ describe('platform error diagnostics', () => {
     expect(message).not.toContain('secret-value')
   })
 
+  it('shows why the access guard refused a request from another device', () => {
+    const message = platformError(new APIError('This system action can only be triggered from the machine running Denova.', {
+      status: 403, requestID: 'request-lan',
+      payload: { error: 'This system action can only be triggered from the machine running Denova.' },
+    }))
+    expect(message).toContain('machine running Denova')
+    expect(message).toContain('request-lan')
+    expect(message).not.toContain(i18n.t('platform.errors.RUNTIME_FAILED'))
+  })
+
   it('retains browser errors without inventing a server cause', () => {
     expect(platformError(new Error('Connection closed'))).toContain('Connection closed')
     expect(platformError(undefined)).toBe(i18n.t('platform.errors.RUNTIME_FAILED'))

@@ -233,6 +233,8 @@ export default {
   "platform.extensions.description": "Install, configure, and manage plugins and games. Develop source in the workbench.",
   "platform.extensions.empty": "No extensions installed",
   "platform.extensions.emptyDescription": "Install from GitHub, a local directory or a ZIP package. You can also create a plugin or game in Workbench.",
+  "platform.extensions.hostOnly": "Extensions run on the host only",
+  "platform.extensions.hostOnlyDescription": "Extensions run on the machine that hosts Denova and can only be managed and opened from a browser on that machine. They are unavailable over LAN access and in container deployments.",
   "platform.type.all": "All",
   "platform.type.plugin": "Plugin",
   "platform.type.game": "Game",

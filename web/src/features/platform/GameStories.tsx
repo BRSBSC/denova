@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useGameCreationRequest } from './extension-navigation'
 import type { StoryPickerProps } from '@/features/interactive/components/StoryPicker'
+import { isHostBrowser } from '@/features/remote-access/api'
 import { InlineErrorNotice } from '@/components/common/inline-error-notice'
 import { MobileWorkspaceHeaderScope } from '@/components/layout/mobile-workspace-header'
 import { GameStoryContext, type GameChoice } from './game-story-context'
@@ -29,9 +30,11 @@ export function GameStories({ projectId, active, builtinPicker, children }: {
   const [creating, setCreating] = useState(false)
   const [choice, setChoice] = useState<string | null>(null)
   const requestedGame = useGameCreationRequest(state => state.gameId)
-  const catalog = useQuery({ queryKey: ['platform', 'catalog'], queryFn: () => management<CatalogEntry[]>('/catalog'), enabled: active })
-  const instances = useQuery({ queryKey: ['platform', 'instances'], queryFn: () => management<Instance[]>('/instances'), enabled: active })
-  const preferences = useQuery({ queryKey: ['platform', 'game-preferences'], queryFn: () => management<GamePreferences>('/game-preferences'), enabled: active })
+  // Extension games run on the host's loopback address; other browsers keep the built-in game.
+  const enabled = isHostBrowser() && active
+  const catalog = useQuery({ queryKey: ['platform', 'catalog'], queryFn: () => management<CatalogEntry[]>('/catalog'), enabled })
+  const instances = useQuery({ queryKey: ['platform', 'instances'], queryFn: () => management<Instance[]>('/instances'), enabled })
+  const preferences = useQuery({ queryKey: ['platform', 'game-preferences'], queryFn: () => management<GamePreferences>('/game-preferences'), enabled })
   const installed = (catalog.data ?? []).filter(item => item.kind === 'game')
   const saves = (instances.data ?? []).filter(item => !item.preview && item.projectId === projectId)
   const selected = saves.find(item => item.instanceId === selectedId)
@@ -89,7 +92,8 @@ export function GameStories({ projectId, active, builtinPicker, children }: {
       else await builtinPicker.onRenameStory?.(id, title)
     },
   }
-  const error = catalog.error || instances.error || preferences.error
+  // A disabled query still reports a failure cached by another view.
+  const error = enabled && (catalog.error || instances.error || preferences.error)
   return <GameStoryContext.Provider value={{
     projectId, creating, setCreating, selectedGameId, chooseGame: setChoice, defaultGameId, choices, picker,
     setDefault: async () => { await management('/game-preferences', 'PATCH', { defaultGameId: selectedGameId }); await client.invalidateQueries({ queryKey: ['platform', 'game-preferences'] }) },

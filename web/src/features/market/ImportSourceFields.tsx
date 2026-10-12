@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { importExtensionSource } from '@/features/platform/extension-navigation'
+import { isHostBrowser } from '@/features/remote-access/api'
 import { PackageFileHelp } from './PackageFileHelp'
 import type { Source } from './api'
 
@@ -22,6 +23,8 @@ export function ImportSourceFields({ value, onChange, source, busy, run, onImpor
   onImportedSource: () => void
 }) {
   const { t } = useTranslation()
+  // A development directory and a source checkout are paths on the host machine.
+  const host = isHostBrowser()
   return <FieldGroup>
     <FieldSet>
       <FieldLegend id="resource-source-kind" variant="label">{t('market.import.source')}</FieldLegend>
@@ -35,7 +38,7 @@ export function ImportSourceFields({ value, onChange, source, busy, run, onImpor
         <ToggleGroupItem value="github">GitHub</ToggleGroupItem>
         <ToggleGroupItem value="https_zip">{t('market.import.url')}</ToggleGroupItem>
         <ToggleGroupItem value="file">{t('market.import.file')}</ToggleGroupItem>
-        <ToggleGroupItem value="directory">{t('market.import.directory')}</ToggleGroupItem>
+        {host && <ToggleGroupItem value="directory">{t('market.import.directory')}</ToggleGroupItem>}
       </ToggleGroup>
     </FieldSet>
     {value.kind === 'file' ? <Field key="file">
@@ -62,11 +65,13 @@ export function ImportSourceFields({ value, onChange, source, busy, run, onImpor
             <FieldLabel htmlFor="market-path">{t('market.import.path')}</FieldLabel>
             <Input id="market-path" value={value.path ?? ''} disabled={busy} placeholder={t('platform.github.root')} onChange={event => onChange({ ...value, path: event.target.value })} />
           </Field>
-          <FieldDescription>{t('platform.github.buildHelp')}</FieldDescription>
-          <Button variant="outline" disabled={busy || !value.url.trim()} onClick={() => void run(async () => {
-            await importExtensionSource({ url: value.url.trim(), ref: value.ref?.trim() || '', path: value.path?.trim() || '' })
-            onImportedSource()
-          })}>{t('platform.github.importSource')}</Button>
+          {host && <>
+            <FieldDescription>{t('platform.github.buildHelp')}</FieldDescription>
+            <Button variant="outline" disabled={busy || !value.url.trim()} onClick={() => void run(async () => {
+              await importExtensionSource({ url: value.url.trim(), ref: value.ref?.trim() || '', path: value.path?.trim() || '' })
+              onImportedSource()
+            })}>{t('platform.github.importSource')}</Button>
+          </>}
         </FieldGroup>
       </details>}
     </>}

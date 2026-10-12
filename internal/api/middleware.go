@@ -9,6 +9,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 
+	"denova/internal/api/handlers"
 	"denova/internal/i18n"
 	"denova/internal/observability"
 )
@@ -53,6 +54,14 @@ func localHostEffectMiddleware(ctx context.Context, c *app.RequestContext) {
 		abortWithLocalizedError(c, consts.StatusForbidden, "api.access.localHostEffect")
 		return
 	}
+	c.Next(ctx)
+}
+
+// hostBrowserMiddleware tells a handler whether the browser runs on the
+// machine hosting Denova, for a route where only some inputs name a path on
+// that machine. The handler decides after its own, single parse of the body.
+func hostBrowserMiddleware(ctx context.Context, c *app.RequestContext) {
+	c.Set(handlers.HostBrowserContextKey, isLocalRequest(c))
 	c.Next(ctx)
 }
 

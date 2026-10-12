@@ -25,11 +25,14 @@ import {
   type ProjectPlugin,
   type RuntimeSnapshot,
 } from './api'
+import { isHostBrowser } from '@/features/remote-access/api'
 
 export function usePluginPages() {
   return useQuery({
     queryKey: ['platform', 'plugin-pages'],
     queryFn: () => management<PluginPage[]>('/plugin-pages'),
+    // Plugin pages are served from the host's loopback address.
+    enabled: isHostBrowser(),
     refetchInterval: 5000,
   })
 }

@@ -45,6 +45,14 @@ func exchangeError(ctx context.Context, c *app.RequestContext, err error) {
 	}
 	writeErrorKey(c, status, key, "detail", err.Error())
 }
+
+// HostBrowserContextKey carries whether the browser runs on the machine hosting
+// Denova. The route's access middleware sets it; a missing value is treated as
+// a remote browser, so a route registered without it stays closed.
+const HostBrowserContextKey = "denova.host_browser"
+
+// HandleResourcePreview serves authenticated remote browsers too: a container
+// deployment has no local one. Only the directory source names a host path.
 func (h *Handlers) HandleResourcePreview(ctx context.Context, c *app.RequestContext) {
 	source := resourceexchange.Source{}
 	var raw []byte
@@ -76,6 +84,10 @@ func (h *Handlers) HandleResourcePreview(ctx context.Context, c *app.RequestCont
 			return
 		}
 		if input.Kind == "directory" {
+			if !c.GetBool(HostBrowserContextKey) {
+				writeErrorKey(c, 403, "api.access.localHostEffect")
+				return
+			}
 			// A host path is only an input. The frozen preview records a portable
 			// file source, never the development directory's absolute location.
 			candidate, err := h.app.Platform().PreviewExtensionDirectory(input.Directory)

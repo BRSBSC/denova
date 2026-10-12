@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 import { jsonHeaders, requestJSON } from '@/lib/api-client/client'
+import { queryClient } from '@/lib/query-client'
 
 export interface RemoteAccessStatus {
   local: boolean
@@ -34,6 +35,14 @@ export const remoteAccessQuery = queryOptions({
     return requestJSON('/api/auth/pair', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ token }) })
   },
 })
+
+/** Whether this browser runs on the machine hosting Denova. Features bound to
+ * that machine — extension runtimes on its loopback address, paths in its file
+ * system — are left out for every other browser, which includes all browsers of
+ * a container deployment. The status is resolved before the workbench mounts. */
+export function isHostBrowser() {
+  return queryClient.getQueryData(remoteAccessQuery.queryKey)?.local !== false
+}
 
 export function loginRemoteAccess(username: string, password: string): Promise<RemoteAccessStatus> {
   return requestJSON('/api/auth/login', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ username, password }) })

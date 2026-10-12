@@ -233,6 +233,8 @@ export default {
   "platform.extensions.description": "安装、配置和管理插件与游戏；在工作台开发源码。",
   "platform.extensions.empty": "尚未安装扩展",
   "platform.extensions.emptyDescription": "从 GitHub、本地目录或 ZIP 包安装，也可以在工作台创建自己的插件或游戏。",
+  "platform.extensions.hostOnly": "扩展只能在本机使用",
+  "platform.extensions.hostOnlyDescription": "扩展在运行 Denova 的机器上运行，只能从那台机器的浏览器管理和打开；通过局域网或容器部署访问时不可用。",
   "platform.type.all": "全部",
   "platform.type.plugin": "插件",
   "platform.type.game": "游戏",

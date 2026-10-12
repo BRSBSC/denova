@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AGENT_CHAT_PROJECT_UPDATED_EVENT } from '@/features/agent-chat/api'
 import type { Installation } from '@/features/market/api'
 import { openResourceDestination, useResourceNavigation } from '@/features/market/resource-navigation'
+import { isHostBrowser } from '@/features/remote-access/api'
 import { management, platformError, type CatalogEntry, type DevelopmentSource, type RuntimeSnapshot } from './api'
 import { ExtensionDirectory } from './ExtensionDirectory'
 import { ExtensionDetails } from './ExtensionDetails'
@@ -28,8 +29,11 @@ export function InstalledExtensions({ visible, catalog, error, installations, di
   const { t } = useTranslation()
   const destination = useResourceNavigation(state => state.destination)
   const selected = destination.section === 'extensions' ? destination.extensionKey : undefined
-  const sources = useQuery({ queryKey: ['platform', 'development'], queryFn: () => management<DevelopmentSource[]>('/development'), enabled: visible })
-  const runtimes = useQuery({ queryKey: ['platform', 'runtimes'], queryFn: () => management<RuntimeSnapshot[]>('/runtimes'), enabled: visible, refetchInterval: visible ? 3000 : false })
+  // Extensions run on the host's loopback address; any other browser gets an explanation instead of requests.
+  const host = isHostBrowser()
+  const reachable = visible && host
+  const sources = useQuery({ queryKey: ['platform', 'development'], queryFn: () => management<DevelopmentSource[]>('/development'), enabled: reachable })
+  const runtimes = useQuery({ queryKey: ['platform', 'runtimes'], queryFn: () => management<RuntimeSnapshot[]>('/runtimes'), enabled: reachable, refetchInterval: reachable ? 3000 : false })
   const entries = extensionEntries(sources.data ?? [], catalog ?? [])
   const current = entries.find(entry => entry.key === selected)
   useEffect(() => {
@@ -46,7 +50,8 @@ export function InstalledExtensions({ visible, catalog, error, installations, di
   }, [catalog, dirtyEntries, onDirtyChange])
   return <>
     {error ? <p role="alert" className="p-4 text-sm text-destructive">{platformError(error)}</p> : null}
-    {!catalog ? !error && <div role="status" aria-label={t('common.loading')} className="flex flex-col gap-4 p-4"><Skeleton className="h-20" /><Skeleton className="h-40" /></div> : <>
+    {!host ? <Empty className="p-4"><EmptyHeader><EmptyMedia variant="icon"><Puzzle /></EmptyMedia><EmptyTitle>{t('platform.extensions.hostOnly')}</EmptyTitle><EmptyDescription>{t('platform.extensions.hostOnlyDescription')}</EmptyDescription></EmptyHeader></Empty>
+    : !catalog ? !error && <div role="status" aria-label={t('common.loading')} className="flex flex-col gap-4 p-4"><Skeleton className="h-20" /><Skeleton className="h-40" /></div> : <>
       {!current && <div className="mx-auto flex max-w-[1600px] flex-col gap-4 p-4 lg:p-5">
         <h1 className="text-base font-semibold">{t('market.extensions')}</h1>
         {entries.length ? <ExtensionDirectory entries={entries} onChanged={onRefresh} onSelect={extensionKey => openResourceDestination({ section: 'extensions', extensionKey })} /> :

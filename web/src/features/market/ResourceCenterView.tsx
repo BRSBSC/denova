@@ -14,6 +14,7 @@ import { CreateProjectDirectoryDialog } from '@/features/agent-chat/CreateProjec
 import { GLOBAL_SETTINGS_TARGET, settingsQueryOptions } from '@/features/settings/query'
 import { InstalledExtensions } from '@/features/platform/InstalledExtensions'
 import { management, type CatalogEntry, type PackageKind } from '@/features/platform/api'
+import { isHostBrowser } from '@/features/remote-access/api'
 import { openInstalledExtension } from '@/features/platform/extension-navigation'
 import { MarketSidebar, type MarketCategory } from './MarketSidebar'
 import { ResourceDiscovery } from './ResourceDiscovery'
@@ -36,7 +37,7 @@ export function ResourceCenterView({ projectID, visible }: { projectID?: string;
   const catalogKey = ['resource-market', registryURL]
   const catalog = useQuery({ queryKey: catalogKey, queryFn: () => getCatalog(), enabled: visible && settings.isSuccess, retry: false })
   const installed = useQuery({ queryKey: ['resources', 'installations'], queryFn: () => exchange<Installation[]>('/installations'), enabled: visible })
-  const extensions = useQuery({ queryKey: ['platform', 'catalog'], queryFn: () => management<CatalogEntry[]>('/catalog'), enabled: visible })
+  const extensions = useQuery({ queryKey: ['platform', 'catalog'], queryFn: () => management<CatalogEntry[]>('/catalog'), enabled: visible && isHostBrowser() })
   const installations = installed.data ?? []
   const updates = installations.filter(item => item.tracking === 'tracked' && item.remote_state === 'update_available')
   const [sidebarVisible, setSidebarVisible] = useState(true)

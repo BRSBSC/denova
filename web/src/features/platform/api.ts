@@ -211,9 +211,12 @@ export function platformError(error: unknown): string {
     error instanceof APIError && typeof error.payload.messageKey === 'string'
       ? error.payload.messageKey
       : 'platform.errors.RUNTIME_FAILED'
-  const summary = i18n.exists(key)
+  // The access guard answers before the platform handler, with a reason the
+  // server has already localized and no message key.
+  const refusal = error instanceof APIError && error.status === 403 && typeof error.payload.error === 'string' ? error.payload.error : ''
+  const summary = refusal || (i18n.exists(key)
     ? i18n.t(key)
-    : i18n.t('platform.errors.RUNTIME_FAILED')
+    : i18n.t('platform.errors.RUNTIME_FAILED'))
   if (error instanceof APIError) {
     return errorMessage({
       summary, code: error.code, status: error.status, requestID: error.requestID,

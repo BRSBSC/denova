@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"denova/config"
@@ -106,5 +107,31 @@ func TestLocalHostEffectMiddlewareRejectsNonLoopbackHost(t *testing.T) {
 	response = ut.PerformRequest(server.Engine, http.MethodPost, "http://localhost:8080/native", nil)
 	if response.Code != http.StatusNoContent || !called {
 		t.Fatalf("local host effect response = %d called=%v", response.Code, called)
+	}
+}
+
+// A container or LAN deployment has no local browser, so only requests that
+// act on the host itself stay local: the resource center must work remotely.
+func TestRemoteBrowserUsesResourceCenterWithoutHostPaths(t *testing.T) {
+	server := hertzserver.Default()
+	(&Server{app: newTestApplication(t)}).registerRoutes(server)
+	for _, tc := range []struct {
+		name, method, path, body string
+		forbidden                bool
+	}{
+		{"remote source", http.MethodPost, "/api/resource-exchange/previews", `{"kind":"github","url":"http://rejected-before-any-download"}`, false},
+		{"installation policy", http.MethodPost, "/api/resource-exchange/installations/missing/policy", `{"update_mode":"manual"}`, false},
+		{"host directory source", http.MethodPost, "/api/resource-exchange/previews", `{"kind":"directory","directory":"/srv/extension"}`, true},
+		{"extension management", http.MethodGet, "/api/platform/manage/catalog", "", true},
+		{"host directory dialog", http.MethodPost, "/api/host/dialogs/directory", `{}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := ut.PerformRequest(server.Engine, tc.method, "http://10.10.10.20:8080"+tc.path,
+				&ut.Body{Body: strings.NewReader(tc.body), Len: len(tc.body)},
+				ut.Header{Key: "Content-Type", Value: "application/json"}, ut.Header{Key: "X-Forwarded-For", Value: "192.168.1.8"})
+			if forbidden := response.Code == http.StatusForbidden; forbidden != tc.forbidden {
+				t.Fatalf("status = %d, want forbidden=%v body=%s", response.Code, tc.forbidden, response.Body.String())
+			}
+		})
 	}
 }
