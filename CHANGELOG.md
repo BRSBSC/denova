@@ -4,11 +4,31 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix18）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix19）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix18) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.5.1fix19) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
+
+## [v0.5.1fix19] - 2026-10-12
+
+### Brief / 简要说明
+
+#### 中文
+
+- 通过局域网或容器部署访问时，资源中心可以正常添加、导入、导出和更新资源；游戏页不再提示「操作失败」。
+
+#### English
+
+- Over LAN access and in container deployments, the resource center can add, import, export and update resources, and the game page no longer shows an "operation failed" notice.
+
+### Fixed / 修复
+
+- 修复从其他设备访问时资源中心不可用的问题：添加资源、导入、导出、备份恢复、检查更新和刷新资源目录此前都提示「此系统操作只能从运行 Denova 的本机触发」，容器部署下因此完全无法使用。现在只有「本地扩展目录」来源仍限本机。
+- Fix the resource center being unusable from another device: adding, importing, exporting, restoring backups, checking for updates and refreshing the catalog all answered "This system action can only be triggered from the machine running Denova", which made them unavailable in container deployments. Only the local extension directory source remains host-only.
+
+- 修复从其他设备打开游戏页时顶部提示「操作失败」的问题。插件与第三方游戏在运行 Denova 的机器上运行，只能从那台机器的浏览器管理和打开；其他设备的资源中心现在会说明这一点，不再报错或持续请求。
+- Fix the "operation failed" notice at the top of the game page when it is opened from another device. Plugins and third-party games run on the machine that hosts Denova and can only be managed and opened from a browser on that machine; the resource center on other devices now says so instead of failing or polling.
 
 ## [v0.5.1fix18] - 2026-10-12
 
