@@ -11,7 +11,8 @@ for (const theme of ['dark', 'light']) {
     await page.route(/\/api\/(?:projects\/[^/]+\/)?settings$/, async route => {
       const response = await route.fetch()
       const body = await response.json()
-      return route.fulfill({ response, json: { ...body, effective: { ...body.effective, theme } } })
+      // Thinking is collapsed by default in this fork; this test observes its content.
+      return route.fulfill({ response, json: { ...body, effective: { ...body.effective, theme, auto_expand_thinking: true } } })
     })
     await request.patch('/api/settings', { data: {
       layer: 'user', base_revision: settings.revisions.user, changes: { motion_intensity: 'system' },
@@ -39,7 +40,8 @@ for (const theme of ['dark', 'light']) {
       { type: 'tool-input-available', toolCallId: 'motion-tool', toolName: 'bash', input: { command: 'echo motion-probe' } },
       { type: 'tool-output-available', toolCallId: 'motion-tool', output: 'motion-probe' },
       { type: 'reasoning-start', id: 'motion-thinking' },
-      { type: 'reasoning-delta', id: 'motion-thinking', delta: '**Motion evidence.**\n\n' + 'Long thinking remains readable while tools are toggled. '.repeat(180) },
+      // Stay under the fork's 8 KiB word-animation cap (MAX_ANIMATED_CONTENT_CHARACTERS).
+      { type: 'reasoning-delta', id: 'motion-thinking', delta: '**Motion evidence.**\n\n' + 'Long thinking remains readable while tools are toggled. '.repeat(120) },
     ]
     const stream = (route: import('@playwright/test').Route) => route.fulfill({
       headers: { 'content-type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1', 'x-test-thinking-motion': 'true' },
