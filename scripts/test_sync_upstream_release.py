@@ -102,6 +102,15 @@ class ReleaseTests(unittest.TestCase):
             command.assert_not_called()
             self.assertFalse(target.exists())
 
+    def test_own_release_of_the_same_version_is_never_mirrored(self):
+        release = {"id": 1, "tag_name": "v1.2.3", "assets": []}
+        own = {"draft": False, "body": "Fork source release"}
+        with tempfile.TemporaryDirectory() as directory, patch.object(sync, "api", return_value=release), patch.object(sync, "find_release", side_effect=[None, own]), patch.object(sync, "run") as command, patch.dict("os.environ", {}, clear=True):
+            target = Path(directory) / "output"
+            sync.prepare(SimpleNamespace(tag="", repository="owner/repo", directory=target, force=True))
+            command.assert_not_called()
+            self.assertFalse(target.exists())
+
     def test_finish_publishes_only_after_upload_and_never_moves_latest(self):
         for upload_fails in (False, True):
             with self.subTest(upload_fails=upload_fails), tempfile.TemporaryDirectory() as directory:

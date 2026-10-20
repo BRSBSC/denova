@@ -4,15 +4,25 @@ Denova 仅在此记录用户可感知的重大功能、重要不兼容或数据�
 
 Denova records only major user-visible features, important compatibility or data changes, security updates, and fixes affecting core workflows. Internal refactors, test changes, copy edits, and minor UI polish are omitted; see the [Git history](https://github.com/alfredxw/denova/commits/master) for full details.
 
-`Unreleased` 以最近一个已发布版本（当前为 v0.5.1fix18）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
+`Unreleased` 以最近一个已发布版本（当前为 v0.6.2）为比较基线，只描述升级用户最终可感知的净变化；内部接口、实现重构和 v0.5.1 后从未发布的中间格式不计入。
 
-`Unreleased` compares against the latest release (currently v0.5.1fix18) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
+`Unreleased` compares against the latest release (currently v0.6.2) and describes only the final user-visible delta. Internal APIs, implementation refactors, and intermediate formats never released after v0.5.1 are excluded.
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
-## [Unreleased]
+## [v0.6.2] - 2026-10-20
 
-同步上游 v0.6.0–v0.6.2。 / Syncs upstream v0.6.0–v0.6.2.
+### Brief / 简要说明
+
+#### 中文
+
+- 同步上游 v0.6.0–v0.6.2：新增 DeepSeek、Perplexity、Tavily 搜索服务，游戏场景环境音，会话正文搜索与导出，以及后台自动更新。
+- 非 Docker 运行的默认端口改为 7789/7788；Docker 镜像仍使用 8080。使用统计默认关闭。
+
+#### English
+
+- Syncs upstream v0.6.0–v0.6.2: DeepSeek, Perplexity and Tavily search, Game scene ambience, conversation body search and export, and background updates.
+- Default ports for non-Docker runs change to 7789/7788; the Docker image still uses 8080. Usage statistics are off by default.
 
 ### Added / 新增
 
@@ -28,8 +38,8 @@ Denova records only major user-visible features, important compatibility or data
 - 语言模型连接与模型配置可单独停用；更新支持后台检查、可选自动下载，并在活动任务结束后重启。
 - Model connections and profiles can be disabled individually. Updates gain background checks, optional automatic downloads and restart after active tasks.
 
-- 上游新增不包含创作内容的使用统计。fork 构建默认关闭、不弹出首次提示；`0.5.1fixN` 格式的版本号不会启用采集。
-- Upstream adds usage statistics without creative content. Fork builds keep it off by default with no first-run notice, and `0.5.1fixN` version numbers never collect.
+- 新增不包含创作内容的使用统计（上游功能，数据发送到上游的 Umami Cloud 统计）。本 fork 默认关闭、不弹出首次提示，可在「设置 → 常规」中开启。
+- Adds usage statistics without creative content (an upstream feature that reports to upstream's Umami Cloud). This fork keeps it off by default with no first-run notice; turn it on in Settings → General.
 
 ### Changed / 变更
 
