@@ -185,7 +185,9 @@ func DefaultSettings() Settings {
 	// Only the v0.5.1 updater handoff needs the former default. Keep this in
 	// the lowest configuration layer so explicit ports still win. The updater
 	// scopes this origin to one launch and clears it before subsequent updates.
-	if os.Getenv("DENOVA_UPDATE_ID") != "" && strings.TrimPrefix(os.Getenv("DENOVA_UPDATE_FROM_VERSION"), "v") == "0.5.1" {
+	// Fork releases 0.5.1fixN share that default and need the same handoff.
+	from := strings.TrimPrefix(os.Getenv("DENOVA_UPDATE_FROM_VERSION"), "v")
+	if os.Getenv("DENOVA_UPDATE_ID") != "" && (from == "0.5.1" || strings.HasPrefix(from, "0.5.1fix")) {
 		backendPort = 8080
 	}
 	return Settings{

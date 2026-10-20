@@ -14,6 +14,7 @@ func TestUpdateStartupPortPreservesConfigurationPrecedence(t *testing.T) {
 		{name: "ordinary launch", want: 7789},
 		{name: "release 051 default", fromVersion: "0.5.1", updateID: "test", want: 8080},
 		{name: "tagged release 051", fromVersion: "v0.5.1", updateID: "test", want: 8080},
+		{name: "fork release 051fix", fromVersion: "v0.5.1fix18", updateID: "test", want: 8080},
 		{name: "origin without handoff", fromVersion: "0.5.1", want: 7789},
 		{name: "later release", fromVersion: "0.6.0", updateID: "test", want: 7789},
 		{name: "global config", fromVersion: "0.5.1", updateID: "test", global: "backend_port = 18080\n", want: 18080},
