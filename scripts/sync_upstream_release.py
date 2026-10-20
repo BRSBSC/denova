@@ -99,7 +99,11 @@ def prepare(args):
     if mirror and ORIGIN_MARKER not in (mirror.get("body") or ""):
         raise ValueError(f"Destination release {tag} is not managed by this workflow; refusing to overwrite it")
     outputs = {"changed": "false", "version": tag, "image": f"ghcr.io/{args.repository.lower()}"}
-    if not is_complete(release, mirror, args.force):
+    # A source release of the same version owns that image tag; never replace it with the upstream build.
+    own = find_release(args.repository, tag)
+    if own and ORIGIN_MARKER not in (own.get("body") or ""):
+        print(f"{args.repository} publishes its own {tag}; skipping the upstream mirror")
+    elif not is_complete(release, mirror, args.force):
         if args.force and mirror:
             # Clear only our completion marker so an interrupted rebuild can be
             # retried by the next scheduled run, including unchanged upstream assets.
