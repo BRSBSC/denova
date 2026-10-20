@@ -11,7 +11,7 @@ import { fetchProjectSettings, fetchSettings } from '@/features/settings/api'
 import { formatApprovedPlanExecutionMessage } from '@/lib/plan-mode'
 import { agentCommandErrorMessage, agentCommandRetryKey, isKnownAgentCommandOutcome, mergeProjectedAgentQueue, rememberAgentCommandID } from '@/lib/agent-command'
 import { localizeAgentRuntimeError, localizeAgentRuntimeReason } from '@/lib/agent-runtime-error'
-import { AgentChatTransport, AgentUIMessageNormalizer, buildAgentChatRequestBody, type AgentChatRequestMetadata, type AgentUIMessage } from '@/lib/agent-ui'
+import { AgentChatTransport, normalizeAgentUIMessages, buildAgentChatRequestBody, type AgentChatRequestMetadata, type AgentUIMessage } from '@/lib/agent-ui'
 import { agentViewContent, type AgentPartRef } from '@/lib/agent-message-view'
 import { STREAMING_RENDER_INTERVAL_MS } from '@/lib/streaming/raf-update-batcher'
 import { isProjectChangeForProject, type WorkspaceChangeEvent } from '@/features/changes/types'
@@ -36,7 +36,7 @@ import {
   type WritingTaskStatus,
 } from './use-agent-runtime-recovery'
 import { writingAgentChatClient, type AgentChatClient } from './agent-chat-client'
-import { attachmentDescriptors, attachmentUploadsRetryIdentity, filesToAttachmentUploads, type ChatAttachmentUpload } from '@/lib/chat-attachments'
+import { attachmentDescriptors, attachmentUploadsRetryIdentity, filesToAttachmentUploads, type ChatAttachmentDescriptor, type ChatAttachmentUpload } from '@/lib/chat-attachments'
 
 interface ChatOptions {
   projectId?: string
@@ -100,8 +100,6 @@ export function useAgentChat(options: ChatOptions = {}) {
   const [runtimeRecoverySignal, setRuntimeRecoverySignal] = useState(0)
   const projectStreamCycleRef = useRef<(operationID: string, cycle?: number) => void>(() => undefined)
   const refreshSessionsRef = useRef<() => Promise<SessionSummary[]>>(async () => [])
-  const messageNormalizerRef = useRef<AgentUIMessageNormalizer | null>(null)
-  messageNormalizerRef.current ??= new AgentUIMessageNormalizer()
   const [displayRehydrateRequest, setDisplayRehydrateRequest] = useState<WritingDisplayRehydrateRequest | null>(null)
   const {
     messages: uiMessages,
@@ -111,6 +109,7 @@ export function useAgentChat(options: ChatOptions = {}) {
     stop: stopAIStream,
     status,
     error,
+    completion,
   } = useAgentStream({
     transport,
     throttle: STREAMING_RENDER_INTERVAL_MS,
@@ -129,6 +128,15 @@ export function useAgentChat(options: ChatOptions = {}) {
           return
         }
         if (data.event === 'agent_cycle_started') {
+          const commandID = typeof data.command_id === 'string' ? data.command_id.trim() : ''
+          const attachments = data.attachments as ChatAttachmentDescriptor[] | undefined
+          if (commandID && Array.isArray(attachments) && attachments.length > 0) {
+            // Acceptance supplies persisted IDs; match the exact optimistic
+            // input so replay or another queued cycle cannot rebind its files.
+            setUIMessages(current => current.map(message => message.role === 'user' && message.id === commandID
+              ? { ...message, metadata: { ...message.metadata, attachments } }
+              : message))
+          }
           const operationID = typeof data.operation_id === 'string' ? data.operation_id.trim() : ''
           const cycle = typeof data.cycle === 'number' ? data.cycle : Number(data.cycle)
           projectStreamCycleRef.current(operationID, Number.isSafeInteger(cycle) ? cycle : undefined)
@@ -175,8 +183,9 @@ export function useAgentChat(options: ChatOptions = {}) {
       void refreshSessionsRef.current()
     },
   })
-  const messages = useMemo(() => {
-    const normalized = messageNormalizerRef.current!.normalize(uiMessages).flatMap<AgentUIMessage>((message) => {
+  const { messages, textConflicts } = useMemo(() => {
+    const textConflicts: string[] = []
+    const normalized = normalizeAgentUIMessages(uiMessages, identity => textConflicts.push(identity)).flatMap<AgentUIMessage>((message) => {
       const visibleParts = message.parts.filter((part) => part.type !== 'data-agent-error')
       if (visibleParts.length === message.parts.length) return [message]
       if (visibleParts.length === 0) return []
@@ -184,9 +193,10 @@ export function useAgentChat(options: ChatOptions = {}) {
     })
     // Manual maintenance uses a non-streaming API. Keep its pending display outside
     // canonical history so a background reload cannot erase the submission feedback.
-    return pendingCompactionID ? [...normalized, buildContextCompactionMessage({
+    const messages = pendingCompactionID ? [...normalized, buildContextCompactionMessage({
       status: 'started', phase: 'agent', summary: t('chat.contextCompaction.manualRunning'),
     }, pendingCompactionID)] : normalized
+    return { messages, textConflicts }
   }, [pendingCompactionID, t, uiMessages])
   const transportStreaming = status === 'submitted' || status === 'streaming'
   const {
@@ -278,7 +288,7 @@ export function useAgentChat(options: ChatOptions = {}) {
     [t],
   )
 
-  const { abortRecovery, resumeTask: continueTask, projectStreamCycle, recoveryPending, recoveryFailed, resumeActiveChat, runtimeProjection, setRuntimeProjection } = useWritingAgentRuntimeRecovery({
+  const { abortRecovery, resumeTask: continueTask, projectStreamCycle, recoveryPending, recoveryFailed, resumeActiveChat, synchronizeActiveChat, runtimeProjection, setRuntimeProjection } = useWritingAgentRuntimeRecovery({
     activeSessionId,
     displayRehydrateRequest,
     loadHistoryAuthoritative,
@@ -290,10 +300,18 @@ export function useAgentChat(options: ChatOptions = {}) {
     transport,
     transportError: error,
     transportStatus: status,
+    transportCompletion: completion,
     transportStreaming,
     client,
   })
   projectStreamCycleRef.current = projectStreamCycle
+  useEffect(() => {
+    if (!transportStreaming || !textConflicts.length) return
+    console.warn('[useAgentChat.ts] Reloading conflicting Agent display segments', { sessionID: activeSessionId, identities: textConflicts })
+    // Closing only the display connection triggers the existing canonical
+    // inspection/reconnect path. The accepted server operation keeps running.
+    stopAIStream()
+  }, [activeSessionId, stopAIStream, textConflicts, transportStreaming])
   const isStreaming = transportStreaming || recoveryPending
   // Recovery inspection temporarily sets recoveryPending even for an idle
   // conversation. Project-level running state must represent real execution,
@@ -552,6 +570,7 @@ export function useAgentChat(options: ChatOptions = {}) {
       try {
         const pendingRequest = sendMessage(
           {
+            id: initialCommandID,
             role: 'user',
             metadata: {
               ...(sendOptions.hideUserMessage ? { display_hidden: true } : {}),
@@ -901,6 +920,7 @@ export function useAgentChat(options: ChatOptions = {}) {
     hasEarlierMessages,
     isLoadingEarlierHistory,
     resumeActiveChat,
+    synchronizeActiveChat,
     createChatSession,
     switchChatSession,
     renameChatSession,

@@ -1,6 +1,6 @@
 import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { CSS, useCombinedRefs } from '@dnd-kit/utilities'
+import { CSS } from '@dnd-kit/utilities'
 import { memo, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronsDownUp, ChevronsUpDown, FileText, Plus, Search } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -157,14 +157,14 @@ export function ResourceDirectory({
               key={item.id}
               item={item}
               active={activeId === item.id}
-              onSelect={() => onSelect(item.id)}
+              onSelect={onSelect}
             />
           ) : (
             <DirectoryItemRow
               key={item.id}
               item={item}
               active={activeId === item.id}
-              onSelect={() => onSelect(item.id)}
+              onSelect={onSelect}
             />
           ))
           return (
@@ -290,8 +290,9 @@ export function ResourceDirectory({
 interface DirectoryItemRowProps {
   item: ResourceDirectoryItem
   active: boolean
-  onSelect: () => void
-  nodeRef?: (node: HTMLButtonElement | null) => void
+  onSelect: (id: string) => void
+  nodeRef?: (node: HTMLLIElement | null) => void
+  activatorNodeRef?: (node: HTMLButtonElement | null) => void
   attributes?: ReturnType<typeof useSortable>['attributes']
   listeners?: ReturnType<typeof useSortable>['listeners']
   transform?: string
@@ -346,16 +347,15 @@ function SortableDirectorySection({ sectionId, items, onReorderItems, children }
   )
 }
 
-function SortableDirectoryItemRow({ item, active, onSelect }: DirectoryItemRowProps) {
+const SortableDirectoryItemRow = memo(function SortableDirectoryItemRow({ item, active, onSelect }: DirectoryItemRowProps) {
   const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
-  // A stable ref avoids disconnecting and remeasuring every row as the pointer moves.
-  const nodeRef = useCombinedRefs(setNodeRef, setActivatorNodeRef)
   return (
     <DirectoryItemRow
       item={item}
       active={active}
       onSelect={onSelect}
-      nodeRef={nodeRef}
+      nodeRef={setNodeRef}
+      activatorNodeRef={setActivatorNodeRef}
       attributes={attributes}
       listeners={listeners}
       transform={CSS.Transform.toString(transform)}
@@ -363,21 +363,27 @@ function SortableDirectoryItemRow({ item, active, onSelect }: DirectoryItemRowPr
       isDragging={isDragging}
     />
   )
-}
+})
 
 // Keep dnd-kit context updates outside the row's unchanged content and controls.
-const DirectoryItemRow = memo(function DirectoryItemRow({ item, active, onSelect, nodeRef, attributes, listeners, transform, transition, isDragging }: DirectoryItemRowProps) {
+const DirectoryItemRow = memo(function DirectoryItemRow({ item, active, onSelect, nodeRef, activatorNodeRef, attributes, listeners, transform, transition, isDragging }: DirectoryItemRowProps) {
   const { t } = useTranslation()
+  // Move the paint-containing slot itself so sorting cannot clip its button.
   return (
-    <SidebarMenuItem>
+    <SidebarMenuItem ref={nodeRef} style={{
+      contentVisibility: 'auto',
+      containIntrinsicSize: item.summary ? 'auto 48px' : 'auto 32px',
+      transform,
+      transition,
+      zIndex: isDragging ? 10 : undefined,
+    }}>
       <SidebarMenuButton
-        ref={nodeRef}
+        ref={activatorNodeRef}
         type="button"
         size={item.summary ? 'lg' : 'default'}
-        style={{ transform, transition }}
         isActive={active}
-        className={cn('cursor-default', item.disabled && 'opacity-50', isDragging && 'relative z-10 bg-sidebar-accent')}
-        onClick={onSelect}
+        className={cn('cursor-default', item.disabled && 'opacity-50', isDragging && 'bg-sidebar-accent')}
+        onClick={() => onSelect(item.id)}
         onDragStart={event => event.preventDefault()}
         aria-current={active ? 'true' : undefined}
         title={item.summary ? `${item.title}\n${item.summary}` : item.title}
@@ -397,7 +403,7 @@ const DirectoryItemContent = memo(function DirectoryItemContent({ item }: { item
     <>
       {item.thumbnailUrl ? (
         <span className="flex size-5 shrink-0 overflow-hidden rounded-md border border-sidebar-border bg-sidebar">
-          <img src={item.thumbnailUrl} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
+          <img src={item.thumbnailUrl} loading="lazy" decoding="async" alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
         </span>
       ) : (
         <span className="relative flex size-5 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar">

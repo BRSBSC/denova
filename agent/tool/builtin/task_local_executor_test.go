@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/alfredxw/denova/agent"
@@ -26,51 +27,6 @@ type taskModel struct {
 type blockingTaskModel struct {
 	release  <-chan struct{}
 	response string
-}
-
-// tickingTaskModel streams one chunk per tick until it is released. A test can
-// keep the child emitting live events until its observer has caught one,
-// instead of guessing when the observer subscribed.
-type tickingTaskModel struct {
-	tick    <-chan struct{}
-	release <-chan struct{}
-}
-
-func (model *tickingTaskModel) Generate(ctx context.Context, _ []*agentschema.Message, _ ...agentmodel.ModelOption) (*agentschema.Message, error) {
-	select {
-	case <-model.release:
-		return agentschema.AssistantMessage("child stream", nil), nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-func (model *tickingTaskModel) Stream(ctx context.Context, _ []*agentschema.Message, _ ...agentmodel.ModelOption) (*agentstream.StreamReader[*agentschema.Message], error) {
-	reader, writer := agentstream.Pipe[*agentschema.Message](1)
-	go func() {
-		defer writer.Close()
-		for {
-			select {
-			case <-model.tick:
-				if writer.Send(agentschema.AssistantMessage("tick ", nil), nil) {
-					return
-				}
-			case <-model.release:
-				writer.Send(agentschema.AssistantMessage("child stream", nil), nil)
-				return
-			case <-ctx.Done():
-				writer.Send(nil, ctx.Err())
-				return
-			}
-		}
-	}()
-	return reader, nil
-}
-
-type notifyingTaskExecutor struct {
-	*LocalTasks
-	waiting chan struct{}
-	once    sync.Once
 }
 
 type lateBoundTaskExecutor struct {
@@ -169,11 +125,6 @@ func cloneTaskMessages(messages []*agentschema.Message) []*agentschema.Message {
 		cloned[index] = message.Clone()
 	}
 	return cloned
-}
-
-func (executor *notifyingTaskExecutor) Wait(ctx context.Context, refs []TaskRef) ([]TaskWaitOutcome, error) {
-	executor.once.Do(func() { close(executor.waiting) })
-	return executor.LocalTasks.Wait(ctx, refs)
 }
 
 func (model *blockingTaskModel) Generate(ctx context.Context, _ []*agentschema.Message, _ ...agentmodel.ModelOption) (*agentschema.Message, error) {
@@ -680,86 +631,60 @@ func TestLocalTasksReconcilesCompletionFromDurableChildSession(t *testing.T) {
 }
 
 func TestLocalTasksWaitForwardsStableTypedChildIdentity(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	tick, release := make(chan struct{}), make(chan struct{})
-	owner := newTaskAgent(t, agentsession.Memory(), &tickingTaskModel{tick: tick, release: release})
-	defer owner.Close(context.Background())
-	// Registered after Close so it runs first: a failed test must still release the child.
-	releaseChild := sync.OnceFunc(func() { close(release) })
-	defer releaseChild()
-	executor := &notifyingTaskExecutor{LocalTasks: newTaskExecutor(t, owner), waiting: make(chan struct{})}
-	started, err := executor.Start(ctx, TaskRequest{Agent: "researcher", Prompt: "research", IdempotencyKey: "forward-task"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	arguments, err := json.Marshal(taskWaitInput{Targets: []taskWaitTarget{{Ref: started.Ref}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	parent, err := agent.New(ctx, agent.Definition{
-		Name: "root", Model: &taskModel{responses: []*agentschema.Message{
-			agentschema.AssistantMessage("", []agentschema.ToolCall{{
-				ID: "wait", Type: "function", Function: agentschema.FunctionCall{Name: "await", Arguments: string(arguments)},
-			}}),
-			agentschema.AssistantMessage("parent final", nil),
-		}},
-		ModelIdentity: agentschema.CapabilityIdentity{Kind: "test.task.parent-model", Version: 1},
-		Tools:         Tasks(executor),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer parent.Close(context.Background())
-	run, err := parent.Run(ctx, agent.Text("delegate"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-executor.waiting:
-	case <-ctx.Done():
-		t.Fatal(ctx.Err())
-	}
-	// The waiting signal fires before the wait has subscribed to the child, and
-	// a child that already finished is reported without live events. Keep the
-	// child emitting, at a bounded pace, until the parent forwards one event,
-	// then let it finish.
-	var forwarded []agentevent.NestedEvent
-	events := run.Events()
-	pace := time.NewTicker(time.Millisecond)
-	defer pace.Stop()
-	for events != nil {
-		select {
-		case event, open := <-events:
-			if !open {
-				events = nil
-				break
-			}
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		release := make(chan struct{})
+		owner := newTaskAgent(t, agentsession.Memory(), &blockingTaskModel{release: release, response: "child stream"})
+		defer owner.Close(context.Background())
+		executor := newTaskExecutor(t, owner)
+		started, err := executor.Start(ctx, TaskRequest{Agent: "researcher", Prompt: "research", IdempotencyKey: "forward-task"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		arguments, err := json.Marshal(taskWaitInput{Targets: []taskWaitTarget{{Ref: started.Ref}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		parent, err := agent.New(ctx, agent.Definition{
+			Name: "root", Model: &taskModel{responses: []*agentschema.Message{
+				agentschema.AssistantMessage("", []agentschema.ToolCall{{
+					ID: "wait", Type: "function", Function: agentschema.FunctionCall{Name: "await", Arguments: string(arguments)},
+				}}),
+				agentschema.AssistantMessage("parent final", nil),
+			}},
+			ModelIdentity: agentschema.CapabilityIdentity{Kind: "test.task.parent-model", Version: 1},
+			Tools:         Tasks(executor),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer parent.Close(context.Background())
+		run, err := parent.Run(ctx, agent.Text("delegate"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Let task_wait subscribe before the child can finish.
+		synctest.Wait()
+		close(release)
+		var forwarded []agentevent.NestedEvent
+		for event := range run.Events() {
 			if nested, ok := event.Payload.(agentevent.NestedEvent); ok {
 				forwarded = append(forwarded, nested)
-				pace.Stop()
-				releaseChild()
 			}
-		case <-pace.C:
-			select {
-			case tick <- struct{}{}:
-			default:
-			}
-		case <-ctx.Done():
-			t.Fatal(ctx.Err())
 		}
-	}
-	if result, waitErr := run.Wait(ctx); waitErr != nil || result.Status != agentschema.ResultCompleted {
-		t.Fatalf("parent result=%#v err=%v", result, waitErr)
-	}
-	if len(forwarded) == 0 {
-		t.Fatal("task_wait did not publish typed child events")
-	}
-	event := forwarded[0]
-	if event.Source.Name != "researcher" || event.Source.InvocationType != "task" ||
-		event.Source.InvocationID == "" || event.SessionID != started.Ref.Session || event.Child.RunID != started.Ref.Run {
-		t.Fatalf("forwarded identity = %#v", event)
-	}
+		if result, waitErr := run.Wait(ctx); waitErr != nil || result.Status != agentschema.ResultCompleted {
+			t.Fatalf("parent result=%#v err=%v", result, waitErr)
+		}
+		if len(forwarded) == 0 {
+			t.Fatal("task_wait did not publish typed child events")
+		}
+		event := forwarded[0]
+		if event.Source.Name != "researcher" || event.Source.InvocationType != "task" ||
+			event.Source.InvocationID == "" || event.SessionID != started.Ref.Session || event.Child.RunID != started.Ref.Run {
+			t.Fatalf("forwarded identity = %#v", event)
+		}
+	})
 }
 
 func TestLocalTasksEnforcesCapacityWithoutBreakingIdempotentStart(t *testing.T) {

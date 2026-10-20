@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -20,9 +21,10 @@ import (
 // Settings 是用户设置的持久化模型。工作区文件只会从中取出 Agent 定制字段。
 // 指针类型用于区分 "未设置"（继承上层）与 "显式置零"。
 type Settings struct {
-	Market               MarketSettings        `toml:"market,omitempty" json:"market,omitempty"`
-	Extensions           *ExtensionSettings    `toml:"extensions,omitempty" json:"extensions,omitempty"`
-	GameCreationDefaults *GameCreationDefaults `toml:"game_creation_defaults,omitempty" json:"game_creation_defaults,omitempty"`
+	Market               MarketSettings           `toml:"market,omitempty" json:"market,omitempty"`
+	Extensions           *ExtensionSettings       `toml:"extensions,omitempty" json:"extensions,omitempty"`
+	GameCreationDefaults *GameCreationDefaults    `toml:"game_creation_defaults,omitempty" json:"game_creation_defaults,omitempty"`
+	GameLastCreation     *GameCreationPreferences `toml:"game_last_creation,omitempty" json:"game_last_creation,omitempty"`
 
 	// 模型
 	OpenAIAPIKey              string                  `toml:"openai_api_key,omitempty" json:"openai_api_key,omitempty"`
@@ -90,6 +92,7 @@ type Settings struct {
 	MotionIntensity        string `toml:"motion_intensity,omitempty" json:"motion_intensity,omitempty"`
 	AutoExpandThinking     *bool  `toml:"auto_expand_thinking,omitempty" json:"auto_expand_thinking,omitempty"`
 	UpdateCheckEnabled     *bool  `toml:"update_check_enabled,omitempty" json:"update_check_enabled,omitempty"`
+	UpdateDownloadEnabled  *bool  `toml:"update_download_enabled,omitempty" json:"update_download_enabled,omitempty"`
 
 	// Agent
 	MaxIteration              *int                `toml:"max_iteration,omitempty" json:"max_iteration,omitempty"`
@@ -178,6 +181,13 @@ const (
 
 // DefaultSettings 返回内置默认配置（最低优先级）。
 func DefaultSettings() Settings {
+	backendPort := 7789
+	// Only the v0.5.1 updater handoff needs the former default. Keep this in
+	// the lowest configuration layer so explicit ports still win. The updater
+	// scopes this origin to one launch and clears it before subsequent updates.
+	if os.Getenv("DENOVA_UPDATE_ID") != "" && strings.TrimPrefix(os.Getenv("DENOVA_UPDATE_FROM_VERSION"), "v") == "0.5.1" {
+		backendPort = 8080
+	}
 	return Settings{
 		Market:                      MarketSettings{RegistryURL: DefaultMarketRegistryURL},
 		DefaultImageAPIProfileID:    DefaultImageAPIProfileID,
@@ -187,8 +197,8 @@ func DefaultSettings() Settings {
 		SkillsDir:                   "./skills",
 		DenovaDir:                   "./" + workspacelayout.DataDirName,
 		NovaDir:                     "./" + workspacelayout.DataDirName,
-		BackendPort:                 intPtr(8080),
-		FrontendPort:                intPtr(5173),
+		BackendPort:                 intPtr(backendPort),
+		FrontendPort:                intPtr(7788),
 		AllowLANAccess:              boolPtr(false),
 		AutoSaveEnabled:             boolPtr(true),
 		AutoSaveIntervalMs:          intPtr(1500),
@@ -210,6 +220,7 @@ func DefaultSettings() Settings {
 		MotionIntensity:             "system",
 		AutoExpandThinking:          boolPtr(false),
 		UpdateCheckEnabled:          boolPtr(true),
+		UpdateDownloadEnabled:       boolPtr(false),
 		ModelMaxRetries:             intPtr(5),
 		AgentIdleTimeoutSeconds:     intPtr(DefaultAgentIdleTimeoutSeconds),
 		AgentToolResultLimitKB:      intPtr(DefaultAgentToolResultLimitKB),
@@ -259,7 +270,10 @@ func Merge(parent, child Settings) Settings {
 	child = preserveTerminalCommandRegistryPresence(child)
 	out := parent
 	if child.Market.RegistryURL != "" {
-		out.Market = child.Market
+		out.Market.RegistryURL = child.Market.RegistryURL
+	}
+	if child.Market.GitHubToken != "" {
+		out.Market.GitHubToken = child.Market.GitHubToken
 	}
 	if child.OpenAIAPIKey != "" {
 		out.OpenAIAPIKey = child.OpenAIAPIKey
@@ -385,6 +399,9 @@ func Merge(parent, child Settings) Settings {
 	}
 	if child.UpdateCheckEnabled != nil {
 		out.UpdateCheckEnabled = child.UpdateCheckEnabled
+	}
+	if child.UpdateDownloadEnabled != nil {
+		out.UpdateDownloadEnabled = child.UpdateDownloadEnabled
 	}
 	if child.MaxIteration != nil {
 		out.MaxIteration = child.MaxIteration
@@ -805,6 +822,7 @@ func LoadLayeredWithGlobalAt(novaDir, workspace, projectConfigPath string, globa
 	// Creation defaults are Project-owned, never inherited from another book
 	// or the user's last-used global resource selection.
 	eff.GameCreationDefaults = ws.GameCreationDefaults
+	eff.GameLastCreation = ws.GameLastCreation
 	inherited := SettingsInheritance{
 		User:      withResolvedLabs(Merge(Merge(def, global), ws)),
 		Workspace: withResolvedLabs(Merge(Merge(def, global), user)),
@@ -830,7 +848,7 @@ func LoadLayeredWithGlobalAt(novaDir, workspace, projectConfigPath string, globa
 		)
 		resolvedContexts[customAgent.ID] = ResolveAgentContext(&customConfig, runtimeKind)
 	}
-	backendPort := settingsInt(eff.BackendPort, 8080)
+	backendPort := settingsInt(eff.BackendPort, 7789)
 	revisions := SettingsRevisions{}
 	userConfigPath := UserConfigPath(novaDir)
 	if rev, err := UserSettingsRevision(novaDir); err == nil {
@@ -885,6 +903,7 @@ func withResolvedLabs(settings Settings) Settings {
 // the transition is reversible, but LoadLayered no longer applies them.
 func PrepareWorkspaceAgentSettingsForWrite(existing, incoming Settings) Settings {
 	scoped := workspaceAgentSettings(incoming)
+	// Last-creation preferences are server-owned. Settings edits preserve them.
 	existing.GameCreationDefaults = scoped.GameCreationDefaults
 	existing.AgentRuntimes = scoped.AgentRuntimes
 	existing.AgentTools = scoped.AgentTools
@@ -905,6 +924,7 @@ func PrepareWorkspaceAgentSettingsForWrite(existing, incoming Settings) Settings
 func workspaceAgentSettings(settings Settings) Settings {
 	return Settings{
 		GameCreationDefaults:     settings.GameCreationDefaults,
+		GameLastCreation:         settings.GameLastCreation,
 		AgentRuntimes:            settings.AgentRuntimes,
 		AgentTools:               settings.AgentTools,
 		AgentPrompts:             settings.AgentPrompts,
@@ -920,6 +940,7 @@ func workspaceAgentSettings(settings Settings) Settings {
 
 func sanitizeEditableSettings(s Settings) Settings {
 	s.Market.RegistryURL = strings.TrimSpace(s.Market.RegistryURL)
+	s.Market.GitHubToken = strings.TrimSpace(s.Market.GitHubToken)
 	s = preserveTerminalCommandRegistryPresence(s)
 	s, _ = migrateModelEndpointSettings(s)
 	s, _ = migrateImageAPIEndpointSettings(s)

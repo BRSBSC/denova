@@ -17,6 +17,7 @@ import (
 	agentruntime "denova/internal/agents/runtime"
 	"denova/internal/agents/session"
 	"denova/internal/agents/trajectory"
+	"denova/internal/analytics"
 	activityapp "denova/internal/app/activity"
 	agentchatapp "denova/internal/app/agentchat"
 	appagentruntime "denova/internal/app/agentruntime"
@@ -41,12 +42,14 @@ import (
 	"denova/internal/portablepath"
 	projectdomain "denova/internal/project"
 	"denova/internal/terminal"
+	"denova/internal/update"
 	"denova/internal/workspace/filewatch"
 )
 
 // App 是 API 层使用的应用门面；具体业务由领域应用服务承接。
 type App struct {
-	cfg *config.Config
+	cfg       *config.Config
+	analytics *analytics.Service
 
 	workspace                       string
 	bookState                       *book.State
@@ -80,6 +83,12 @@ type App struct {
 	workspaceGeneration             uint64
 	closed                          bool
 	closeOnce                       sync.Once
+	updates                         *update.Service
+	updateRestartMu                 sync.Mutex
+	updateWaitID                    string
+	updateRestarting                bool
+	updateRestartError              string
+	updateRestartErrorID            string
 	activeTaskReplay                apptask.ReplayAdmission
 
 	// terminals owns the pty sessions behind the AgentChat terminal tabs. They are decoupled from
@@ -109,7 +118,7 @@ type App struct {
 	mu sync.RWMutex
 	// Keep concurrent manual selections ordered across their conversation and
 	// user-default writes, including selections made in different Projects.
-	modelSelectionMu sync.Mutex
+	conversationSelectionMu sync.Mutex
 }
 
 // New creates the application runtime. When neither an explicit nor resumable
@@ -211,6 +220,11 @@ func New(ctx context.Context, cfg *config.Config) (_ *App, err error) {
 		return nil, fmt.Errorf("initialize canonical Agent Session Store: %w", err)
 	}
 	app.platform = platform.New(dataDir, registry)
+	app.platform.ConfigureGitHubToken(func() string {
+		app.mu.RLock()
+		defer app.mu.RUnlock()
+		return app.cfg.Market.GitHubToken
+	})
 	finishStage(nil)
 	finishStage = observability.StartStartupStage(ctx, "application_runtime")
 	app.platform.ConfigureAgents(canonicalSessions, platformapp.NewModels(platformHost{app}).Resolve)
@@ -265,6 +279,7 @@ func New(ctx context.Context, cfg *config.Config) (_ *App, err error) {
 		cfg.Workspace = ""
 		app.Automation().StartScheduler(ctx)
 		app.startResourceUpdates(ctx)
+		app.startSoftwareUpdates(ctx)
 		return app, nil
 	}
 
@@ -296,6 +311,7 @@ func New(ctx context.Context, cfg *config.Config) (_ *App, err error) {
 	app.mu.Unlock()
 	app.Automation().StartScheduler(ctx)
 	app.startResourceUpdates(ctx)
+	app.startSoftwareUpdates(ctx)
 	return app, nil
 }
 
@@ -324,6 +340,7 @@ var ErrAgentContextChanged = appagentruntime.ErrContextChanged
 
 func (a *App) ensureServices() {
 	a.servicesOnce.Do(func() {
+		a.updates = update.NewService()
 		a.agentEngines = agentruntime.NewEngines()
 		a.workspaceApp = &workspaceService{app: a}
 		a.chatApp = &ChatAppService{
@@ -509,6 +526,9 @@ func (a *App) Close() {
 		sessionStore := a.sessionStore
 		a.mu.Unlock()
 
+		if a.analytics != nil {
+			a.analytics.Close()
+		}
 		if workspaceFiles != nil {
 			workspaceFiles.Close()
 		}

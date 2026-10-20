@@ -13,8 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	workspacelayout "denova/internal/workspace"
 )
 
 const registryVersion = 5
@@ -41,6 +39,8 @@ type Registry struct {
 	path            string
 	legacyBooksPath string
 	denovaDir       string
+	readCache       *registryReadCache
+	preparedStores  map[string]preparedProjectStore // Guarded by storeMu; successful migrations only.
 }
 
 func NewRegistry(denovaDir string) *Registry {
@@ -656,6 +656,7 @@ func (registry *Registry) saveLocked(data registryData) error {
 		return err
 	}
 	removeTemp = false
+	registry.readCache = &registryReadCache{raw: append(raw, '\n'), data: cloneRegistryData(data)}
 	return nil
 }
 
@@ -876,18 +877,4 @@ func isUserDataDirectory(name string) bool {
 	default:
 		return strings.HasPrefix(name, ".")
 	}
-}
-
-func isBookWorkspace(path string) bool {
-	markers := []string{
-		filepath.Join(path, workspacelayout.DataDirName), filepath.Join(path, workspacelayout.LegacyDataDirName),
-		filepath.Join(path, "book.json"), filepath.Join(path, "ideas.md"), filepath.Join(path, "brainstorm.md"),
-		filepath.Join(path, "chapters"), filepath.Join(path, "setting"),
-	}
-	for _, marker := range markers {
-		if _, err := os.Stat(marker); err == nil {
-			return true
-		}
-	}
-	return false
 }

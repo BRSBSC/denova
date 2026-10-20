@@ -1,3 +1,4 @@
+import { randomUUID } from '@/lib/uuid'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -26,13 +27,7 @@ import {
   type RuntimeSnapshot,
 } from './api'
 
-export function usePluginPages() {
-  return useQuery({
-    queryKey: ['platform', 'plugin-pages'],
-    queryFn: () => management<PluginPage[]>('/plugin-pages'),
-    refetchInterval: 5000,
-  })
-}
+import { usePluginPages } from './use-plugin-pages'
 
 /** Navigation selects a destination; its consumer and Agent remain bound to the
  * same Project while the user visits other routes. Project changes revoke it. */
@@ -121,7 +116,7 @@ function ProjectPluginPage({ page, projectId, visible, loreReferenceLabels, lore
       context: 'general',
       kind: 'page',
       actionId: page.id,
-      consumerId: crypto.randomUUID(),
+      consumerId: randomUUID(),
       locale: i18n.language,
       theme: resolvedTheme,
     })

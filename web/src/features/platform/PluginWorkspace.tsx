@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { randomUUID } from '@/lib/uuid'
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from 'next-themes'
 import { Minimize2, PanelsTopLeft, Puzzle } from 'lucide-react'
@@ -6,9 +7,10 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { toast } from 'sonner'
 import { GamePlayer } from './GamePlayer'
-import { PluginLauncher } from './PluginLauncher'
-import { PluginCommandDialog } from './PluginCommandDialog'
 import { localized, management, platformError, releasePluginConsumer, type ContributionContext, type PluginAction, type ProjectPlugin, type RuntimeSnapshot, type LocalizedText } from './api'
+
+const PluginLauncher = lazy(() => import('./PluginLauncher').then(module => ({ default: module.PluginLauncher })))
+const PluginCommandDialog = lazy(() => import('./PluginCommandDialog').then(module => ({ default: module.PluginCommandDialog })))
 
 export interface PluginLauncherTarget { projectId?: string; context?: ContributionContext; pluginId?: string }
 export interface PluginActionSelection {
@@ -58,7 +60,7 @@ export function PluginWorkspaceProvider({ children }: { children: ReactNode }) {
     try {
       const runtime = await management<RuntimeSnapshot>('/plugin-actions/open', 'POST', {
         projectId: selection.projectId, pluginId: selection.plugin.id, releaseId: selection.plugin.releaseId, context: selection.context,
-        kind: selection.action.kind, actionId: selection.action.id, consumerId: crypto.randomUUID(),
+        kind: selection.action.kind, actionId: selection.action.id, consumerId: randomUUID(),
         locale: i18n.language, theme: resolvedTheme,
       })
       if (!mounted.current) { await releasePluginConsumer(runtime); return }
@@ -78,8 +80,8 @@ export function PluginWorkspaceProvider({ children }: { children: ReactNode }) {
   }
   return <PluginWorkspaceContext.Provider value={openLauncher}>
     {children}
-    {launcher && <PluginLauncher target={launcher} onClose={() => setLauncher(null)} onSelect={openAction} />}
-    {command && <PluginCommandDialog selection={command} onClose={() => setCommand(null)} />}
+    {launcher && <Suspense fallback={null}><PluginLauncher target={launcher} onClose={() => setLauncher(null)} onSelect={openAction} /></Suspense>}
+    {command && <Suspense fallback={null}><PluginCommandDialog selection={command} onClose={() => setCommand(null)} /></Suspense>}
     {panels.length > 0 && <>
       {!visible && <Button className="fixed right-3 bottom-3 z-40 max-w-[calc(100vw-1.5rem)] shadow-md" variant="outline" onClick={() => setVisible(true)}><PanelsTopLeft />{t('platform.plugins.openPanels', { count: panels.length })}</Button>}
       <section role="region" aria-label={t('platform.plugins.workspace')} className={visible ? 'fixed inset-2 z-40 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border bg-background shadow-xl sm:inset-6' : 'hidden'}>

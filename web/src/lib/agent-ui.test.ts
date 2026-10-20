@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   AgentChatTransport,
-  AgentUIMessageNormalizer,
   buildAgentChatRequestBody,
   initialSubmissionOutcomeForStatus,
   normalizeAgentUIMessages,
@@ -34,16 +33,15 @@ describe('agent-ui', () => {
     ])
   })
   it('retracts failed streamed parts while retaining confirmed tools across later deltas', () => {
-    const normalizer = new AgentUIMessageNormalizer()
     const message: AgentUIMessage = { id: 'run', role: 'assistant', parts: [
       { type: 'dynamic-tool', toolName: 'read', toolCallId: 'confirmed', state: 'output-available', input: {}, output: 'kept' },
       { type: 'text', text: 'partial', providerMetadata: { agent: { display_segment_id: 'failed-text' } } },
       { type: 'dynamic-tool', toolName: 'write', toolCallId: 'failed-tool', state: 'input-streaming', input: {} },
       { type: 'data-agent-activity', id: 'retry', data: { event: 'model_retry', discard_ids: ['failed-text', 'failed-tool'] } },
     ] }
-    expect(normalizer.normalize([message])[0].parts).toHaveLength(2)
+    expect(normalizeAgentUIMessages([message])[0].parts).toHaveLength(2)
     const next = { ...message, parts: [...message.parts, { type: 'text' as const, text: 'recovered' }] }
-    expect(normalizer.normalize([next])[0].parts).toEqual([message.parts[0], message.parts[3], next.parts[4]])
+    expect(normalizeAgentUIMessages([next])[0].parts).toEqual([message.parts[0], message.parts[3], next.parts[4]])
   })
   it('classifies initial start acceptance without treating 5xx as a definite rejection', () => {
     expect(initialSubmissionOutcomeForStatus(200)).toBe('accepted')
@@ -158,8 +156,7 @@ describe('agent-ui', () => {
     expect(normalized[1].parts[0]).toBe(streamingPart)
   })
 
-  it('增量归一化复用稳定历史，并在 part 结构变化时恢复完整去重', () => {
-    const normalizer = new AgentUIMessageNormalizer()
+  it('reuses unchanged history while reconciling growing text and tool updates', () => {
     const history = {
       id: 'history-tool',
       role: 'assistant',
@@ -172,12 +169,12 @@ describe('agent-ui', () => {
       metadata: { run_id: 'run-1', display_segment_id: 'segment-1' },
       parts: [{ type: 'text', text: 'first', state: 'streaming' }],
     } as AgentUIMessage
-    const initial = normalizer.normalize([history, active])
+    const initial = normalizeAgentUIMessages([history, active])
     const growing = {
       ...active,
       parts: [{ type: 'text', text: 'first second', state: 'streaming' }],
     } as AgentUIMessage
-    const incremented = normalizer.normalize([history, growing])
+    const incremented = normalizeAgentUIMessages([history, growing])
     expect(incremented[0]).toBe(initial[0])
     expect(incremented[1].parts[0]).toMatchObject({ text: 'first second' })
 
@@ -188,7 +185,7 @@ describe('agent-ui', () => {
         { type: 'dynamic-tool', toolName: 'read', toolCallId: 'call-1', state: 'output-available', output: 'done' },
       ],
     } as AgentUIMessage
-    const deduped = normalizer.normalize([history, structural])
+    const deduped = normalizeAgentUIMessages([history, structural])
     expect(deduped[0].parts[0]).toMatchObject({ toolCallId: 'call-1', state: 'output-available', output: 'done' })
     expect(deduped[1].parts).toHaveLength(1)
   })
@@ -928,8 +925,8 @@ describe('agent-ui', () => {
       // The emoji is two UTF-16 units, the unit the server counts in.
       expect(merge(type, 'a😀b', 'bc', 3)[0].parts[0]).toMatchObject({ text: 'a😀bc' })
     }
-    // A part that starts at the beginning of its segment still replaces history.
-    expect(merge('reasoning', '旧', '新的完整内容', 0)[0].parts[0]).toMatchObject({ text: '新的完整内容' })
+    // A part that starts at the beginning of its segment carries the whole segment.
+    expect(merge('reasoning', '新的', '新的完整内容', 0)[0].parts[0]).toMatchObject({ text: '新的完整内容' })
   })
 
   it('同一 run 中内容相同但稳定 ID 不同的正文和 reasoning 保持为独立分段', () => {

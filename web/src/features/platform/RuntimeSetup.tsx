@@ -14,7 +14,7 @@ import { InlineErrorNotice } from '@/components/common/inline-error-notice'
 import { ConfigurationForm } from './ConfigurationForm'
 import { getAgentChatProjects } from '@/features/agent-chat/api'
 import { fetchSettings } from '@/features/settings/api'
-import { modelProfilesWithDefault } from '@/features/settings/model-profiles'
+import { selectableModelProfiles } from '@/features/settings/model-profiles'
 import { imageAPIProfilesWithDefault } from '@/features/settings/image-profiles'
 import { management, platformError, type RuntimeSetupDocument, type Manifest } from './api'
 
@@ -50,7 +50,7 @@ export function RuntimeSetup({
   const form = useQuery({ queryKey: ['platform', 'setup', configurationEndpoint, i18n.language], queryFn: () => management<RuntimeSetupDocument>(configurationEndpoint! + (configurationEndpoint!.includes('?') ? '&' : '?') + 'locale=' + (i18n.language.startsWith('zh') ? 'zh-CN' : 'en-US')), enabled: !!configurationEndpoint, staleTime: 'static', refetchOnWindowFocus: false })
   const projects = useQuery({
     queryKey: ['platform', 'projects'],
-    queryFn: getAgentChatProjects,
+    queryFn: () => getAgentChatProjects(),
     enabled: !projectLocked,
   })
   const settings = useQuery({
@@ -58,7 +58,7 @@ export function RuntimeSetup({
     queryFn: fetchSettings,
   })
   const slots = modelRequirements ?? form.data?.models ?? []
-  const profiles = modelProfilesWithDefault(settings.data?.effective).filter(
+  const profiles = selectableModelProfiles(settings.data?.effective).filter(
     (profile): profile is typeof profile & { id: string } => !!profile.id,
   )
   const imageProfiles = imageAPIProfilesWithDefault(settings.data?.effective).filter(

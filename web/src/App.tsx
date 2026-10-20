@@ -2,11 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from 'next-themes'
-import { checkForUpdate, fetchProjectSettings, fetchSettings, refreshProjectSettings, refreshSettings } from '@/features/settings/api'
+import { getUpdateStatus, fetchProjectSettings, fetchSettings, refreshProjectSettings, refreshSettings } from '@/features/settings/api'
 import { subscribeSettingsTarget } from '@/features/settings/query'
 import { applyFontSettings, fontSettingsFromEffective } from '@/features/settings/font-variables'
-import { markAutoUpdateChecked, shouldRunAutoUpdateCheck, UPDATE_CHECK_RESULT_EVENT } from '@/features/settings/update-check-cache'
+import { UPDATE_CHECK_RESULT_EVENT } from '@/features/settings/update-events'
 import type { UpdateCheckResult } from '@/features/settings/types'
+import { buildFrontendReloadURL } from '@/features/settings/update-reload'
+import { APP_VERSION } from '@/app-version'
+import { AnalyticsNotice } from '@/features/analytics/AnalyticsPreferences'
+import { useAnalyticsActivity } from '@/features/analytics/use-analytics-activity'
 import { getProjectLoreItems, importCharacterCard, previewCharacterCard, setProjectChapterConfirmed, switchWorkspace, type CharacterCardPreview, type LoreItem, type WorkspaceSearchResult } from '@/lib/api'
 import { withErrorLogID } from '@/lib/api-client'
 import { CommandPalette } from '@/components/common/command-palette'
@@ -80,6 +84,7 @@ function App() {
   const [projectExplorerRefreshSignal, setProjectExplorerRefreshSignal] = useState(0)
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(() => readLayoutBoolean(SETTINGS_OPEN_KEY, false))
+  const [analyticsReady, setAnalyticsReady] = useState(false)
   useEffect(() => {
     const openSettings = () => setSettingsOpen(true)
     window.addEventListener(SETTINGS_SECTION_EVENT, openSettings)
@@ -90,7 +95,6 @@ function App() {
   const [maxOpenTabs, setMaxOpenTabs] = useState<number>(MAX_OPEN_TABS_FALLBACK)
   const [editorAutoSaveEnabled, setEditorAutoSaveEnabled] = useState(AUTO_SAVE_ENABLED_FALLBACK)
   const [editorAutoSaveDelayMs, setEditorAutoSaveDelayMs] = useState(AUTO_SAVE_DELAY_FALLBACK_MS)
-  const [updateCheckEnabled, setUpdateCheckEnabled] = useState<boolean | null>(null)
   const [developerMode, setDeveloperMode] = useState<boolean | null>(null)
   const [motionIntensity, setMotionIntensity] = useState('system')
   const [autoExpandThinking, setAutoExpandThinking] = useState(false)
@@ -115,7 +119,6 @@ function App() {
   const [lastCreationRoute, setLastCreationRoute] = useState<CreationRoute>(() => readContentMode())
   const lastCreationRouteRef = useRef<CreationRoute>(readContentMode())
   const characterCardInputRef = useRef<HTMLInputElement>(null)
-  const updateCheckInFlightRef = useRef(false)
   const tabActivationsRef = useRef<Map<string, number>>(new Map())
   const tabActivationCounterRef = useRef(0)
   const editorFlushHandlerRef = useRef<EditorFlushHandler | null>(null)
@@ -139,11 +142,13 @@ function App() {
     setLastCreationRoute(contentMode)
   }, [mode])
 
+  const retainedFilePaths = useMemo(() => openTabs.flatMap(tab => tab.kind === 'file' ? [tab.path] : []), [openTabs])
   const {
-    tree, loading, selectedFile, fileDocument, fileContent, fileRevision, workspace, projectId, workspaceLoaded, summary, books, booksLoaded, bookSortMode,
+    tree, loading, selectedFile, fileDocument, fileDocuments, workspace, projectId, workspaceLoaded, summary, books, booksLoaded, bookSortMode,
     selectFile, clearSelectedFile, saveFileDraft, createItem, deleteItem, renameItem, copyItem, moveItem,
     refresh, refreshSummary, refreshAfterAgentFileChange, refreshAll, refreshBooks,
-  } = useWorkspace()
+  } = useWorkspace({ retainedFilePaths })
+  useAnalyticsActivity(settingsOpen || !analyticsReady, Boolean(selectedFile))
   // A late response stays with its Project instead of replacing another library.
   const loreQuery = useQuery({
     queryKey: ['lore-items', projectId],
@@ -308,7 +313,6 @@ function App() {
       if (typeof v === 'number' && v >= 1) setMaxOpenTabs(Math.floor(v))
       setEditorAutoSaveEnabled(effective?.auto_save_enabled ?? AUTO_SAVE_ENABLED_FALLBACK)
       setEditorAutoSaveDelayMs(normalizeAutoSaveDelayMs(effective?.auto_save_interval_ms))
-      setUpdateCheckEnabled(effective?.update_check_enabled !== false)
       setDeveloperMode(effective?.labs?.developer_mode === true)
       setNovaDir(data.paths?.denova_dir || data.paths?.nova_dir || '')
       setConfiguredLocale(effective?.language)
@@ -359,18 +363,30 @@ function App() {
   }, [t])
 
   useEffect(() => {
-    if (updateCheckEnabled !== true || updateCheckInFlightRef.current || !shouldRunAutoUpdateCheck()) return
-    updateCheckInFlightRef.current = true
-    checkForUpdate()
-      .then((result) => {
-        applyUpdateCheckResult(result)
-      })
-      .catch((e) => console.warn('[App.tsx] automatic update check failed', e))
-      .finally(() => {
-        markAutoUpdateChecked()
-        updateCheckInFlightRef.current = false
-      })
-  }, [applyUpdateCheckResult, updateCheckEnabled])
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout>
+    const poll = async () => {
+      try {
+        const status = await getUpdateStatus(AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]))
+        if (!controller.signal.aborted) {
+          // Another tab can schedule an idle restart. Every open workbench
+          // must load the new bundle, even if Settings was never mounted here.
+          if (status.phase === 'succeeded' && status.id && status.version
+            && status.current_version.replace(/^v/, '') === status.version.replace(/^v/, '')
+            && status.current_version.replace(/^v/, '') !== APP_VERSION.replace(/^v/, '')) {
+            window.location.replace(buildFrontendReloadURL(status.version, Date.now(), window.location.href))
+            return
+          }
+          if (status.phase === 'staged' && status.version) {
+            applyUpdateCheckResult({ current_version: status.current_version, latest_version: status.version, update_available: true, can_install: false, platform: '', release_url: '', published_at: '' }, true)
+          } else if (status.check) applyUpdateCheckResult(status.check)
+        }
+      } catch (error) { if (!controller.signal.aborted) console.warn('[App.tsx] update status unavailable', error) }
+      if (!controller.signal.aborted) timer = setTimeout(() => void poll(), 15_000)
+    }
+    void poll()
+    return () => { controller.abort(); clearTimeout(timer) }
+  }, [applyUpdateCheckResult])
 
   useEffect(() => {
     if (activeTabKey) touchTab(activeTabKey)
@@ -879,6 +895,7 @@ function App() {
   return (
     <ThinkingExpansionPreference value={autoExpandThinking}>
       <NovaMotionProvider intensity={motionIntensity}>
+        <AnalyticsNotice onReadyChange={setAnalyticsReady} />
         <ModeRouter
           mode={mode}
           lastCreationRoute={lastCreationRoute}
@@ -907,8 +924,7 @@ function App() {
           loading={loading}
           selectedFile={selectedFile}
           fileDocument={fileDocument}
-          fileContent={fileContent}
-          fileRevision={fileRevision}
+          fileDocuments={fileDocuments}
           openTabs={openTabs}
           activeTabKey={activeTabKey}
           sidebarView={sidebarView}
@@ -1039,7 +1055,7 @@ function App() {
           onImport={handleCharacterCardImport}
         />
         <OnboardingGuide
-          workspaceReady={workspaceLoaded && booksLoaded}
+          workspaceReady={workspaceLoaded && booksLoaded && analyticsReady}
           mode={mode}
           rightPanel={rightPanel}
           settingsOpen={settingsOpen}
