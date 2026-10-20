@@ -44,7 +44,7 @@ func hostStatePath() (string, error) {
 }
 
 func loadState(path string) (state, error) {
-	initial := state{Format: 1, Enabled: true}
+	initial := state{Format: 1, NoticeSeen: true}
 	snapshot, err := revisionfile.Read(context.Background(), path)
 	if err != nil {
 		return state{}, err

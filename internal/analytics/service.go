@@ -61,7 +61,8 @@ func Open(options Options) (*Service, error) {
 	// not read or mutate the real user's host analytics preferences.
 	available := !options.Development && regexp.MustCompile(`^v?\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$`).MatchString(options.Version)
 	s := &Service{version: options.Version, available: available, path: options.StatePath,
-		state: state{Format: 1, Enabled: true, NoticeSeen: !available},
+		// ponytail: fork builds keep collection opt-in; there is no first-run notice to show.
+		state: state{Format: 1, NoticeSeen: true},
 		queue: make(chan queuedEvent, 128), done: make(chan struct{}),
 		client: options.Client, endpoint: options.Endpoint}
 	if available {
@@ -108,8 +109,8 @@ func (s *Service) Preferences() Preferences {
 	return Preferences{Enabled: s.state.Enabled, NoticeSeen: s.state.NoticeSeen, Available: s.available && !s.closed}
 }
 
-// SetEnabled also acknowledges the first-run notice. The default is enabled,
-// but no event is admitted until that notice has been presented and dismissed.
+// SetEnabled also acknowledges the first-run notice. Collection is disabled
+// until the user turns it on in Settings.
 func (s *Service) SetEnabled(enabled bool) (Preferences, error) {
 	if s == nil {
 		return Preferences{NoticeSeen: true}, fmt.Errorf("analytics is unavailable")

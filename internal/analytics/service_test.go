@@ -73,12 +73,12 @@ func awaitEvents(t *testing.T, c *collector, count int) []event {
 func TestNoticeDefaultAndHostWideActivityDeduplication(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "analytics.json")
 	s, c := openCollector(t, path)
-	if got := s.Preferences(); got != (Preferences{Enabled: true, Available: true}) {
+	if got := s.Preferences(); got != (Preferences{NoticeSeen: true, Available: true}) {
 		t.Fatalf("preferences=%+v", got)
 	}
 	s.Activity(Writing)
 	if len(c.snapshot()) != 0 || len(s.queue) != 0 {
-		t.Fatal("collected before the notice")
+		t.Fatal("collected before the user opted in")
 	}
 	if _, err := s.SetEnabled(true); err != nil {
 		t.Fatal(err)

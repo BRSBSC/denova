@@ -16,7 +16,7 @@ func TestAnalyticsAPIRejectsContentAndKeepsHostPreferencesIndependentOfProjects(
 	}
 	var preferences analytics.Preferences
 	decodeResponse(t, response.Body.Bytes(), &preferences)
-	if !preferences.Enabled || !preferences.NoticeSeen || preferences.Available {
+	if preferences.Enabled || !preferences.NoticeSeen || preferences.Available {
 		t.Fatalf("development preferences=%+v", preferences)
 	}
 	for _, body := range []any{
