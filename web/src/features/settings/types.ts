@@ -11,8 +11,9 @@ export interface SpeechSettings {
 }
 
 export interface Settings {
-  market?: { registry_url?: string }
+  market?: { registry_url?: string; github_token?: string }
   game_creation_defaults?: import('@/features/interactive/game-creation-defaults').GameCreationDefaults
+  game_last_creation?: import('@/features/interactive/game-creation-defaults').GameCreationPreferences
   speech?: SpeechSettings
   agent_runtimes?: Partial<Record<'ide' | 'general' | 'interactive_story', import('@/features/agent-runtime/types').RuntimePreferences>>
   openai_api_key?: string
@@ -62,6 +63,7 @@ export interface Settings {
   motion_intensity?: string
   auto_expand_thinking?: boolean | null
   update_check_enabled?: boolean | null
+  update_download_enabled?: boolean | null
   max_iteration?: number | null
   model_max_retries?: number | null
   agent_idle_timeout_seconds?: number | null
@@ -128,7 +130,19 @@ export interface TerminalCommandSettings {
   enabled: boolean
 }
 
+export type WebSearchProvider = 'builtin' | 'searxng' | 'deepseek' | 'perplexity' | 'tavily'
+
+export interface SearchServiceSettings {
+  api_key?: string
+  mode?: 'web' | 'fast' | 'basic' | 'advanced'
+}
+
 export interface WebAccessSettings {
+  search_provider?: WebSearchProvider
+  search_fallback?: 'none' | 'builtin'
+  deepseek?: SearchServiceSettings
+  perplexity?: SearchServiceSettings
+  tavily?: SearchServiceSettings
   searxng_base_url?: string
   search_max_results?: number | null
   search_provider_timeout_seconds?: number | null
@@ -136,9 +150,17 @@ export interface WebAccessSettings {
   fetch_max_content_chars?: number | null
 }
 
+export interface WebSearchTestResult {
+  provider: string
+  status: 'success' | 'no_results'
+  elapsed_ms: number
+  results: { title: string; url: string; summary?: string; provider: string; published_at?: string }[] | null
+}
+
 export interface ModelProfileSettings {
   id?: string
   name?: string
+  enabled?: boolean
   endpoint_id?: string
   model?: string
   temperature?: number | null
@@ -161,6 +183,7 @@ export type AgentQuickPromptRegistry = Record<string, AgentQuickPromptSettings[]
 export interface ModelEndpointSettings {
   id?: string
   name?: string
+  enabled?: boolean
   provider?: string
   protocol?: string
   api_key?: string
@@ -672,6 +695,13 @@ export interface UpdateInstallProgress {
 }
 
 export interface UpdateStatus {
+  check?: UpdateCheckResult
+  checked_at?: string
+  operation?: 'checking' | 'downloading' | 'uploading'
+  progress?: UpdateInstallProgress
+  operation_error?: string
+  restart_waiting?: boolean
+  busy?: boolean
   current_version: string
   /** Releases of the repository that built this version; a fork links to its own packages. */
   releases_url?: string

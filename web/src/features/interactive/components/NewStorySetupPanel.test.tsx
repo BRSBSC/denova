@@ -16,6 +16,7 @@ const settingsMocks = vi.hoisted(() => ({
 vi.mock('@/features/settings/api', () => ({
   fetchSettings: settingsMocks.fetchSettings,
   fetchProjectSettings: settingsMocks.fetchProjectSettings,
+  refreshProjectSettings: settingsMocks.fetchProjectSettings,
 }))
 
 vi.mock('../api', () => ({
@@ -30,7 +31,7 @@ vi.mock('@/features/agents/CustomAgentSelect', () => ({
 
 const planningTemplate: GamePlanningTemplate = {
   version: 1,
-  id: 'adventure',
+  id: 'default',
   name: '冒险',
   description: '',
   sections: [{ id: 'direction', title: '方向', description: '规划方向。' }],
@@ -176,7 +177,7 @@ describe('NewStorySetupPanel', () => {
     await user.click(screen.getByRole('button', { name: '开始故事' }))
     await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1))
     expect(onCreate.mock.calls[0][0].presentation_settings).toEqual({
-      background: false, characters: false,
+      background: false, characters: false, ambient: false,
       default_background: { item_id: 'station', asset_id: 'day', path: 'assets/day.png', name: '白昼' },
     })
   })
@@ -318,6 +319,47 @@ describe('NewStorySetupPanel', () => {
     expect(screen.getByRole('combobox', { name: '思考强度' })).toHaveTextContent('中')
   })
 
+  it('keeps loaded model controls stable while saving and refreshing remembered choices', async () => {
+    const controller = conversationConfigController()
+    const props = {
+      projectId: 'project-1',
+      tellers: [teller],
+      planningTemplates: [planningTemplate],
+      imagePresets: [],
+      loreItems: [loreCharacter],
+      onCancel: vi.fn(),
+      onCreate: vi.fn(),
+    }
+    const { rerender } = render(<NewStorySetupPanel {...props} conversationConfig={controller} />)
+    const model = screen.getByRole('combobox', { name: '模型配置' })
+    const thinking = screen.getByRole('combobox', { name: '思考强度' })
+    const descriptionText = '用于当前故事；模型和思考强度也会记住，用于新故事。'
+    const description = screen.getByText(descriptionText)
+    await waitFor(() => expect(model).toBeEnabled())
+    expect(screen.getByRole('button', { name: '开始故事' })).toBeEnabled()
+
+    rerender(<NewStorySetupPanel {...props} conversationConfig={{ ...controller, saving: true }} />)
+    expect(description).toHaveTextContent(descriptionText)
+    expect(screen.getByRole('combobox', { name: '模型配置' })).toBe(model)
+    expect(model).toBeDisabled()
+    expect(thinking).toBeDisabled()
+    expect(screen.getByRole('button', { name: '开始故事' })).toBeDisabled()
+
+    const updated = { ...controller, snapshot: { ...controller.snapshot!, profile_id: 'creative', thinking_level: 'high' as const } }
+    rerender(<NewStorySetupPanel {...props} conversationConfig={{ ...updated, loading: true }} />)
+    expect(description).toHaveTextContent(descriptionText)
+    expect(model).toHaveTextContent('创意模型')
+    expect(thinking).toHaveTextContent('高')
+    expect(model).toBeDisabled()
+    expect(screen.getByRole('button', { name: '开始故事' })).toBeDisabled()
+
+    rerender(<NewStorySetupPanel {...props} conversationConfig={updated} />)
+    expect(screen.getByRole('combobox', { name: '模型配置' })).toBe(model)
+    expect(description).toHaveTextContent(descriptionText)
+    expect(model).toBeEnabled()
+    expect(screen.getByRole('button', { name: '开始故事' })).toBeEnabled()
+  })
+
   it('seeds book resources once and keeps explicit background clearing local', async () => {
     const user = userEvent.setup()
     const onCreate = vi.fn().mockResolvedValue(undefined)
@@ -327,7 +369,7 @@ describe('NewStorySetupPanel', () => {
     vi.mocked(getProjectLoreItems).mockResolvedValue([loreCharacter])
     const props = { projectId: 'project-1', tellers: [teller], planningTemplates: [planningTemplate], imagePresets: [], loreItems: [loreCharacter], conversationConfig: conversationConfigController(), onCancel: vi.fn(), onCreate }
     const { rerender } = render(<NewStorySetupPanel {...props} />)
-    await screen.findByText('已预填本书默认资源；这里的调整只影响当前故事。')
+    await screen.findByText('已使用本书默认资源；成功创建后会记住本次配置。')
     await user.click(screen.getByRole('button', { name: '当前背景' }))
     await user.click(screen.getByRole('button', { name: '无背景' }))
     // Late resource/settings refreshes must not replace edits in this open form.

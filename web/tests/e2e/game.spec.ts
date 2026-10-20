@@ -72,8 +72,9 @@ for (const viewportWidth of [1280, 390]) {
     await createAndOpenBook(request, 'Game choice motion')
     const story = await createStartedStory(request, 'Choice motion')
     const turn = (await getStorySnapshot(request, story.id)).turns[0]
+    const narrative = '车站的灯光照亮漫长的轨道，旅人沿着脚印继续探索。'.repeat(180)
     const edited = await request.patch(`/api/interactive/stories/${story.id}/turns/${turn.id}/narrative`, {
-      data: { branch_id: 'main', expected_narrative: turn.narrative, narrative: '车站的灯光照亮漫长的轨道，旅人沿着脚印继续探索。'.repeat(180) },
+      data: { branch_id: 'main', expected_narrative: turn.narrative, narrative },
     })
     expect(edited.ok(), await edited.text()).toBe(true)
     const settings = await request.patch('/api/settings', { data: { layer: 'user', changes: { motion_intensity: 'system' } } })
@@ -85,18 +86,20 @@ for (const viewportWidth of [1280, 390]) {
     const toggle = page.locator('.nova-story-stage-composer [aria-controls][aria-expanded]')
     await expect(toggle).toBeEnabled()
     const timeline = page.locator('.nova-story-stage-content .nova-chat-canvas')
-    // The list accepts input before its rows are measured; that measurement then re-pins the
-    // bottom. A reader can only scroll into history once it is on screen and at rest.
-    await expect(timeline.locator('[data-nova-chat-item="message"]')).toBeVisible()
-    await timeline.evaluate(async (element) => {
-      for (let still = 0, last = ''; still < 10; still++) {
-        await new Promise(requestAnimationFrame)
-        const geometry = `${element.scrollTop}:${element.scrollHeight}`
-        if (geometry !== last) still = 0
-        last = geometry
+    // Composer controls can become ready before history is rendered and measured.
+    await expect(timeline).toContainText(narrative)
+    await expect(timeline).toHaveAttribute('aria-busy', 'false')
+    await expect.poll(() => timeline.evaluate(el => el.scrollHeight - el.clientHeight)).toBeGreaterThan(600)
+    // Wait for the route's entrance fade before sending input or measuring motion.
+    await expect.poll(() => page.locator('.nova-story-choice-panel').evaluate(surface => {
+      let opacity = 1
+      for (let ancestor = surface.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        opacity *= Number(getComputedStyle(ancestor).opacity)
       }
-    })
-    await timeline.hover()
+      return opacity
+    })).toBe(1)
+    // Wheel over the timeline gutter so nested state panels do not consume it.
+    await timeline.hover({ position: { x: 8, y: 80 } })
     await page.mouse.wheel(0, -600)
     await expect.poll(() => timeline.evaluate(el => el.scrollHeight - el.clientHeight - el.scrollTop)).toBeGreaterThan(400)
     const frames = await toggle.evaluate(async (element) => {
@@ -186,7 +189,7 @@ for (const viewportWidth of [1280, 390]) {
   })
 }
 
-test('submits, streams, and persists a complete Game turn', async ({ page, request }) => {
+test('submits, streams, and persists a complete Game turn', { tag: '@smoke' }, async ({ page, request }) => {
   await createAndOpenBook(request, 'Game E2E Book')
   const story = await createStartedStory(request, 'Game E2E Story')
 
@@ -217,7 +220,7 @@ test('submits, streams, and persists a complete Game turn', async ({ page, reque
   await expect.poll(async () => (await getStorySnapshot(request, story.id)).turns[2]?.user).toBe('走进旧车站')
 })
 
-test('creates and switches to a branch from a persisted Game turn', async ({ page, request }) => {
+test('creates and switches to a branch from a persisted Game turn', { tag: '@smoke' }, async ({ page, request }) => {
   await createAndOpenBook(request, 'Game Branch E2E Book')
   const story = await createStartedStory(request, 'Game Branch E2E Story')
 

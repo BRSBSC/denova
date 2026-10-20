@@ -29,12 +29,17 @@ var (
 
 // Store 管理会话的 JSONL 文件持久化。
 type Store struct {
-	dir      string
-	mu       sync.Mutex
-	cache    map[string]*Session
-	used     map[string]uint64
-	sequence uint64
-	metadata map[string]cachedSessionMetadata
+	dir           string
+	mu            sync.Mutex
+	cache         map[string]*Session
+	used          map[string]uint64
+	sequence      uint64
+	metadata      map[string]cachedSessionMetadata
+	metadataDirty bool
+	searchMu      sync.Mutex
+	searchCache   map[string]searchDocument
+	searchBytes   int
+	searchClock   uint64
 }
 
 // NewStore 创建会话存储，目录不存在则自动创建。
@@ -45,12 +50,14 @@ func NewStore(dir string) (*Store, error) {
 	if err := migratePageConversations(dir); err != nil {
 		return nil, err
 	}
-	return &Store{
+	store := &Store{
 		dir:      dir,
 		cache:    make(map[string]*Session),
 		used:     make(map[string]uint64),
 		metadata: make(map[string]cachedSessionMetadata),
-	}, nil
+	}
+	store.restoreMetadataIndex()
+	return store, nil
 }
 
 // GetOrCreate 获取指定 ID 的会话，不存在则创建。
@@ -138,7 +145,7 @@ func (s *Store) create(title string, seed *conversationconfig.Config) (*Session,
 	return nil, fmt.Errorf("生成会话 ID 失败")
 }
 
-// RecentRuntimeConfig returns the latest snapshot for one Agent kind. Session
+// RecentRuntimeConfig returns the latest selection for one Agent kind. Session
 // metadata is projection-backed, so this does not materialize old transcripts.
 func (s *Store) RecentRuntimeConfig(agentKind, excludeID string) (conversationconfig.Config, bool, error) {
 	metas, err := s.List("")
@@ -150,7 +157,7 @@ func (s *Store) RecentRuntimeConfig(agentKind, excludeID string) (conversationco
 			continue
 		}
 		if meta.RuntimeConfig.AgentKind == agentKind {
-			return meta.RuntimeConfig.Config, true, nil
+			return *meta.RuntimeConfig, true, nil
 		}
 	}
 	return conversationconfig.Config{}, false, nil
@@ -174,9 +181,6 @@ func (s *Store) GetActiveOrCreate() (*Session, error) {
 
 // List 返回当前存储目录下的所有会话摘要。
 func (s *Store) List(activeID string) ([]SessionMeta, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	files, err := filepath.Glob(filepath.Join(s.dir, "*.jsonl"))
 	if err != nil {
 		return nil, err
@@ -186,7 +190,9 @@ func (s *Store) List(activeID string) ([]SessionMeta, error) {
 	for _, file := range files {
 		id := strings.TrimSuffix(filepath.Base(file), ".jsonl")
 		visible[id] = struct{}{}
+		s.mu.Lock()
 		meta, err := s.metadataLocked(id, file, activeID)
+		s.mu.Unlock()
 		if err != nil {
 			// One obsolete or damaged Session must not hide every healthy
 			// conversation. The canonical journal remains untouched and the
@@ -196,7 +202,10 @@ func (s *Store) List(activeID string) ([]SessionMeta, error) {
 		}
 		result = append(result, meta)
 	}
+	s.mu.Lock()
 	s.discardMissingMetadataLocked(visible)
+	s.checkpointMetadataLocked()
+	s.mu.Unlock()
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].UpdatedAt.After(result[j].UpdatedAt)
 	})
@@ -208,9 +217,6 @@ func (s *Store) ListByPrefix(prefix string) ([]SessionMeta, error) {
 	if err := validateSessionID(prefix); err != nil {
 		return nil, err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	activeID, _ := s.ActiveID()
 	files, err := filepath.Glob(filepath.Join(s.dir, prefix+"*.jsonl"))
 	if err != nil {
@@ -222,7 +228,9 @@ func (s *Store) ListByPrefix(prefix string) ([]SessionMeta, error) {
 		if !strings.HasPrefix(id, prefix) {
 			continue
 		}
+		s.mu.Lock()
 		meta, err := s.metadataLocked(id, file, activeID)
+		s.mu.Unlock()
 		if err != nil {
 			slog.Error("[session.Store.ListByPrefix] skipped unreadable Session metadata", "session_id", id, "path", file, "error", err)
 			continue
@@ -232,6 +240,9 @@ func (s *Store) ListByPrefix(prefix string) ([]SessionMeta, error) {
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].UpdatedAt.After(result[j].UpdatedAt)
 	})
+	s.mu.Lock()
+	s.checkpointMetadataLocked()
+	s.mu.Unlock()
 	return result, nil
 }
 
@@ -285,6 +296,7 @@ func (s *Store) Delete(id string) error {
 		return fmt.Errorf("delete conversation: %w", err)
 	}
 	delete(s.metadata, id)
+	s.metadataDirty = true
 	return err
 }
 
@@ -312,6 +324,7 @@ func (s *Store) DeleteByPrefix(prefix string) error {
 			return fmt.Errorf("删除会话失败: %w", err)
 		}
 		delete(s.metadata, id)
+		s.metadataDirty = true
 	}
 	return nil
 }
@@ -328,6 +341,7 @@ func (s *Store) Close() error {
 	for id := range s.cache {
 		result = errors.Join(result, s.closeCachedLocked(id))
 	}
+	s.checkpointMetadataLocked()
 	return result
 }
 

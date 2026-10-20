@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/BRSBSC/denova/releases"><img alt="Release" src="https://img.shields.io/github/v/release/BRSBSC/denova?style=flat-square"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/github/license/alfredxw/denova?style=flat-square"></a>
-  <img alt="Go" src="https://img.shields.io/badge/Go-1.26.6%2B-00ADD8?style=flat-square&logo=go&logoColor=white">
+  <img alt="Go" src="https://img.shields.io/badge/Go-1.26.9%2B-00ADD8?style=flat-square&logo=go&logoColor=white">
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-22.13%2B-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white">
 </p>
 
@@ -102,7 +102,7 @@ curl -fsSL https://github.com/BRSBSC/denova/releases/download/v0.5.1fix18/instal
 
 ### 从源码运行
 
-需要 Go 1.26.6+、Node.js 22.13+、pnpm、ripgrep 和 Bash。Windows 请在 Git Bash 或 WSL 中运行以下命令。
+需要 Go 1.26.9+、Node.js 22.13+、pnpm、ripgrep 和 Bash。Windows 请在 Git Bash 或 WSL 中运行以下命令。
 
 ```bash
 git clone https://github.com/alfredxw/denova.git
@@ -113,8 +113,8 @@ corepack enable
 
 默认地址：
 
-- 前端：`http://localhost:5173`
-- 后端：`http://localhost:8080`
+- 前端：`http://localhost:7788`
+- 后端：`http://localhost:7789`
 
 ## 模型与配置
 
@@ -129,6 +129,10 @@ Google Gemini 文本模型可在连接的协议选项中选择「Gemini 原生�
 从源码运行时，二维码和连接链接使用后端端口提供的 `web/dist` 构建产物。首次使用或更新前端后，执行 `pnpm --dir web build` 并重启后端；本机 Vite 热更新入口可继续用于开发。
 
 通过公网或域名部署时，请使用 Caddy、Nginx 等反向代理提供 HTTPS，避免明文传输登录凭据。与 Denova 运行在同一台机器上的反向代理必须转发原始 `Host`，或以 `X-Forwarded-For` 传递客户端地址（如 Nginx 的 `proxy_set_header Host $host;` 与 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`）；两者都不转发时，Denova 无法区分代理请求与本机浏览器，会跳过登录。
+
+## 使用统计
+
+正式发布版本首次启动会说明使用统计，告知确认后才开始采集，默认开启，可在「设置 → 常规」随时关闭。统计只包含活跃、功能触达、留存、版本、平台、执行结果和毫秒耗时等固定字段，不包含正文、提示词、AI 回答、图片、项目名称、文件路径或密钥。随机本地标识用于关联留存，数据发送至 Umami Cloud，云端会接触连接 IP。源码和开发版本不发送统计；完整口径与字段见 [使用统计说明](./docs/analytics.md)。
 
 ## 开发
 

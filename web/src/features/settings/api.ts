@@ -7,6 +7,13 @@ import { GLOBAL_SETTINGS_TARGET, projectSettingsTarget, settingsQueryKeys, setti
 import type { SettingsTarget } from './query'
 import { SettingsSaveError, settingsSaveFiles } from './save-error'
 import type { SettingsPatch } from './merge-patch'
+import type { WebAccessSettings, WebSearchTestResult } from './types'
+
+export function testWebSearch(settings: WebAccessSettings, query: string, signal: AbortSignal): Promise<WebSearchTestResult> {
+  return requestJSON('/api/settings/web-search/test', {
+    method: 'POST', headers: jsonHeaders, body: JSON.stringify({ settings, query }), signal,
+  })
+}
 
 export { GLOBAL_SETTINGS_TARGET, projectSettingsTarget }
 export type { SettingsTarget }
@@ -130,8 +137,8 @@ export async function installUpdateStream(signal?: AbortSignal): Promise<Readabl
   return parseSSEStream(res.body)
 }
 
-export async function applyUpdate(): Promise<UpdateApplyResult> {
-  return requestJSON('/api/update/apply', { method: 'POST' })
+export async function applyUpdate(when: 'now' | 'when_idle' | 'cancel' = 'now'): Promise<UpdateApplyResult> {
+  return requestJSON('/api/update/apply', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ when }) })
 }
 
 export function fetchModelCatalog(signal?: AbortSignal): Promise<ModelCatalog> {

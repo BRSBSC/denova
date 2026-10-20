@@ -41,7 +41,7 @@ async function customGenerate(page: Page, title: string) {
 }
 
 for (const theme of ['dark', 'light']) {
-  test(`browses categorized cards, filters and returns from editing in ${theme}`, async ({
+  test(theme === 'light' ? 'renders empty and populated Lore cards at wide and narrow widths in light' : 'browses categorized cards, filters and returns from editing in dark', async ({
     page,
     request,
   }, testInfo) => {
@@ -90,11 +90,21 @@ for (const theme of ['dark', 'light']) {
     }
     await page.reload()
     const hero = library.getByTestId('lore-card-hero')
-    const sizes = library.getByRole('group', { name: '卡片大小', exact: true })
+    const sizes = library.getByRole('radiogroup', { name: '卡片大小', exact: true })
     await expect(hero).toBeVisible()
     await expect(library.getByRole('button', { name: longName, exact: true })).toBeVisible()
     await expect(sizes.getByRole('radio', { name: '中', exact: true })).toBeChecked()
     await page.setViewportSize({ width: 1600, height: 1000 })
+    // The light journey retains empty/data/long-label layouts. Filtering,
+    // cover mutations and editor persistence are verified once in dark.
+    if (theme === 'light') {
+      await page.screenshot({ path: testInfo.outputPath(`library-${theme}-wide.png`) })
+      await page.setViewportSize({ width: 390, height: 844 })
+      await expect(hero).toBeVisible()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await page.screenshot({ path: testInfo.outputPath(`library-${theme}-narrow.png`) })
+      return
+    }
     const directory = page.locator('.nova-embedded-sidebar').filter({ has: page.getByRole('textbox', { name: '搜索资料', exact: true }) })
     await directory.getByRole('button', { name: '收起全部', exact: true }).click()
     await expect(directory.getByRole('button', { name: '展开角色', exact: true })).toHaveAttribute('aria-expanded', 'false')
@@ -340,7 +350,7 @@ test('uploads and regenerates covers while keeping old images and text', async (
     .locator('[data-slot=dialog-footer]')
     .getByRole('button', { name: '关闭', exact: true })
     .click()
-  const sizes = page.getByRole('group', { name: '卡片大小', exact: true })
+  const sizes = page.getByRole('radiogroup', { name: '卡片大小', exact: true })
   await sizes.getByRole('radio', { name: '大', exact: true }).click()
   await card.getByRole('button', { name: '重新生成', exact: true }).click()
   await customGenerate(page, '重新生成')
@@ -402,7 +412,7 @@ test('toggles Lore enabled state from cards and preserves it when saving fails',
   })
   await page.reload()
   await expect(toggle).not.toBeChecked()
-  await page.getByRole('group', { name: '卡片大小', exact: true })
+  await page.getByRole('radiogroup', { name: '卡片大小', exact: true })
     .getByRole('radio', { name: '小', exact: true }).click()
   await toggle.press('Space')
   await expect(toggle).toBeChecked()

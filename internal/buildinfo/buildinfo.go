@@ -5,7 +5,7 @@ package buildinfo
 var Version = "dev"
 
 // DevelopmentVersion is the public capability target of this source tree.
-const DevelopmentVersion = "0.6.0"
+const DevelopmentVersion = "0.6.1"
 
 // Repository is the GitHub repository whose releases update this build.
 // Release builds of a fork inject their own repository, so the updater never

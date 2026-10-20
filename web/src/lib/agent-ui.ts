@@ -271,13 +271,19 @@ function normalizeReviewFeedbackRefs(
   return [...merged.values()]
 }
 
-export function normalizeAgentUIMessages(messages: AgentUIMessage[]): AgentUIMessage[] {
-  const normalized = normalizeRepeatedAgentUIParts(normalizeRepeatedAgentUIMessageIDs(messages))
-  const discarded = normalized.flatMap(message => message.parts.flatMap(part => {
+/** Reconcile history and replay without retracting a known text prefix. A
+ * conflicting stable identity keeps the existing part; display owners can
+ * collect that identity here and request authoritative recovery after render. */
+export function normalizeAgentUIMessages(
+  messages: AgentUIMessage[],
+  onTextConflict: (identity: string) => void = identity => console.warn('[agent-ui.ts] Conflicting Agent display segment', { identity }),
+): AgentUIMessage[] {
+  const discarded = messages.flatMap(message => message.parts.flatMap(part => {
     if (part.type !== 'data-agent-activity' || part.data.event !== 'model_retry') return []
     return Array.isArray(part.data.discard_ids) ? part.data.discard_ids.filter((id): id is string => typeof id === 'string') : []
   }))
-  return discardAgentPreviews(normalized, discarded)
+  // Explicit retry retractions take precedence over replay reconciliation.
+  return normalizeRepeatedAgentUIParts(discardAgentPreviews(normalizeRepeatedAgentUIMessageIDs(messages), discarded), onTextConflict)
 }
 
 /** Retract exact display parts from one failed response, keeping earlier tools. */
@@ -292,53 +298,6 @@ export function discardAgentPreviews(messages: AgentUIMessage[], ids: string[]):
     })
     return parts.length ? [parts.length === message.parts.length ? message : { ...message, parts }] : []
   })
-}
-
-/**
- * Reuses a normalized stable prefix while one cumulative streaming message is
- * growing. Structural changes still take the complete dedupe path, so history
- * replay and tool/data part replacement keep their canonical behavior.
- */
-export class AgentUIMessageNormalizer {
-  private source: AgentUIMessage[] = []
-  private normalized: AgentUIMessage[] = []
-
-  normalize(messages: AgentUIMessage[]): AgentUIMessage[] {
-    const lastIndex = messages.length - 1
-    const previousLast = this.source[lastIndex]
-    const nextLast = messages[lastIndex]
-    let stableGrowingTail =
-      messages.length > 0 &&
-      messages.length === this.source.length &&
-      this.normalized.length === messages.length &&
-      nextLast.role === previousLast?.role &&
-      nextLast.parts.length === previousLast?.parts.length
-    for (let index = 0; stableGrowingTail && index < messages.length; index += 1) {
-      const message = messages[index]
-      stableGrowingTail =
-        Boolean(message.id) &&
-        message.id === this.source[index]?.id &&
-        message.id === this.normalized[index]?.id &&
-        this.normalized[index]?.parts.length === this.source[index]?.parts.length &&
-        (index === lastIndex || message === this.source[index])
-    }
-
-    let normalized: AgentUIMessage[]
-    if (stableGrowingTail) {
-      const tail = normalizeAgentUIMessages([nextLast])[0]
-      if (tail) {
-        normalized = [...this.normalized]
-        normalized[lastIndex] = tail
-      } else {
-        normalized = normalizeAgentUIMessages(messages)
-      }
-    } else {
-      normalized = normalizeAgentUIMessages(messages)
-    }
-    this.source = [...messages]
-    this.normalized = normalized
-    return normalized
-  }
 }
 
 function normalizeRepeatedAgentUIMessageIDs(messages: AgentUIMessage[]) {
@@ -382,7 +341,7 @@ const messagePartDedupeIdentitiesCache = new WeakMap<
   }
 >()
 
-function normalizeRepeatedAgentUIParts(messages: AgentUIMessage[]) {
+function normalizeRepeatedAgentUIParts(messages: AgentUIMessage[], onTextConflict: (identity: string) => void) {
   const normalized = [...messages]
   const locationByKey = new Map<string, AgentUIPartLocation>()
   const contentFallbackByKey = new Map<string, AgentUIContentFallbackLocation | null>()
@@ -403,6 +362,17 @@ function normalizeRepeatedAgentUIParts(messages: AgentUIMessage[]) {
           existing = fallback.location
         }
       }
+      let mergedPart = existing && mergeDuplicateAgentUIPart(normalized[existing.messageIndex].parts[existing.partIndex], part)
+      if (existing && !mergedPart) {
+        if (identity.stableContentKey && locationByKey.has(identity.primaryKey)) {
+          onTextConflict(identity.primaryKey)
+          mergedPart = normalized[existing.messageIndex].parts[existing.partIndex]
+        } else {
+          // A legacy content fingerprint is only a candidate match. Distinct
+          // reasoning can share the same opening without being the same part.
+          existing = undefined
+        }
+      }
       if (!existing) {
         const location = { messageIndex, partIndex }
         locationByKey.set(identity.primaryKey, location)
@@ -413,11 +383,10 @@ function normalizeRepeatedAgentUIParts(messages: AgentUIMessage[]) {
       rememberContentFallback(contentFallbackByKey, identity, existing)
       const existingMessage = normalized[existing.messageIndex]
       const existingPart = existingMessage.parts[existing.partIndex]
-      const mergedPart = mergeDuplicateAgentUIPart(existingPart, part)
       const mergedMetadata = mergeAgentMessageMetadata(existingMessage.metadata, message.metadata)
       if (mergedPart !== existingPart || mergedMetadata !== existingMessage.metadata) {
         const parts = mergedPart === existingPart ? existingMessage.parts : [...existingMessage.parts]
-        if (parts !== existingMessage.parts) parts[existing.partIndex] = mergedPart
+        if (parts !== existingMessage.parts) parts[existing.partIndex] = mergedPart!
         normalized[existing.messageIndex] = {
           ...existingMessage,
           parts,
@@ -590,12 +559,17 @@ function mergeDuplicateAgentUIPart(existing: AgentUIMessage['parts'][number], in
     // everything before the resume point and may already overlap the first live
     // characters; the live part says exactly where in the segment it starts.
     const start = liveSegmentStart(incomingRaw)
-    const joined = start > 0
-      ? { ...incomingRaw, text: readString(existingRaw.text).slice(0, start) + readString(incomingRaw.text) }
-      : incomingRaw
-    const existingID = readString(existingRaw.id)
-    if (!readString(joined.id) && existingID) return { ...joined, id: existingID } as AgentUIMessage['parts'][number]
-    return joined as AgentUIMessage['parts'][number]
+    const previousText = readString(existingRaw.text)
+    const liveText = readString(incomingRaw.text)
+    const nextText = start > 0 ? previousText.slice(0, start) + liveText : liveText
+    if (start === 0 && !previousText.startsWith(nextText) && !nextText.startsWith(previousText)) return undefined
+    const text = start === 0 && previousText.length > nextText.length ? previousText : nextText
+    const id = readString(incomingRaw.id) || readString(existingRaw.id)
+    // State follows the current connection even when its replay is behind the
+    // durable body. In particular, a stored partial segment is marked done.
+    if (text !== liveText || id !== readString(incomingRaw.id)) {
+      return { ...incomingRaw, text, ...(id ? { id } : {}) } as AgentUIMessage['parts'][number]
+    }
   }
   return incoming
 }

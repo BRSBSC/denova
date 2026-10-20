@@ -22,6 +22,7 @@ import { agentContentPreview } from './agent-content-preview'
 import { ThinkingExpansionPreference } from './thinking-expansion-preference'
 import { AgentSourceBadge } from './message-source-badge'
 import { StreamingContentStage } from './StreamingContentStage'
+import { useMotionIntensity } from '@/features/motion/motion-preferences'
 
 // Word animations create individual DOM nodes even for previously streamed text.
 // Bound that visual overhead while preserving the complete Markdown content.
@@ -46,6 +47,7 @@ interface MarkdownContentProps {
   highlightDialogue: boolean
   projectId: string
   streaming?: boolean
+  animateWords?: boolean
 }
 
 interface ChatMarkdownImageProps {
@@ -87,6 +89,7 @@ export const MarkdownContent = memo(function MarkdownContent({
   highlightDialogue,
   projectId,
   streaming = false,
+  animateWords = true,
 }: MarkdownContentProps) {
   const { t } = useTranslation()
   const components = useMemo(() => ({
@@ -107,7 +110,7 @@ export const MarkdownContent = memo(function MarkdownContent({
   // retain Streamdown's horizontal overflow behavior.
   return (
     <Streamdown
-      animated={content.length <= MAX_ANIMATED_CONTENT_CHARACTERS}
+      animated={animateWords && content.length <= MAX_ANIMATED_CONTENT_CHARACTERS}
       className="nova-streamdown min-w-0 space-y-2"
       components={components}
       controls={chatMarkdownControls}
@@ -229,6 +232,7 @@ function highlightDialogueText(text: string, enabled: boolean, keyPrefix: string
 /** Reasoning follows streaming until the user takes explicit control. */
 export function ThinkingBlock({ projectId, message, content, streaming, showAgentSource = true }: { projectId: string; message: ThinkingChatMessage; content: string; streaming: boolean; showAgentSource?: boolean }) {
   const { t } = useTranslation()
+  const motionIntensity = useMotionIntensity()
   const preview = agentContentPreview(content)
   const autoExpandThinking = useContext(ThinkingExpansionPreference)
   const [expanded, setExpanded] = useVirtualizedMessageState('thinking-expanded', streaming && autoExpandThinking)
@@ -301,6 +305,9 @@ export function ThinkingBlock({ projectId, message, content, streaming, showAgen
                       highlightDialogue={false}
                       projectId={projectId}
                       streaming={streaming}
+                      // Word animation events bubble through the thinking
+                      // disclosure; enable this extra work only for full motion.
+                      animateWords={motionIntensity === 'full'}
                     />
                   )}
                 </StreamingContentStage>

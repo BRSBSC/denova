@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -16,7 +16,7 @@ import { MessageCenterButton } from '@/features/messages/MessageCenter'
 import type { AutomationMessageNavigation } from '@/features/messages/types'
 import { requestAutomationNavigation } from '@/features/automations/automation-navigation'
 import { setActivityMessageUnreadCount, useActivitySummary } from '@/features/activity/use-activity-summary'
-import { usePluginPages } from '@/features/platform/PluginPageWorkspace'
+import { usePluginPages } from '@/features/platform/use-plugin-pages'
 import { localized } from '@/features/platform/api'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import type { BookRecord, WorkspaceSummary } from '@/lib/api'
@@ -26,6 +26,7 @@ import { BookSwitcher } from './BookSwitcher'
 import { WorkbenchNoticePill } from './WorkbenchNoticePill'
 import type { WorkbenchNotice } from '@/features/notices/use-workbench-notice'
 import { WorkbenchAppSidebar } from './WorkbenchAppSidebar'
+import { useActivityBarWidth } from './use-activity-bar-width'
 import {
   defaultActivityOrderForScope,
   isActivityItemID,
@@ -69,15 +70,7 @@ interface WorkbenchShellProps {
   onDismissNotice?: () => void
 }
 
-type PrimaryNavigationId = ActivityItemID | 'settings'
-// User-level width preference; it should survive reloads and development hot updates.
-const ACTIVITY_BAR_WIDTH_STORAGE_KEY = 'nova.layout.activityBarWidth'
 const ACTIVITY_BAR_COLLAPSED_WIDTH = 48
-const ACTIVITY_BAR_MIN_WIDTH = 192
-const ACTIVITY_BAR_LEGACY_DEFAULT_WIDTH = 152
-const ACTIVITY_BAR_DEFAULT_WIDTH = 224
-const ACTIVITY_BAR_MAX_WIDTH = 288
-const ACTIVITY_BAR_WIDTH_KEYBOARD_STEP = 8
 
 export function WorkbenchShell({
   mode,
@@ -111,39 +104,16 @@ export function WorkbenchShell({
   const setCommandOpen = useWorkspaceStore((state) => state.setCommandOpen)
   const [activityOrders, setActivityOrders] = useState<Record<ActivityOrderScope, ActivityItemID[]>>(readStoredActivityOrders)
   const [hiddenActivityIDs, setHiddenActivityIDs] = useState<ActivityItemID[]>(readStoredHiddenActivityIDs)
-  const [activityBarWidth, setActivityBarWidth] = useState(readStoredActivityBarWidth)
+  const activityBarSizing = useActivityBarWidth(activityBarExpanded && !isMobile)
   const activitySummary = useActivitySummary().data
   const messageUnread = activitySummary?.message_unread_count ?? 0
   const automationInboxUnread = activitySummary?.automation_inbox_unread_count ?? 0
   const automationRunning = activitySummary?.automation_running_count ?? 0
-  const [optimisticNavigationId, setOptimisticNavigationId] = useState<PrimaryNavigationId | null>(null)
-  const navigationFrameRef = useRef<number | null>(null)
   const [mainContentHost] = useState(() => {
     const host = createStablePortalHost('h-full min-h-0 w-full min-w-0 overflow-hidden')
     if (host) host.dataset.novaWorkbenchMainHost = 'true'
     return host
   })
-  const selectPrimaryNavigation = useCallback((id: PrimaryNavigationId, action: () => void) => {
-    setOptimisticNavigationId(id)
-    if (navigationFrameRef.current !== null) window.cancelAnimationFrame(navigationFrameRef.current)
-
-    // Let the optimistic selected state reach one paint before the workspace performs the
-    // potentially expensive route update. Two frames guarantee a paint boundary in browsers.
-    navigationFrameRef.current = window.requestAnimationFrame(() => {
-      navigationFrameRef.current = window.requestAnimationFrame(() => {
-        navigationFrameRef.current = null
-        try {
-          action()
-        } finally {
-          setOptimisticNavigationId(null)
-        }
-      })
-    })
-  }, [])
-
-  useEffect(() => () => {
-    if (navigationFrameRef.current !== null) window.cancelAnimationFrame(navigationFrameRef.current)
-  }, [])
 
   const ideModeActive = mode === 'ide' && !settingsOpen
   const interactiveModeActive = mode === 'interactive' && !settingsOpen
@@ -155,7 +125,7 @@ export function WorkbenchShell({
   const automationsActive = mode === 'automations' && !settingsOpen
   const agentChatActive = mode === 'agentchat' && !settingsOpen
   const trajectoryActive = mode === 'trajectory' && !settingsOpen
-  // Navigation state updates optimistically, while heavyweight route content is deferred.
+  // Navigation state updates immediately, while heavyweight route content is deferred.
   // Layout must follow the content that is actually painted; mixing it with the newer
   // navigation state briefly squeezes or stretches the outgoing page.
   const writingContentVisible = presentedLayout === 'writing'
@@ -370,46 +340,7 @@ export function WorkbenchShell({
     const hiddenItem = allActivityItems.find((item) => item.id === id)
     if (!visible && hiddenItem?.active) {
       const fallback = allActivityItems.find((item) => !nextHiddenIDs.includes(item.id))
-      if (fallback) selectPrimaryNavigation(fallback.id, fallback.onClick)
-    }
-  }
-
-  const resizeActivityBar = (nextWidth: number) => {
-    const clampedWidth = clampActivityBarWidth(nextWidth)
-    setActivityBarWidth(clampedWidth)
-    storeActivityBarWidth(clampedWidth)
-  }
-
-  const handleActivityBarResizePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!activityBarExpanded) return
-    event.preventDefault()
-    const startX = event.clientX
-    const startWidth = activityBarWidth
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      resizeActivityBar(startWidth + moveEvent.clientX - startX)
-    }
-    const handlePointerUp = () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
-    }
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp, { once: true })
-  }
-
-  const handleActivityBarResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!activityBarExpanded) return
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault()
-      resizeActivityBar(activityBarWidth - ACTIVITY_BAR_WIDTH_KEYBOARD_STEP)
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault()
-      resizeActivityBar(activityBarWidth + ACTIVITY_BAR_WIDTH_KEYBOARD_STEP)
-    } else if (event.key === 'Home') {
-      event.preventDefault()
-      resizeActivityBar(ACTIVITY_BAR_MIN_WIDTH)
-    } else if (event.key === 'End') {
-      event.preventDefault()
-      resizeActivityBar(ACTIVITY_BAR_MAX_WIDTH)
+      if (fallback) fallback.onClick()
     }
   }
 
@@ -417,11 +348,7 @@ export function WorkbenchShell({
     <WorkbenchAppSidebar
       expanded={activityBarExpanded}
       activityOrderScope={activityOrderScope}
-      activityItems={activityItems.map((item) => ({
-        ...item,
-        active: optimisticNavigationId ? optimisticNavigationId === item.id : item.active,
-        onClick: () => selectPrimaryNavigation(item.id, item.onClick),
-      }))}
+      activityItems={activityItems}
       customizationItems={allActivityItems}
       hiddenActivityIDs={effectiveHiddenActivityIDs}
       dragDisabled={settingsOpen}
@@ -456,19 +383,19 @@ export function WorkbenchShell({
       )}
       sidebarLabel={t('workbench.sidebar.label')}
       settingsLabel={t('workbench.activity.settings')}
-      settingsActive={optimisticNavigationId ? optimisticNavigationId === 'settings' : settingsOpen}
+      settingsActive={settingsOpen}
       toggleLabel={activityBarExpanded ? t('workbench.activity.toggleCollapse') : t('workbench.activity.toggleExpand')}
       resizeLabel={t('layout.resize.activityBar')}
-      minWidth={ACTIVITY_BAR_MIN_WIDTH}
-      maxWidth={ACTIVITY_BAR_MAX_WIDTH}
-      currentWidth={activityBarWidth}
-      onOpenSettings={() => selectPrimaryNavigation('settings', onToggleSettings)}
+      minWidth={activityBarSizing.minWidth}
+      maxWidth={activityBarSizing.maxWidth}
+      currentWidth={activityBarSizing.width}
+      onOpenSettings={onToggleSettings}
       onToggle={onToggleActivityBarExpanded}
       onReorder={handleActivityReorder}
       onCustomizationReorder={handleCustomizationActivityReorder}
       onActivityVisibilityChange={handleActivityVisibilityChange}
-      onResizePointerDown={handleActivityBarResizePointerDown}
-      onResizeKeyDown={handleActivityBarResizeKeyDown}
+      onResizePointerDown={activityBarSizing.onResizePointerDown}
+      onResizeKeyDown={activityBarSizing.onResizeKeyDown}
     />
   )
 
@@ -513,8 +440,8 @@ export function WorkbenchShell({
         id: item.id,
         label: item.label,
         icon: item.icon,
-        active: optimisticNavigationId ? optimisticNavigationId === item.id : item.active,
-        onClick: () => selectPrimaryNavigation(item.id, item.onClick),
+        active: item.active,
+        onClick: item.onClick,
       }))
     const mobileProjectDrawer = sidebar ? {
       id: 'project' as const,
@@ -539,8 +466,8 @@ export function WorkbenchShell({
             id: 'settings',
             label: t('workbench.activity.settings'),
             icon: <Settings className="h-4 w-4" />,
-            active: optimisticNavigationId ? optimisticNavigationId === 'settings' : settingsOpen,
-            onClick: () => selectPrimaryNavigation('settings', onToggleSettings),
+            active: settingsOpen,
+            onClick: onToggleSettings,
           }}
           closeLabel={t('common.close')}
           navigationLabel={t('workbench.mobile.navigation')}
@@ -553,9 +480,10 @@ export function WorkbenchShell({
   return (
     <MobileWorkspaceHeaderProvider route={presentedLayout}>
       <SidebarProvider
+        ref={activityBarSizing.wrapperRef}
         open={activityBarExpanded}
         style={{
-          '--sidebar-width': `${activityBarWidth}px`,
+          '--sidebar-width': `${activityBarSizing.width}px`,
           '--sidebar-width-icon': `${ACTIVITY_BAR_COLLAPSED_WIDTH}px`,
         } as CSSProperties}
       >
@@ -589,22 +517,4 @@ function ActivityIconBadge({ count, running, children }: { count: number; runnin
       )}
     </span>
   )
-}
-
-export function readStoredActivityBarWidth() {
-  if (typeof window === 'undefined') return ACTIVITY_BAR_DEFAULT_WIDTH
-  const raw = window.localStorage.getItem(ACTIVITY_BAR_WIDTH_STORAGE_KEY)
-  if (raw === null) return ACTIVITY_BAR_DEFAULT_WIDTH
-  const value = Number(raw)
-  if (value === ACTIVITY_BAR_LEGACY_DEFAULT_WIDTH) return ACTIVITY_BAR_DEFAULT_WIDTH
-  return Number.isFinite(value) ? clampActivityBarWidth(value) : ACTIVITY_BAR_DEFAULT_WIDTH
-}
-
-function storeActivityBarWidth(width: number) {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(ACTIVITY_BAR_WIDTH_STORAGE_KEY, String(clampActivityBarWidth(width)))
-}
-
-function clampActivityBarWidth(width: number) {
-  return Math.min(ACTIVITY_BAR_MAX_WIDTH, Math.max(ACTIVITY_BAR_MIN_WIDTH, Math.round(width)))
 }

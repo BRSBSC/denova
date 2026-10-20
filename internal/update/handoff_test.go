@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -92,8 +93,12 @@ func TestApplyHandoffFailureRemainsRetryable(t *testing.T) {
 	if _, err := service.stageUpdate(source, "0.2.0"); err != nil {
 		t.Fatal(err)
 	}
+	status, err := service.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for range 2 {
-		if _, err := service.Apply(context.Background(), func() { t.Error("closed after failed handoff") }, 0); err == nil || strings.Contains(err.Error(), "no staged update") {
+		if _, err := service.Apply(context.Background(), func() { t.Error("closed after failed handoff") }, 0, status.ID); err == nil || strings.Contains(err.Error(), "no staged update") {
 			t.Fatalf("handoff was not attempted: %v", err)
 		}
 		status, err := service.Status()
@@ -116,7 +121,7 @@ func TestRelease051ManifestIsUpgradedBeforeReplacement(t *testing.T) {
 		"source_dir": source, "install_dir": install,
 		"backup_dir":        filepath.Join(updateDataDir(install), "backup-legacy"),
 		"target_executable": target, "updater_executable": filepath.Join(source, updaterExecutableName()),
-		"relaunch_args": []string{target, "--port", "8080", "--no-open"},
+		"relaunch_args": []string{target, "--no-open"},
 		"version":       "0.2.0", "log_path": filepath.Join(root, applyLogFileName),
 	}
 	if err := writeJSONFile(path, legacy, 0o600); err != nil {
@@ -125,13 +130,21 @@ func TestRelease051ManifestIsUpgradedBeforeReplacement(t *testing.T) {
 	if err := writeJSONFile(filepath.Join(updateDataDir(install), pendingManifestRefName), pendingManifestRef{ManifestPath: path}, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := RunUpdater(context.Background(), path, UpdaterOptions{ProcessAlive: func(int) bool { return false }, StartProcess: acknowledgeTestLaunch}); err != nil {
+	if err := RunUpdater(context.Background(), path, UpdaterOptions{
+		ProcessAlive: func(int) bool { return false },
+		StartProcess: func(executable string, args, env []string) error {
+			if !slices.Contains(env, "DENOVA_UPDATE_FROM_VERSION=0.5.1") {
+				t.Fatal("legacy launch lost its original default port context")
+			}
+			return acknowledgeTestLaunch(executable, args, env)
+		},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	assertFileContent(t, target, "new")
 	assertFileContent(t, filepath.Join(root, "backup", "nova"), "old")
 	m, err := readManifest(path)
-	if err != nil || m.State != PhaseSucceeded || m.ID == "" || m.RelaunchArgs[0] != target {
+	if err != nil || m.State != PhaseSucceeded || m.ID == "" || m.PreviousVersion != "0.5.1" || m.RelaunchArgs[0] != target {
 		t.Fatalf("legacy handoff failed: %+v %v", m, err)
 	}
 	var ref pendingManifestRef
