@@ -10,6 +10,51 @@ Denova records only major user-visible features, important compatibility or data
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
+## [Unreleased]
+
+同步上游 v0.6.0–v0.6.2。 / Syncs upstream v0.6.0–v0.6.2.
+
+### Added / 新增
+
+- 搜索支持 DeepSeek、Perplexity 和 Tavily，可在服务列表中管理密钥、选择默认服务并测试搜索；网页读取保持原有流程。
+- Search supports DeepSeek, Perplexity, and Tavily with saved service credentials, a selectable default, and search testing; page reading keeps its existing flow.
+
+- 游戏舞台支持选择资料库音频作为循环环境音，随回合与分支保存；新故事记住开局偏好与主角。
+- Game stages can loop Lore audio as scene ambience saved with turns and branches; new stories remember opening preferences and protagonists.
+
+- 写作与通用对话支持会话正文搜索、Markdown 导出和 `/snapshot` 工作区版本命令。
+- Writing and General conversations add conversation body search, Markdown export and the `/snapshot` workspace version command.
+
+- 语言模型连接与模型配置可单独停用；更新支持后台检查、可选自动下载，并在活动任务结束后重启。
+- Model connections and profiles can be disabled individually. Updates gain background checks, optional automatic downloads and restart after active tasks.
+
+- 上游新增不包含创作内容的使用统计。fork 构建默认关闭、不弹出首次提示；`0.5.1fixN` 格式的版本号不会启用采集。
+- Upstream adds usage statistics without creative content. Fork builds keep it off by default with no first-run notice, and `0.5.1fixN` version numbers never collect.
+
+### Changed / 变更
+
+- 非 Docker 运行的默认端口改为后端 7789、前端 7788；配置文件或环境变量指定的端口不受影响，Docker 镜像仍固定使用 8080。从 v0.5.1fixN 自动更新时首次启动沿用 8080，保证旧页面能重连。
+- Default ports for non-Docker runs change to 7789 (backend) and 7788 (frontend). Ports set in configuration or environment variables are unaffected, and the Docker image still uses 8080. The first launch after an automatic update from v0.5.1fixN keeps 8080 so the old page can reconnect.
+
+- 改善启动、页面切换、编辑器恢复、大资料库、版本比较、自动化目录和长会话历史的加载性能。
+- Improves startup, navigation, editor restoration, large Lore libraries, version comparisons, Automation catalogs and long-session history.
+
+### Fixed / 修复
+
+- 修复游戏回合补齐状态与选项时丢失已接受正文上下文的问题，并保持正常续轮与冷恢复的消息顺序。
+- Fixed lost accepted narrative context while completing Game turn state and choices, preserving message order during continuation and cold recovery.
+
+- 修复已发送图片预览消失、流式正文截断或回退、思考重复，以及 Safari 输入框删除失效的问题。
+- Fixes disappearing sent-image previews, truncated or regressing streamed text, duplicated reasoning and broken deletion in the Safari composer.
+
+- 修复包含用户数据目录的代码项目添加失败，以及 Windows 环境找不到 `cmd` 时无法自动打开浏览器的问题。
+- Fixes failed registration of code projects containing a user data directory, and browser opening on Windows when `cmd` is unavailable through the environment.
+
+### Security / 安全
+
+- 更新构建工具链与运行依赖，修复网络请求、文件访问和内容渲染相关的已知安全问题。
+- Updates the build toolchain and runtime dependencies to fix known security issues in network requests, file access and content rendering.
+
 ## [v0.5.1fix18] - 2026-10-12
 
 ### Brief / 简要说明
