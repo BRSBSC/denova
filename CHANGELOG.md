@@ -12,8 +12,35 @@ Denova records only major user-visible features, important compatibility or data
 
 ## [Unreleased]
 
+### Brief / 简要说明
+
+#### 中文
+
+- 同步上游 v0.6.3 及之后的更新：新增可选决策模型、资料正文提及检索，以及内置网文创作与互动游戏创作 Skill。
+- 修复首次打开旧会话长时间停在“恢复中”、原文修改后批注阻断发送，以及 Windows 文件定位误报失败的问题。
+
+#### English
+
+- Syncs upstream v0.6.3 and later: optional decision models, Lore text-mention search, and built-in novel-writing and interactive-game design Skills.
+- Fixes older conversations hanging on "recovering" when first opened, comments blocking messages after source edits, and false failures when revealing files on Windows.
+
+### Added / 新增
+
+- 可选决策模型支持游戏舞台素材选择、资料库语义分类和自动化语义触发，不确定或服务不可用时由语言模型兜底。
+- Optional decision models handle Game stage media, Lore semantic classification, and automation semantic triggers, with language-model fallback for uncertain results or service failures.
+- 资料详情新增「作品提及」：查找作品文件与指定故事分支的正文提及，定位文件或只读查看历史回合。
+- Lore details now find text mentions in project files and a selected story branch, with file navigation and read-only historical narrative.
+- 内置网文创作 Skill，支持构思、大纲、人物与规则设计、章节场景、长篇续航和改稿诊断。
+- A built-in novel-writing Skill supports premises, outlines, characters and rules, scenes, long-form continuity, and revision.
+- 内置互动游戏创作 Skill，支持游戏构思与核心循环、世界与角色资料库、状态系统、规则判定、游戏规划、开局回合和跑团诊断；Skills 库新增「游戏」分类。
+- A built-in interactive-game design Skill covers game premises and loops, world and character Lore, state systems, rules and checks, planning, openings and turns, and play diagnostics; the Skills library adds a Game category.
+
 ### Fixed / 修复
 
+- 修复编辑原文后批注阻断消息发送的问题；保留原文引用，并让 Agent 结合当前内容处理。
+- Fixed document comments blocking messages after source edits; original quotes remain available for the Agent to reconcile with current content.
+- 修复 Windows 文件定位已成功打开资源管理器却误报失败的问题。
+- Fixed false failure reports after successfully revealing files in Windows Explorer.
 - 升级后首次打开旧会话不再长时间停在“正在从持久化状态恢复”：恢复检查只读取该会话自己的子任务，不再加载项目里所有会话记录（会话记录很大时原先要几十秒到数分钟）。
 - Opening an older conversation for the first time after an upgrade no longer hangs on "recovering from persisted state": the recovery check reads only that conversation's own delegated tasks instead of loading every conversation journal in the project, which took tens of seconds to minutes with large journals.
 
