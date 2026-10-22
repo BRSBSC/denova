@@ -10,6 +10,13 @@ Denova records only major user-visible features, important compatibility or data
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)。
 
+## [Unreleased]
+
+### Fixed / 修复
+
+- 升级后首次打开旧会话不再长时间停在“正在从持久化状态恢复”：恢复检查只读取该会话自己的子任务，不再加载项目里所有会话记录（会话记录很大时原先要几十秒到数分钟）。
+- Opening an older conversation for the first time after an upgrade no longer hangs on "recovering from persisted state": the recovery check reads only that conversation's own delegated tasks instead of loading every conversation journal in the project, which took tens of seconds to minutes with large journals.
+
 ## [v0.6.2] - 2026-10-20
 
 ### Brief / 简要说明
