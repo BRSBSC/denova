@@ -17,12 +17,12 @@ Denova records only major user-visible features, important compatibility or data
 #### 中文
 
 - 同步上游 v0.6.3 及之后的更新：新增可选决策模型、资料正文提及检索，以及内置网文创作与互动游戏创作 Skill。
-- 修复原文修改后批注阻断发送，以及 Windows 文件定位误报失败的问题。
+- 修复首次打开旧会话长时间停在“恢复中”、原文修改后批注阻断发送，以及 Windows 文件定位误报失败的问题。
 
 #### English
 
 - Syncs upstream v0.6.3 and later: optional decision models, Lore text-mention search, and built-in novel-writing and interactive-game design Skills.
-- Fixes comments blocking messages after source edits and false failures when revealing files on Windows.
+- Fixes older conversations hanging on "recovering" when first opened, comments blocking messages after source edits, and false failures when revealing files on Windows.
 
 ### Added / 新增
 
@@ -41,6 +41,8 @@ Denova records only major user-visible features, important compatibility or data
 - Fixed document comments blocking messages after source edits; original quotes remain available for the Agent to reconcile with current content.
 - 修复 Windows 文件定位已成功打开资源管理器却误报失败的问题。
 - Fixed false failure reports after successfully revealing files in Windows Explorer.
+- 升级后首次打开旧会话不再长时间停在“正在从持久化状态恢复”：恢复检查只读取该会话自己的子任务，不再加载项目里所有会话记录（会话记录很大时原先要几十秒到数分钟）。
+- Opening an older conversation for the first time after an upgrade no longer hangs on "recovering from persisted state": the recovery check reads only that conversation's own delegated tasks instead of loading every conversation journal in the project, which took tens of seconds to minutes with large journals.
 
 ## [v0.6.2] - 2026-10-20
 

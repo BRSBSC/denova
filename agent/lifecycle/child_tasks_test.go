@@ -16,11 +16,14 @@ import (
 
 type childCatalogProbe struct {
 	agentsession.Store
-	lists int
+	lists, unscoped int
 }
 
 func (store *childCatalogProbe) List(ctx context.Context, selector agentsession.Selector) ([]agentsession.Key, error) {
 	store.lists++
+	if selector.All {
+		store.unscoped++
+	}
 	return store.Store.List(ctx, selector)
 }
 
@@ -183,12 +186,14 @@ func TestReleasedChildTreeIsAdoptedOnce(t *testing.T) {
 		if err != nil || len(children) != 1 || children[0].Key.ID != childKey.ID {
 			t.Fatalf("adopted children=%+v err=%v", children, err)
 		}
-		wantScans := 1
+		// One parent-scoped scan per released node (root, child, grandchild):
+		// catalog stores must not load every unrelated root journal.
+		wantScans := 3
 		if reopen != 0 {
 			wantScans = 0
 		}
-		if store.lists != wantScans {
-			t.Fatalf("reopen=%d scans=%d want=%d", reopen, store.lists, wantScans)
+		if store.lists != wantScans || store.unscoped != 0 {
+			t.Fatalf("reopen=%d scans=%d unscoped=%d want=%d", reopen, store.lists, store.unscoped, wantScans)
 		}
 		if err := owner.Close(context.Background()); err != nil {
 			t.Fatal(err)
