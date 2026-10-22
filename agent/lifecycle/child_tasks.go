@@ -21,8 +21,6 @@ type ChildTask struct {
 	Key agentsession.Key `json:"key"`
 }
 
-type childAdoptionCatalogKey struct{}
-
 type childTasks struct {
 	Initialized bool                 `json:"initialized"`
 	Pending     map[string]ChildTask `json:"pending,omitempty"`
@@ -80,31 +78,17 @@ func (session *Session) PendingChildTasks(ctx context.Context) ([]ChildTask, err
 	// A new journal has no legacy children to discover. Released journals are
 	// adopted once by appending a checkpoint; their existing bytes are untouched.
 	if revision != 0 {
-		catalog, inherited := ctx.Value(childAdoptionCatalogKey{}).(map[string][]agentsession.Key)
-		if !inherited {
-			// Released trees have no pending-edge checkpoints. Enumerate once
-			// and group by exact parent; recursive adoption reuses this snapshot
-			// instead of rereading every manifest for every historical child.
-			keys, err := session.agent.ListSessions(ctx, agentsession.Selector{All: true})
-			if err != nil {
-				return nil, err
-			}
-			catalog = make(map[string][]agentsession.Key)
-			for _, key := range keys {
-				if key.Attributes[ParentSessionAttribute] == "" {
-					continue
-				}
-				parent, err := ParentSessionKey(key)
-				if err != nil {
-					continue
-				} // An invalid edge cannot name this parent.
-				canonical, _ := agentsession.CanonicalKey(parent)
-				catalog[canonical] = append(catalog[canonical], key)
-			}
-			ctx = context.WithValue(ctx, childAdoptionCatalogKey{}, catalog)
+		// Released trees have no pending-edge checkpoints. List only this
+		// parent's children, as recursive deletion does: an unscoped catalog
+		// makes stores replay every unrelated root journal.
+		attributes, err := ChildSessionAttributes(session.key)
+		if err != nil {
+			return nil, err
 		}
-		self, _ := agentsession.CanonicalKey(session.key)
-		keys := catalog[self]
+		keys, err := session.agent.ListSessions(ctx, agentsession.Selector{Attributes: attributes})
+		if err != nil {
+			return nil, err
+		}
 		for _, key := range keys {
 			child, err := session.agent.Session(ctx, key)
 			if err != nil {
