@@ -1403,6 +1403,19 @@ func TestAgentRuntimeNextTurnChainsASeparatePublicRunToOneDisplayTask(t *testing
 	case <-time.After(2 * time.Second):
 		t.Fatal("first next-turn model call did not start")
 	}
+	// RunStarted is projected by an async observer; the model call does not
+	// order it, so wait for the first edge before chaining the second Run.
+	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(time.Millisecond) {
+		eventsMu.Lock()
+		started := countPublicBackendEvent(events, "agent_cycle_started")
+		eventsMu.Unlock()
+		if started > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("first next-turn cycle edge was not projected")
+		}
+	}
 	receipt, err := runtime.SubmitCommand(ctx, CommandRequest{
 		Kind: CommandNextTurn, CommandID: "next-command", AfterOperationID: operation.Receipt().OperationID,
 		Request: agentchatRequest("next-command", "second request"), Options: options, Emit: emit,
