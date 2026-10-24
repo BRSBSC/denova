@@ -80,6 +80,63 @@ Denova 把小说写作、互动故事、结构化资料库、AI Agent、图像�
 
 ## 快速开始
 
+### Docker 部署（推荐）
+
+本 fork 发布 `ghcr.io/brsbsc/denova` 镜像，支持 `linux/amd64` 与 `linux/arm64`。标签 `latest` 指向最新版本，也可以固定为具体版本（例如 `v0.6.3`）。镜像内置 Bash、Git、curl、Python 和 ripgrep，不包含其他语言工具链或外部 Agent CLI。
+
+容器需要首次登录账号：`DENOVA_USERNAME` 和 `DENOVA_PASSWORD`（密码 1–72 个 UTF-8 字节）。它们只在数据目录还没有 `config.toml` 时生效，之后改密码请在应用设置中操作。
+
+**docker run**
+
+```bash
+docker run -d --name denova \
+  -p 8080:8080 \
+  -e DENOVA_USERNAME=admin \
+  -e DENOVA_PASSWORD=replace-with-your-own-password \
+  -v denova-data:/data \
+  --restart unless-stopped \
+  ghcr.io/brsbsc/denova:latest
+```
+
+**Docker Compose**
+
+在 `docker/.env` 中写入账号和镜像标签（该文件已被 Git 忽略）：
+
+```dotenv
+DENOVA_USERNAME=admin
+DENOVA_PASSWORD=replace-with-your-own-password
+DENOVA_IMAGE_TAG=latest
+```
+
+在仓库根目录启动：
+
+```bash
+docker compose --env-file docker/.env -f docker/compose.yml up -d
+```
+
+启动后打开 `http://localhost:8080` 登录。仓库自带的 [docker/compose.yml](docker/compose.yml) 只把端口发布到宿主机 `127.0.0.1`；需要局域网访问时把端口映射改为 `8080:8080`，需要公网访问时请在前面加 HTTPS 反向代理。
+
+**数据与权限**
+
+- 所有数据在 `/data`：`/data/.denova` 是应用数据（配置、项目、会话），`/data/log` 是日志。默认使用命名卷 `denova-data`。
+- 容器以 root 启动，只把 `/data/.denova` 和 `/data/log` 的属主调整为 `10001:10001`，然后降权运行应用。
+- 绑定宿主目录（如 `-v /path/to/denova:/data`）时，文件系统需允许 chown；不允许 chown 的 NFS / NAS 目录，请先在宿主机给 UID `10001` 读写权限，再用 `--user 10001:10001`（Compose 为 `user: "10001:10001"`）跳过权限初始化。
+- 外部 Project 需要额外挂载对应目录，容器看不到未挂载的宿主文件。
+- 导入旧数据时，`config.toml` 必须启用 `allow_lan_access`，并包含 `remote_access_username` 与 `remote_access_password_hash`，否则容器拒绝启动。不要在容器内关闭局域网访问，否则端口不可达。
+
+**更新、备份与回退**
+
+```bash
+docker compose --env-file docker/.env -f docker/compose.yml pull
+docker compose --env-file docker/.env -f docker/compose.yml up -d
+```
+
+- 使用 `docker run` 时，先 `docker pull ghcr.io/brsbsc/denova:latest`，再删除旧容器并用相同参数重建；数据卷会保留。
+- 不要使用应用内更新器替换容器内的程序，也不要执行 `docker compose down -v`（会删除数据卷）。
+- 升级前备份数据卷。回退时把 `DENOVA_IMAGE_TAG` 改回旧版本并重建容器；回退镜像不会回退数据格式。
+
+镜像的构建、上游 Release 同步和验证流程见 [容器发布说明](docs/container-publishing.md)。
+
 ### 安装发布版
 
 macOS / Linux 可以使用一键安装脚本：
@@ -89,8 +146,6 @@ curl -fsSL https://github.com/BRSBSC/denova/releases/download/v0.6.3/install.sh 
 ```
 
 安装完成后运行 `denova`。Windows 用户以及希望手动安装的用户，可以从 [GitHub Releases](https://github.com/BRSBSC/denova/releases) 下载对应平台的压缩包；Windows 运行 `denova.exe`。
-
-本 fork 另提供上游安装包自动同步与 GHCR 双架构容器构建流程，启用方法和 Docker Compose 部署见 [容器发布说明](docs/container-publishing.md)。
 
 稳定使用建议选择 Release；`master` 分支可能包含尚未发布的改动。
 
@@ -129,6 +184,8 @@ Google Gemini 文本模型可在连接的协议选项中选择「Gemini 原生�
 在 **设置 → 访问** 中开启局域网访问、设置用户名和密码并重启后，其他设备可以使用页面显示的地址登录 Denova。本机还可生成 5 分钟有效的一次性登录二维码及链接，同一局域网内的手机扫码即可登录，也可复制链接到其他设备打开。浏览器会保持登录 30 天，刷新或服务重启无需重新输入密码；可在设置中退出登录。手机浏览器可以将页面添加到主屏幕。
 
 从源码运行时，二维码和连接链接使用后端端口提供的 `web/dist` 构建产物。首次使用或更新前端后，执行 `pnpm --dir web build` 并重启后端；本机 Vite 热更新入口可继续用于开发。
+
+Docker 容器默认已开启局域网访问，并使用启动时设置的账号登录，无需再在设置中开启。
 
 通过公网或域名部署时，请使用 Caddy、Nginx 等反向代理提供 HTTPS，避免明文传输登录凭据。与 Denova 运行在同一台机器上的反向代理必须转发原始 `Host`，或以 `X-Forwarded-For` 传递客户端地址（如 Nginx 的 `proxy_set_header Host $host;` 与 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`）；两者都不转发时，Denova 无法区分代理请求与本机浏览器，会跳过登录。
 
