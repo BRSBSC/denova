@@ -21,6 +21,9 @@
   当前版本：<strong>v0.6.3</strong>（2026-10-22） · Beta · <a href="https://github.com/BRSBSC/denova/releases">下载最新版本</a>
 </p>
 
+> [!NOTE]
+> 本仓库是 [alfredxw/denova](https://github.com/alfredxw/denova) 的 Docker 版本，只负责构建和发布容器镜像，不接受议题（Issue）和拉取请求（Pull Request）。应用本身的问题和建议请提交到上游仓库。
+
 ![Denova 写作](./img/ide.png)
 
 <details>
@@ -195,7 +198,7 @@ Docker 容器默认已开启局域网访问，并使用启动时设置的账号�
 
 ## 开发
 
-贡献代码前请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。常用命令：
+常用命令：
 
 ```bash
 ./scripts/bootstrap.sh fe

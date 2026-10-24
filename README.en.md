@@ -21,6 +21,9 @@
   Current version: <strong>v0.6.3</strong> (2026-10-22) · Beta · <a href="https://github.com/BRSBSC/denova/releases">Download the latest release</a>
 </p>
 
+> [!NOTE]
+> This repository is the Docker edition of [alfredxw/denova](https://github.com/alfredxw/denova). It only builds and publishes container images and does not accept issues or pull requests. Please report app issues and suggestions to the upstream repository.
+
 ![Denova Writing](./img/ide.png)
 
 <details>
@@ -195,7 +198,7 @@ Release builds explain usage statistics on first use. Collection is enabled by d
 
 ## Development
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before contributing. Common commands:
+Common commands:
 
 ```bash
 ./scripts/bootstrap.sh fe
