@@ -21,6 +21,9 @@
   Current version: <strong>v0.6.3</strong> (2026-10-22) · Beta · <a href="https://github.com/BRSBSC/denova/releases">Download the latest release</a>
 </p>
 
+> [!NOTE]
+> This repository is the Docker edition of [alfredxw/denova](https://github.com/alfredxw/denova). It only builds and publishes container images and does not accept issues or pull requests. Please report app issues and suggestions to the upstream repository.
+
 ![Denova Writing](./img/ide.png)
 
 <details>
@@ -80,6 +83,63 @@ Lore, Creative Setups, Skills, and version management are shared between the two
 
 ## Quick Start
 
+### Docker (Recommended)
+
+This fork publishes the `ghcr.io/brsbsc/denova` image for `linux/amd64` and `linux/arm64`. The `latest` tag follows the newest release; you can also pin a version such as `v0.6.3`. The image includes Bash, Git, curl, Python, and ripgrep, but no other language toolchains or external Agent CLIs.
+
+The container needs a first-login account: `DENOVA_USERNAME` and `DENOVA_PASSWORD` (1–72 UTF-8 bytes). They only apply while the data directory has no `config.toml`; change the password in the app's settings afterwards.
+
+**docker run**
+
+```bash
+docker run -d --name denova \
+  -p 8080:8080 \
+  -e DENOVA_USERNAME=admin \
+  -e DENOVA_PASSWORD=replace-with-your-own-password \
+  -v denova-data:/data \
+  --restart unless-stopped \
+  ghcr.io/brsbsc/denova:latest
+```
+
+**Docker Compose**
+
+Put the account and image tag in `docker/.env` (ignored by Git):
+
+```dotenv
+DENOVA_USERNAME=admin
+DENOVA_PASSWORD=replace-with-your-own-password
+DENOVA_IMAGE_TAG=latest
+```
+
+Start it from the repository root:
+
+```bash
+docker compose --env-file docker/.env -f docker/compose.yml up -d
+```
+
+Then open `http://localhost:8080` and sign in. The bundled [docker/compose.yml](docker/compose.yml) publishes the port on the host's `127.0.0.1` only; change the mapping to `8080:8080` for LAN access, and put an HTTPS reverse proxy in front for internet access.
+
+**Data and permissions**
+
+- All data lives in `/data`: `/data/.denova` holds app data (settings, projects, sessions) and `/data/log` holds logs. The default is the named volume `denova-data`.
+- The container starts as root, changes ownership of only `/data/.denova` and `/data/log` to `10001:10001`, then drops privileges to run the app.
+- When bind-mounting a host directory (for example `-v /path/to/denova:/data`), the file system must allow chown. For NFS / NAS directories that refuse chown, grant UID `10001` read/write access on the host first, then run with `--user 10001:10001` (Compose: `user: "10001:10001"`) to skip the permission setup.
+- External Projects need their directories mounted separately; the container cannot see unmounted host files.
+- When importing existing data, `config.toml` must enable `allow_lan_access` and contain `remote_access_username` and `remote_access_password_hash`, or the container refuses to start. Do not turn off LAN access inside the container, or the port becomes unreachable.
+
+**Update, backup, and rollback**
+
+```bash
+docker compose --env-file docker/.env -f docker/compose.yml pull
+docker compose --env-file docker/.env -f docker/compose.yml up -d
+```
+
+- With `docker run`, run `docker pull ghcr.io/brsbsc/denova:latest`, remove the old container, and recreate it with the same arguments; the data volume is kept.
+- Do not use the in-app updater to replace the program inside the container, and do not run `docker compose down -v`, which deletes the data volume.
+- Back up the data volume before upgrading. To roll back, set `DENOVA_IMAGE_TAG` to the older version and recreate the container; rolling back the image does not roll back the data format.
+
+See [Container publishing](docs/container-publishing.en.md) for how the image is built, synced with upstream releases, and verified.
+
 ### Install a Release
 
 macOS / Linux users can run the installer:
@@ -89,8 +149,6 @@ curl -fsSL https://github.com/BRSBSC/denova/releases/download/v0.6.3/install.sh 
 ```
 
 Run `denova` after installation. Windows users and anyone who prefers manual installation can download the archive for their platform from [GitHub Releases](https://github.com/BRSBSC/denova/releases); on Windows, run `denova.exe`.
-
-This fork also provides upstream release mirroring and dual-architecture GHCR image builds. See [container publishing](docs/container-publishing.en.md) for setup and Docker Compose deployment.
 
 For stable use, choose a Release. The `master` branch may contain unreleased changes.
 
@@ -130,6 +188,8 @@ Enable LAN access under **Settings → Access**, set a username and password, an
 
 When running from source, QR codes and connection links use the backend port to serve the `web/dist` build. Run `pnpm --dir web build` and restart the backend before first use or after frontend changes. The local Vite entry point remains available for development with hot reload.
 
+Docker containers already have LAN access enabled and use the account set at first start; no need to enable it in Settings.
+
 For public or domain-based deployments, put Denova behind an HTTPS reverse proxy such as Caddy or Nginx so login credentials are not transmitted in cleartext. A reverse proxy on the same machine as Denova must forward the original `Host` or pass the client address in `X-Forwarded-For` (for Nginx, `proxy_set_header Host $host;` and `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`). A proxy that forwards neither is indistinguishable from a local browser and skips the login.
 
 ## Usage statistics
@@ -138,7 +198,7 @@ Release builds explain usage statistics on first use. Collection is enabled by d
 
 ## Development
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before contributing. Common commands:
+Common commands:
 
 ```bash
 ./scripts/bootstrap.sh fe
